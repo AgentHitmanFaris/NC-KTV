@@ -188,6 +188,16 @@ class WizardMode(QWidget):
             
         model_layout.addWidget(self.combo_model)
         
+        # Performance warning label
+        self.lbl_warning = QLabel("")
+        self.lbl_warning.setWordWrap(True)
+        self.lbl_warning.setStyleSheet("color: #ff9800; font-style: italic;")
+        self.lbl_warning.hide()
+        model_layout.addWidget(self.lbl_warning)
+        
+        # Connect signals for warnings
+        self.combo_model.currentIndexChanged.connect(self._check_performance_warning)
+        
         model_group.setLayout(model_layout)
         layout.addWidget(model_group)
         
@@ -197,6 +207,7 @@ class WizardMode(QWidget):
         
         self.chk_use_gpu = QCheckBox("Use GPU (NVIDIA CUDA)")
         self.chk_use_gpu.setChecked(self.config.get('uvr.use_gpu', True))
+        self.chk_use_gpu.stateChanged.connect(self._check_performance_warning)
         gpu_layout.addWidget(self.chk_use_gpu)
         
         self.lbl_gpu_info = QLabel()
@@ -206,10 +217,14 @@ class WizardMode(QWidget):
         gpu_group.setLayout(gpu_layout)
         layout.addWidget(gpu_group)
         
+        # Initial check
+        self._check_performance_warning()
+        
         layout.addSpacing(20)
         
         # Process button
         self.btn_process = QPushButton("🎵 Start Processing")
+
         self.btn_process.clicked.connect(self._start_processing)
         self.btn_process.setMinimumHeight(50)
         self.btn_process.setStyleSheet("""
@@ -284,6 +299,24 @@ class WizardMode(QWidget):
             file_path = Path(urls[0].toLocalFile())
             self._load_file(file_path)
     
+    def _check_performance_warning(self):
+        """Check configurations and warn user about potential performance issues"""
+        model_text = self.combo_model.currentText()
+        use_gpu = self.chk_use_gpu.isChecked() and self.chk_use_gpu.isEnabled()
+        
+        # Heavy models list
+        heavy_models = ["UVR_MDXNET_KARA_2", "HP-Karaoke", "HQ"]
+        is_heavy = any(m in model_text for m in heavy_models)
+        
+        if is_heavy and not use_gpu:
+            self.lbl_warning.setText(
+                "⚠️ Warning: High-quality models are very slow on CPU (3-10 minutes/song). "
+                "Enable GPU if possible or be patient."
+            )
+            self.lbl_warning.show()
+        else:
+            self.lbl_warning.hide()
+
     def _update_gpu_info(self):
         """Update GPU information label"""
         from utils.gpu_detector import GPUDetector
@@ -315,7 +348,7 @@ class WizardMode(QWidget):
         
         # Create progress dialog
         progress_dialog = QProgressDialog(
-            "Processing...",
+            "Initializing...",
             "Cancel",
             0,
             100,
@@ -323,7 +356,10 @@ class WizardMode(QWidget):
         )
         progress_dialog.setWindowTitle("Vocal Removal")
         progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        progress_dialog.setMinimumDuration(0)
+        progress_dialog.setAutoClose(False)
+        progress_dialog.setAutoReset(False)
+        # Disable built-in time estimation which is often inaccurate
+        progress_dialog.setMinimumDuration(0) 
         
         # Create and start worker
         self.processing_worker = ProcessingWorker(self.config, self.project)

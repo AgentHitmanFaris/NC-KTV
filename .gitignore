@@ -42,9 +42,9 @@ output/
 *.nctv
 
 # Models (large files - users download separately)
-models/*.pth
-models/*.onnx
-models/*.pt
+models/**/*.pth
+models/**/*.onnx
+models/**/*.pt
 !models/.gitkeep
 !models/README.md
 
@@ -86,3 +86,4 @@ htmlcov/
 *.bak
 torch-2.1.0+cu118-cp310-cp310-win_amd64.whl
 Ghea Indrawari - Dendam Malam Kelam (Official MV) OST. Dendam Malam Kelam _ 28 Mei di Bioskop.mp4
+models/whisper/small.pt

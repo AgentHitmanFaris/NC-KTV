@@ -119,32 +119,44 @@ class MainWindow(QMainWindow):
         start_mode = self.config.get('gui.start_mode', 'wizard')
         self._switch_mode(start_mode)
     
-    def _switch_mode(self, mode: str):
+    def _switch_mode(self, mode: str, project=None):
         """Switch between wizard and editor mode
         
         Args:
             mode: 'wizard' or 'editor'
+            project: Optional Project object to pass to editor
         """
+        # Clear current central widget
+        while self.central_widget.count() > 0:
+            widget = self.central_widget.widget(0)
+            self.central_widget.removeWidget(widget)
+            widget.deleteLater()
+            
         if mode == 'wizard':
             # Import and create wizard mode
             from gui.wizard_mode import WizardMode
-            
-            # Remove existing wizard if any
-            while self.central_widget.count() > 0:
-                widget = self.central_widget.widget(0)
-                self.central_widget.removeWidget(widget)
-                widget.deleteLater()
-            
-            # Create new wizard
             wizard = WizardMode(self.config)
+            
+            # Connect project created signal
+            wizard.project_created.connect(lambda p: self._switch_mode('editor', p))
+            
             self.central_widget.addWidget(wizard)
             self.central_widget.setCurrentWidget(wizard)
-            
             self.statusBar().showMessage("Switched to Wizard Mode", 3000)
             
         elif mode == 'editor':
-            # TODO: Implement advanced editor mode
-            self.statusBar().showMessage("Advanced Editor mode coming soon!", 3000)
+            # Import and create editor mode
+            from gui.editor.editor_mode import EditorMode
+            
+            if project:
+                editor = EditorMode(self.config, project)
+                self.central_widget.addWidget(editor)
+                self.central_widget.setCurrentWidget(editor)
+                self.statusBar().showMessage(f"Opened Editor: {project.name}", 3000)
+            else:
+                 QMessageBox.information(self, "Editor Mode", "Please create a project via Wizard Mode first.")
+                 self._switch_mode('wizard')
+                 
         else:
             self.statusBar().showMessage(f"Unknown mode: {mode}", 3000)
 

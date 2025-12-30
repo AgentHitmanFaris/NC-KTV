@@ -184,6 +184,11 @@ class Project:
             import shutil
             shutil.rmtree(temp_dir)
     
+    @property
+    def name(self) -> str:
+        """Alias for project_name for compatibility"""
+        return self.project_name
+        
     def validate(self) -> tuple[bool, str]:
         """Validate project state
         
