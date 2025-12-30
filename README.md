@@ -15,7 +15,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
@@ -31,7 +31,7 @@
 
 ---
 
-## 🎯 Overview
+## Overview
 
 NC-KTV automates the process of creating professional karaoke videos from music files or videos. Using state-of-the-art AI models for vocal removal and speech recognition, it generates synchronized lyric videos with customizable effects.
 
@@ -43,27 +43,27 @@ NC-KTV automates the process of creating professional karaoke videos from music 
 
 ---
 
-## ✨ Features
+## Features
 
 ### Currently Implemented (Phase 2)
 
-- **🎤 Automatic Vocal Removal**
+- **Automatic Vocal Removal**
   - GPU-accelerated processing using UVR 5 models
   - Support for VR_Models and MDX_Net_Models
   - High-quality instrumental track separation
   - CUDA 11.8 support for NVIDIA GPUs
 
-- **📁 Multi-Format Support**
+- **Multi-Format Support**
   - Audio: MP3, WAV, FLAC, M4A, AAC, OGG
   - Video: MP4, AVI, MKV, MOV, WMV, FLV, WEBM
 
-- **🧙 Wizard Mode Interface**
+- **Wizard Mode Interface**
   - Step-by-step workflow for beginners
   - Drag-and-drop file selection
   - Real-time progress tracking
   - GPU status monitoring
 
-- **⚡ High Performance**
+- **High Performance**
   - Background processing with Qt threading
   - Progress reporting with ETA estimation
   - Cancellation support
@@ -71,22 +71,22 @@ NC-KTV automates the process of creating professional karaoke videos from music 
 
 ### Coming Soon (Phase 3+)
 
-- 📝 Manual lyrics input with timeline editor
-- 🤖 AI-powered lyrics synchronization (Whisper)
-- 🎬 Professional karaoke video generation
-- 🎨 Customizable text effects and animations
-- 📊 Advanced timeline editor with waveform visualization
-- 📦 Batch processing support
+- Manual lyrics input with timeline editor
+- AI-powered lyrics synchronization (Whisper)
+- Professional karaoke video generation
+- Customizable text effects and animations
+- Advanced timeline editor with waveform visualization
+- Batch processing support
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 > Screenshots coming soon after UI refinement
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### Prerequisites
 
@@ -145,7 +145,7 @@ NC-KTV requires UVR models for vocal removal:
 
 ---
 
-## 🎬 Quick Start
+## Quick Start
 
 ```powershell
 # Launch the application
@@ -161,7 +161,7 @@ python_embed\python.exe main.py
 
 ---
 
-## 📖 Usage
+## Usage
 
 ### Wizard Mode (Beginner-Friendly)
 
@@ -184,7 +184,7 @@ python_embed\python.exe main.py
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 - **[SETUP.md](SETUP.md)** - Detailed setup instructions
 - **[PYTORCH_MANUAL_INSTALL.md](PYTORCH_MANUAL_INSTALL.md)** - Manual PyTorch installation guide
@@ -214,7 +214,7 @@ gui:
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [x] **Phase 1:** Research & Planning
 - [x] **Phase 2:** Core Backend & Wizard Mode (Steps 1-2)
@@ -229,7 +229,7 @@ See [task.md](.gemini/task.md) for detailed progress.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
@@ -254,21 +254,21 @@ git push origin feature/your-feature-name
 
 ### Areas for Contribution
 
-- 🐛 Bug fixes and testing
-- 📝 Documentation improvements
-- 🌍 Internationalization (i18n)
-- 🎨 UI/UX enhancements
-- ⚡ Performance optimizations
+- Bug fixes and testing
+- Documentation improvements
+- Internationalization (i18n)
+- UI/UX enhancements
+- Performance optimizations
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 ### Core Technologies
 
@@ -286,14 +286,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📧 Support
+## Support
 
 - **Issues:** [GitHub Issues](https://github.com/AgentHitmanFaris/NC-KTV/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/AgentHitmanFaris/NC-KTV/discussions)
 
 ---
 
-## 📊 Project Status
+## Project Status
 
 **Current Version:** 0.1.0-alpha  
 **Status:** Active Development  
