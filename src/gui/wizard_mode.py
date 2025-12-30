@@ -86,7 +86,7 @@ class WizardMode(QWidget):
         title_font.setPointSize(16)
         title_font.setBold(True)
         title.setFont(title_font)
-        layout.add Widget(title)
+        layout.addWidget(title)
         
         # Description
         desc = QLabel(
