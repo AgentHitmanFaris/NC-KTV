@@ -1,0 +1,38 @@
+# GUI Framework
+PyQt6>=6.6.0
+PyQt6-QtMultimedia>=6.6.0
+
+# Audio/Video Processing
+librosa>=0.10.0
+soundfile>=0.12.0
+pydub>=0.25.0
+ffmpeg-python>=0.2.0
+
+# Machine Learning
+torch>=2.1.0
+torchaudio>=2.1.0
+openai-whisper>=20231117
+
+# UVR Integration
+audio-separator>=0.18.0
+
+
+# Visualization
+pyqtgraph>=0.13.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+
+# Text Processing & Fuzzy Matching
+python-Levenshtein>=0.21.0
+thefuzz>=0.20.0
+
+# Utilities
+pyyaml>=6.0
+tqdm>=4.65.0
+
+# Testing
+pytest>=7.4.0
+pytest-qt>=4.2.0
+
+# Optional: Forced Alignment (Phase 2)
+# aeneas>=1.7.3
