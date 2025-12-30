@@ -54,6 +54,10 @@ python_embeded/
 *.whl
 get-pip.py
 
+# FFmpeg (portable installation)
+ffmpeg/
+ffmpeg.zip
+
 # Logs
 *.log
 

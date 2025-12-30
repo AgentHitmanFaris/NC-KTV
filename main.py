@@ -6,14 +6,21 @@ Main application entry point
 import sys
 from pathlib import Path
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt
-
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+# Add portable FFmpeg to PATH if exists
+import os
+ffmpeg_dir = Path(__file__).parent / "ffmpeg"
+if ffmpeg_dir.exists():
+    os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
+
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import Qt
+
 from gui.main_window import MainWindow
 from utils.config import Config
+
 
 
 def main():
