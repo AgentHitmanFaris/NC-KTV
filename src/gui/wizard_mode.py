@@ -160,11 +160,32 @@ class WizardMode(QWidget):
         model_layout.addWidget(QLabel("Select vocal removal model:"))
         
         self.combo_model = QComboBox()
-        self.combo_model.addItems([
-            "UVR_MDXNET_KARA_2.onnx (Recommended)",
-            "UVR-MDX-NET-Inst_HQ_3.onnx (High Quality)",
-            "UVR-MDX-NET-Voc_FT.onnx (Vocal Focus)"
-        ])
+        
+        # Define recommended models with descriptions
+        self.model_map = {
+            "UVR_MDXNET_KARA_2.onnx (Best for Karaoke)": "UVR_MDXNET_KARA_2.onnx",
+            "5_HP-Karaoke-UVR.pth (High Performance Karaoke)": "5_HP-Karaoke-UVR.pth",
+            "6_HP-Karaoke-UVR.pth (Aggressive Karaoke)": "6_HP-Karaoke-UVR.pth",
+            "UVR-MDX-NET-Inst_HQ_3.onnx (High Quality Instrumental)": "UVR-MDX-NET-Inst_HQ_3.onnx"
+        }
+        
+        # Add available models
+        try:
+            available_models = self.config.get('uvr.available_models', []) or \
+                             ProcessingWorker(self.config, None).vocal_remover.list_available_models()
+        except:
+            available_models = []
+
+        # Add recommended ones first if they exist
+        for display_name, filename in self.model_map.items():
+            self.combo_model.addItem(display_name, filename)
+            if filename in available_models:
+                available_models.remove(filename)
+        
+        # Add remaining models
+        for model in available_models:
+            self.combo_model.addItem(model, model)
+            
         model_layout.addWidget(self.combo_model)
         
         model_group.setLayout(model_layout)
@@ -285,9 +306,11 @@ class WizardMode(QWidget):
             return
         
         # Update project settings
-        model_text = self.combo_model.currentText()
-        model_name = model_text.split()[0]  # Extract model name
-        self.project.settings.uvr_model = model_name
+        model_filename = self.combo_model.currentData()
+        if not model_filename:
+             model_filename = self.combo_model.currentText().split()[0]
+             
+        self.project.settings.uvr_model = model_filename
         self.project.settings.use_gpu = self.chk_use_gpu.isChecked()
         
         # Create progress dialog
