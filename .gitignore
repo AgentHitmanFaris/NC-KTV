@@ -58,6 +58,16 @@ get-pip.py
 ffmpeg/
 ffmpeg.zip
 
+# Media Files (User Inputs/Testing)
+*.mp4
+*.mp3
+*.wav
+*.flac
+*.mkv
+*.avi
+*.mov
+
+
 # Logs
 *.log
 
@@ -75,3 +85,4 @@ htmlcov/
 *.tmp
 *.bak
 torch-2.1.0+cu118-cp310-cp310-win_amd64.whl
+Ghea Indrawari - Dendam Malam Kelam (Official MV) OST. Dendam Malam Kelam _ 28 Mei di Bioskop.mp4
