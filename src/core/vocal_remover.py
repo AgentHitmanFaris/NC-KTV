@@ -53,7 +53,7 @@ class VocalRemover:
             output_single_stem='Instrumental',  # We want instrumental only
             normalization_threshold=0.9,
             output_format='WAV',
-            use_cuda=use_gpu,
+            # device=device,  # Removed: Not supported in this version
             sample_rate=self.config.get('processing.sample_rate', 44100)
         )
         
