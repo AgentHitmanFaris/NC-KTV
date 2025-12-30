@@ -202,7 +202,8 @@ def add_subtitles(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Use subtitles filter to burn in
-    subtitle_filter = f"subtitles='{str(subtitle_path).replace('\\', '/')}'"
+    subtitle_path_str = str(subtitle_path).replace('\\', '/')
+    subtitle_filter = f"subtitles='{subtitle_path_str}'"
     
     cmd = [
         'ffmpeg',
