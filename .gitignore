@@ -16,74 +16,94 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environment
-venv/
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Environments
+.env
+.venv
 env/
+venv/
 ENV/
+env.bak/
+venv.bak/
+python_embed/
+omnizart_env/
 
-# PyQt6
-*.pyc
-*.pyo
-
-# IDE
+# IDE / Editor
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.spyderproject
+.spyproject
+.ropeproject
 
-# Project specific
-temp/
+# Jupyter
+.ipynb_checkpoints
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Documentation
+/site
+
+# ========================
+# NC-KTV Project Specific
+# ========================
+
+# Large folders (not tracked)
+Testing/
 output/
+temp/
+models/
+ffmpeg/
+
+# User config (template tracked)
+config.yaml
+!config.example.yaml
+
+# Logs and temp files
+*.log
+*.zip
+*.spec
+*.whl
+
+# Assets (keep logo only)
+assets/
+!assets/logo.png
+
+# Project files (user-specific)
 *.nctv
 
-# Models (large files - users download separately)
-models/**/*.pth
-models/**/*.onnx
-models/**/*.pt
-!models/.gitkeep
-!models/README.md
-
-# Python Embedded (users download separately)
-python_embed/
-python_embeded/
-*.whl
-get-pip.py
-
-# FFmpeg (portable installation)
-ffmpeg/
-ffmpeg.zip
-
-# Media Files (User Inputs/Testing)
-*.mp4
-*.mp3
-*.wav
-*.flac
-*.mkv
-*.avi
-*.mov
-
-
-# Logs
-*.log
-
-# OS
+# System files
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Temporary files
-*.tmp
-*.bak
-torch-2.1.0+cu118-cp310-cp310-win_amd64.whl
-Ghea Indrawari - Dendam Malam Kelam (Official MV) OST. Dendam Malam Kelam _ 28 Mei di Bioskop.mp4
-models/whisper/small.pt

@@ -121,10 +121,8 @@ class ProgressReporter:
         stage = self.stages[self.current_stage]
         progress = stage.progress
         
-        eta = self.get_eta_seconds()
-        eta_str = f" ({self._format_time(eta)} remaining)" if eta is not None else ""
-        
-        return f"{stage.name}: {progress:.1f}%{eta_str}"
+        # User requested no percentage and no timing
+        return f"{stage.name}..."
     
     @staticmethod
     def _format_time(seconds: float) -> str:

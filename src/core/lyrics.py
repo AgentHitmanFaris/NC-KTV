@@ -73,9 +73,19 @@ class LyricsData:
         self.lines: List[LyricsLine] = []
         self.metadata: dict = {}
     
-    def add_line(self, text: str, start: float = 0.0, end: float = 0.0):
+    def add_line(self, text: str, start: float = 0.0, end: float = 0.0, tokens: List[dict] = None):
         """Add a new line"""
-        self.lines.append(LyricsLine(text, start, end))
+        line = LyricsLine(text, start, end)
+        if tokens:
+            # Convert dict tokens to LyricsToken objects
+            line.tokens = [
+                LyricsToken(
+                    text=t.get('word', t.get('text', '')).strip(),
+                    start_time=t['start'],
+                    end_time=t['end']
+                ) for t in tokens
+            ]
+        self.lines.append(line)
     
     def clear(self):
         """Clear all lyrics"""
@@ -85,12 +95,25 @@ class LyricsData:
         """Import lyrics from plain text (one line per line)"""
         self.lines = [LyricsLine(line.strip()) for line in text.splitlines() if line.strip()]
     
-    def save_to_json(self, path: Path):
-        """Save to JSON file"""
-        data = {
+    def to_dict(self) -> dict:
+        """Convert to dictionary"""
+        return {
             'metadata': self.metadata,
             'lines': [line.to_dict() for line in self.lines]
         }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'LyricsData':
+        """Create from dictionary"""
+        lyrics = cls()
+        lyrics.metadata = data.get('metadata', {})
+        lyrics.lines = [LyricsLine.from_dict(l) for l in data.get('lines', [])]
+        return lyrics
+
+    def save_to_json(self, path: Path):
+        """Save to JSON file"""
+        # Use to_dict for consistency
+        data = self.to_dict()
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
             

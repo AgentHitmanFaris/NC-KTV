@@ -351,22 +351,21 @@ class WizardMode(QWidget):
             "Initializing...",
             "Cancel",
             0,
-            100,
+            0, # Set to 0, 0 for infinite/indeterminate "loading line" style
             self
         )
         progress_dialog.setWindowTitle("Vocal Removal")
         progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         progress_dialog.setAutoClose(False)
         progress_dialog.setAutoReset(False)
-        # Disable built-in time estimation which is often inaccurate
-        progress_dialog.setMinimumDuration(0) 
         
         # Create and start worker
         self.processing_worker = ProcessingWorker(self.config, self.project)
         
         # Connect signals
+        # For indeterminate bar, we only update the label, not the value (setValue is ignored or resets it)
         self.processing_worker.progress_updated.connect(
-            lambda p, m: (progress_dialog.setValue(int(p)), progress_dialog.setLabelText(m))
+            lambda p, m: progress_dialog.setLabelText(m)
         )
         
         self.processing_worker.processing_complete.connect(
@@ -394,11 +393,16 @@ class WizardMode(QWidget):
         """
         dialog.close()
         
+        # Ensure paths are Path objects before accessing .name
+        inst_name = Path(result['instrumental_file']).name
+        voc_name = Path(result['vocals_file']).name if result.get('vocals_file') else 'Not saved'
+        
         QMessageBox.information(
             self,
             "Processing Complete",
             "Vocal removal completed successfully!\n\n"
-            f"Instrumental track: {result['instrumental_file']}"
+            f"Instrumental: {inst_name}\n"
+            f"Vocals: {voc_name}"
         )
         
         self.btn_process.setEnabled(True)

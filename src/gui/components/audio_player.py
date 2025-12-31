@@ -5,11 +5,14 @@ Handles playback of instrumental tracks
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-    QSlider, QLabel, QStyle
+    QSlider, QLabel, QStyle, QButtonGroup
 )
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AudioPlayer(QWidget):
@@ -29,6 +32,10 @@ class AudioPlayer(QWidget):
         
         self._init_ui()
         self._connect_signals()
+        
+    def set_video_output(self, video_output):
+        """Set video output widget"""
+        self.media_player.setVideoOutput(video_output)
         
     def _init_ui(self):
         """Initialize UI"""
@@ -75,15 +82,42 @@ class AudioPlayer(QWidget):
         controls_layout.addSpacing(20)
         controls_layout.addWidget(QLabel("Vol:"))
         controls_layout.addWidget(self.slider_vol)
+        controls_layout.addWidget(self.slider_vol)
         controls_layout.addStretch()
         
         layout.addLayout(controls_layout)
+        
+        # Speed Controls
+        speed_layout = QHBoxLayout()
+        speed_layout.addStretch()
+        speed_layout.addWidget(QLabel("Speed:"))
+        
+        self.speed_group = QButtonGroup(self)
+        self.speed_group.setExclusive(True)
+        
+        for rate in [0.5, 0.75, 1.0]:
+            btn = QPushButton(f"{rate}x")
+            btn.setFixedWidth(50)
+            btn.setCheckable(True)
+            if rate == 1.0:
+                btn.setChecked(True)
+                self.btn_speed_normal = btn
+            
+            self.speed_group.addButton(btn)
+            btn.clicked.connect(lambda checked, r=rate: self.set_playback_rate(r))
+            speed_layout.addWidget(btn)
+            
+        speed_layout.addStretch()
+        layout.addLayout(speed_layout)
         
     def _connect_signals(self):
         """Connect media player signals"""
         self.media_player.positionChanged.connect(self._on_position_changed)
         self.media_player.durationChanged.connect(self._on_duration_changed)
         self.media_player.playbackStateChanged.connect(self._on_state_changed)
+        
+        # Error handling
+        self.media_player.errorOccurred.connect(self._on_error)
         
         # UI signals
         self.slider_seek.sliderMoved.connect(self.media_player.setPosition)
@@ -94,8 +128,26 @@ class AudioPlayer(QWidget):
         
     def load_audio(self, file_path: Path):
         """Load audio file"""
-        self.media_player.setSource(QUrl.fromLocalFile(str(file_path)))
+        file_path = Path(file_path) # Ensure Path object
+        logger.info(f"Attempting to load audio file: {file_path}")
+        if not file_path.exists():
+            logger.error(f"Audio file not found: {file_path}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Audio Error", f"Audio file not found:\n{file_path}")
+            return
+
+        absolute_path = file_path.absolute()
+        logger.info(f"Loading absolute path: {absolute_path}")
+        
+        self.media_player.setSource(QUrl.fromLocalFile(str(absolute_path)))
         self.btn_play.setEnabled(True)
+    
+    def _on_error(self):
+        """Handle media player error"""
+        from PyQt6.QtWidgets import QMessageBox
+        error_msg = self.media_player.errorString()
+        logger.error(f"Media player error: {error_msg}")
+        QMessageBox.warning(self, "Playback Error", f"Could not play audio:\n{error_msg}")
         
     def toggle_playback(self):
         """Toggle play/pause"""
@@ -107,6 +159,16 @@ class AudioPlayer(QWidget):
     def stop(self):
         """Stop playback"""
         self.media_player.stop()
+        
+    def set_playback_rate(self, rate: float):
+        """Set playback speed"""
+        self.media_player.setPlaybackRate(rate)
+        
+        # Update button states (simple uncheck all then check active approach if we stored refs, 
+        # but for now just relying on user click interaction or we can improve UI feedback later)
+        # To keep it simple, we just set the rate. The buttons might not mutually exclude visually 
+        # without a QButtonGroup, but functionality is key.
+        logger.info(f"Playback rate set to {rate}")
         
     def _set_volume(self, value):
         """Set volume"""

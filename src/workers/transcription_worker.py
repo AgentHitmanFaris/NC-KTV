@@ -17,10 +17,11 @@ class TranscriptionWorker(QThread):
     transcription_complete = pyqtSignal(dict)  # Result data
     error_occurred = pyqtSignal(str)
     
-    def __init__(self, audio_file: Path, model_name: str = "small"):
+    def __init__(self, audio_file: Path, model_name: str = "small", language: str = None):
         super().__init__()
         self.audio_file = audio_file
         self.model_name = model_name
+        self.language = language
         self._is_cancelled = False
         
         # Check for local models first
@@ -40,9 +41,18 @@ class TranscriptionWorker(QThread):
             # Whisper handles local files if they exist in the download_root
             model = whisper.load_model(self.model_name, download_root=download_root)
             
+            # Check for GPU
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            if device == "cuda":
+                self.progress_updated.emit("Using GPU (CUDA) for transcription...")
+            
             if self._is_cancelled: return
             
-            self.progress_updated.emit("Transcribing audio (this may take a while)...")
+            if self.language:
+                self.progress_updated.emit(f"Transcribing audio in {self.language}...")
+            else:
+                self.progress_updated.emit("Transcribing audio (auto-detecting language)...")
             
             # Transcribe
             # We use the vocals file usually, but instrumental-only might not work well.
@@ -50,7 +60,9 @@ class TranscriptionWorker(QThread):
             result = model.transcribe(
                 str(self.audio_file),
                 verbose=False,
-                fp16=False # safe for CPU/older GPUs, though we have 1060
+                language=self.language,
+                word_timestamps=True, # REQUEST WORD TIMESTAMPS
+                fp16=(device=="cuda") # Enable fp16 on GPU for speed
             )
             
             if self._is_cancelled: return
@@ -63,7 +75,8 @@ class TranscriptionWorker(QThread):
                 segments.append({
                     "text": segment["text"].strip(),
                     "start": segment["start"],
-                    "end": segment["end"]
+                    "end": segment["end"],
+                    "words": segment.get("words", []) # Extract words
                 })
             
             self.transcription_complete.emit({"segments": segments})

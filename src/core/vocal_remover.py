@@ -50,7 +50,7 @@ class VocalRemover:
             log_level=logging.INFO,
             model_file_dir=self.config.get('uvr.models_path', 'models'),
             output_dir=output_dir,
-            output_single_stem='Instrumental',  # We want instrumental only
+            output_single_stem=None,  # Output BOTH Instrumental and Vocals
             normalization_threshold=0.9,
             output_format='WAV',
             # device=device,  # Removed: Not supported in this version
@@ -138,8 +138,18 @@ class VocalRemover:
                 'vocals': None
             }
             
+            output_dir = Path(self.config.get('processing.output_dir', 'output'))
+            
             for file_path in output_files:
                 file_path = Path(file_path)
+                
+                # Fix path if it's just a filename
+                if not file_path.exists() and (output_dir / file_path).exists():
+                    file_path = output_dir / file_path
+                
+                # Ensure absolute path
+                file_path = file_path.absolute()
+                
                 if 'Instrumental' in file_path.name:
                     result['instrumental'] = file_path
                 elif 'Vocals' in file_path.name:

@@ -22,6 +22,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         self.config = config
+        self.current_project = None  # Track active project
         self.setWindowTitle("NC-KTV - Music Video Karaoke Maker")
         self.resize(1200, 800)
         
@@ -126,13 +127,33 @@ class MainWindow(QMainWindow):
             mode: 'wizard' or 'editor'
             project: Optional Project object to pass to editor
         """
-        # Clear current central widget
-        while self.central_widget.count() > 0:
-            widget = self.central_widget.widget(0)
-            self.central_widget.removeWidget(widget)
-            widget.deleteLater()
-            
+        # Ensure we don't lose work when switching modes or projects
+        # Exception: switching to editor with SAME project is just a refresh/re-entry, logic below handles it
+        # But if we are in editor and switching to wizard, or different project, check first.
+        
+        # Determine if we are effectively leaving the current editing session
+        current_widget = self.central_widget.currentWidget()
+        from gui.editor.editor_mode import EditorMode
+        is_editing = isinstance(current_widget, EditorMode)
+        
+        # If we are already editing and switching to a DIFFERENT project or mode, check.
+        # Logic below handles "same project" checks, but we need to check dirty before clearing.
+        
+        if is_editing:
+             # If target is same project, don't nag.
+             if mode == 'editor' and project and current_widget.project == project:
+                 pass # Will fallback to "Already editing" logic below
+             elif mode == 'editor' and not project and self.current_project == current_widget.project:
+                 pass
+             else:
+                 # Switching to new project, wizard, or unrelated state
+                 if not self._check_unsaved_changes():
+                     return
+        
         if mode == 'wizard':
+            # Clear current central widget
+            self._clear_central_widget()
+            
             # Import and create wizard mode
             from gui.wizard_mode import WizardMode
             wizard = WizardMode(self.config)
@@ -145,20 +166,60 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Switched to Wizard Mode", 3000)
             
         elif mode == 'editor':
-            # Import and create editor mode
-            from gui.editor.editor_mode import EditorMode
+            # Resolve project priority: Argument > Active Project
+            if project:
+                self.current_project = project
+            elif self.current_project:
+                project = self.current_project
             
             if project:
+                # Check if we are already in editor mode with this project
+                current_widget = self.central_widget.currentWidget()
+                from gui.editor.editor_mode import EditorMode
+                
+                if isinstance(current_widget, EditorMode) and current_widget.project == project:
+                    self.statusBar().showMessage(f"Already editing: {project.name}", 3000)
+                    return
+
+                # Clear current central widget
+                self._clear_central_widget()
+                
+                # Import and create editor mode
                 editor = EditorMode(self.config, project)
                 self.central_widget.addWidget(editor)
                 self.central_widget.setCurrentWidget(editor)
                 self.statusBar().showMessage(f"Opened Editor: {project.name}", 3000)
             else:
-                 QMessageBox.information(self, "Editor Mode", "Please create a project via Wizard Mode first.")
-                 self._switch_mode('wizard')
+                # No project argument and no active project
+                reply = QMessageBox.question(
+                    self, "No Active Project",
+                    "No project is currently loaded.\nWould you like to open an existing project file or create a new one?",
+                    QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Cancel
+                )
+                 
+                if reply == QMessageBox.StandardButton.Open:
+                    self._open_project()
+                else:
+                    if self.central_widget.count() == 0:
+                        # Fallback if nothing shown
+                        self._switch_mode('wizard')
                  
         else:
             self.statusBar().showMessage(f"Unknown mode: {mode}", 3000)
+
+    def _clear_central_widget(self):
+        while self.central_widget.count() > 0:
+            widget = self.central_widget.widget(0)
+            
+            # Safe cleanup for resource-heavy widgets
+            if hasattr(widget, 'cleanup'):
+                try:
+                    widget.cleanup()
+                except Exception as e:
+                    print(f"Error cleaning up widget: {e}")
+                    
+            self.central_widget.removeWidget(widget)
+            widget.deleteLater()
 
     
     def _new_project(self):
@@ -168,8 +229,24 @@ class MainWindow(QMainWindow):
     
     def _open_project(self):
         """Open existing project"""
-        # TODO: Implement
-        QMessageBox.information(self, "Open Project", "Project opening coming soon!")
+        from pathlib import Path
+        from core.project import Project
+        from PyQt6.QtWidgets import QFileDialog
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Project",
+            "",
+            "NC-KTV Project (*.nctv)"
+        )
+        
+        if file_path:
+            try:
+                project = Project.load(Path(file_path))
+                self.statusBar().showMessage(f"Loaded project: {project.name}", 3000)
+                self._switch_mode('editor', project)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to load project:\n{e}")
     
     def _show_preferences(self):
         """Show preferences dialog"""
@@ -193,7 +270,50 @@ class MainWindow(QMainWindow):
         """
         QMessageBox.about(self, "About NC-KTV", about_text)
     
+    def _check_unsaved_changes(self):
+        """
+        Check for unsaved changes in current editor.
+        Returns: True if safe to proceed (Saved, Discarded, or Nothing to save), False if Cancelled.
+        """
+        # Check if current widget is editor
+        widget = self.central_widget.currentWidget()
+        from gui.editor.editor_mode import EditorMode
+        
+        if isinstance(widget, EditorMode) and hasattr(widget, 'has_unsaved_changes'):
+            if widget.has_unsaved_changes():
+                project_name = widget.project.name if widget.project else "Project"
+                
+                reply = QMessageBox.question(
+                    self,
+                    "Unsaved Changes",
+                    f"Project '{project_name}' has unsaved changes.\nDo you want to save them before closing?",
+                    QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
+                )
+                
+                if reply == QMessageBox.StandardButton.Save:
+                    # Trigger save
+                    # Note: _save_project is technically internal but accessible
+                    # Ideally expose a public method, but this works in Python
+                    widget._save_project()
+                    # Check if save was successful? _save_project shows its own success msg
+                    # We assume if they clicked save and went through dialog, it's handled.
+                    # But if they cancelled the file dialog in save, is_dirty remains True.
+                    if widget.has_unsaved_changes():
+                         # Save cancelled or failed
+                         return False
+                    return True
+                    
+                elif reply == QMessageBox.StandardButton.Discard:
+                    return True
+                    
+                elif reply == QMessageBox.StandardButton.Cancel:
+                    return False
+                    
+        return True
+
     def closeEvent(self, event):
         """Handle window close event"""
-        # TODO: Check for unsaved changes
-        event.accept()
+        if self._check_unsaved_changes():
+            event.accept()
+        else:
+            event.ignore()

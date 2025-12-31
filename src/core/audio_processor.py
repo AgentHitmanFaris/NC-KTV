@@ -76,27 +76,29 @@ class AudioProcessor:
         sample_rate: int = 44100,
         channels: int = 2
     ) -> Path:
-        """Convert audio to specified format
-        
-        Args:
-            input_path: Input audio file
-            output_path: Output audio file
-            sample_rate: Target sample rate
-            channels: Number of channels (1=mono, 2=stereo)
-        
-        Returns:
-            Path to converted audio file
-        """
+        """Convert audio to specified format using FFmpeg (Fast & Low Memory)"""
         input_path = Path(input_path)
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Load audio with librosa
-        audio, sr = librosa.load(input_path, sr=sample_rate, mono=(channels == 1))
+        # ⚡ Bolt Optimization: Use FFmpeg directly instead of Librosa
+        # This avoids loading the entire file into RAM.
+        cmd = [
+            'ffmpeg',
+            '-i', str(input_path),
+            '-acodec', 'pcm_s16le',   # Standard WAV 16-bit
+            '-ar', str(sample_rate),  # Target Sample Rate
+            '-ac', str(channels),     # Target Channels
+            '-y',                     # Overwrite output
+            '-loglevel', 'error',     # Reduce log spam
+            str(output_path)
+        ]
         
-        # Save with soundfile
-        sf.write(output_path, audio.T if audio.ndim > 1 else audio, sample_rate)
-        
+        try:
+            subprocess.run(cmd, check=True, capture_output=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"FFmpeg conversion failed: {e.stderr}")
+            
         return output_path
     
     def get_audio_info(self, audio_path: Path) -> Dict[str, any]:
