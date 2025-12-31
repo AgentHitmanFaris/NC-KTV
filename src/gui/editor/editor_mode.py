@@ -56,6 +56,12 @@ class EditorMode(QWidget):
         self.undo_manager = UndoManager(max_history=50)
         self.undo_manager.set_initial_state(self.lyrics_data)
         
+        # Initialize Auto-Save timer (every 5 minutes)
+        from PyQt6.QtCore import QTimer
+        self.auto_save_timer = QTimer(self)
+        self.auto_save_timer.timeout.connect(self._auto_save)
+        self.auto_save_timer.start(5 * 60 * 1000)  # 5 minutes
+        
         logger.info(f"Initializing EditorMode for project: {project.name}")
         
         logger.info("[DEBUG] Calling _init_ui")
@@ -293,9 +299,22 @@ class EditorMode(QWidget):
         
         layout.addWidget(splitter)
         
+        # Status Bar
+        self.status_bar = QLabel("Ready")
+        self.status_bar.setStyleSheet("""
+            QLabel {
+                padding: 5px 10px;
+                background-color: #2d2d2d;
+                color: #aaa;
+                border-top: 1px solid #444;
+            }
+        """)
+        layout.addWidget(self.status_bar)
+        
         # Initial state
         self.active_line_index = -1
         self.sync_mode_active = False
+        self._update_status_bar()
         logger.info("[DEBUG] _init_ui finished")
 
     def cleanup(self):
@@ -753,6 +772,7 @@ class EditorMode(QWidget):
         self.lyrics_data = self.undo_manager.undo(self.lyrics_data)
         self._refresh_table()
         self.is_dirty = True
+        self._update_status_bar()
         logger.info(f"Undo performed. Stack: {self.undo_manager.get_undo_count()}")
         
     def _perform_redo(self):
@@ -763,7 +783,19 @@ class EditorMode(QWidget):
         self.lyrics_data = self.undo_manager.redo(self.lyrics_data)
         self._refresh_table()
         self.is_dirty = True
+        self._update_status_bar()
         logger.info(f"Redo performed. Stack: {self.undo_manager.get_redo_count()}")
+
+    def _update_status_bar(self):
+        """Update status bar with current state info"""
+        lines_count = len(self.lyrics_data.lines)
+        mode = "Sync Mode" if self.sync_mode_active else "Input Mode"
+        undo_count = self.undo_manager.get_undo_count()
+        redo_count = self.undo_manager.get_redo_count()
+        dirty = "●" if self.is_dirty else ""
+        
+        status = f"{dirty} {lines_count} lines | {mode} | Undo: {undo_count} | Redo: {redo_count}"
+        self.status_bar.setText(status.strip())
 
     def _start_auto_transcription(self):
         """Start AI transcription"""
@@ -911,6 +943,20 @@ class EditorMode(QWidget):
                 QMessageBox.information(self, "Success", "Project saved successfully!")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save project:\n{e}")
+
+    def _auto_save(self):
+        """Auto-save project silently if there are unsaved changes"""
+        if not self.is_dirty:
+            return
+            
+        try:
+            # Save to default location
+            default_path = Path(f"output/{self.project.project_name}_autosave.nctv")
+            self.project.lyrics = self.lyrics_data
+            self.project.save(default_path)
+            logger.info(f"Auto-saved project to: {default_path}")
+        except Exception as e:
+            logger.warning(f"Auto-save failed: {e}")
 
     def _export_video(self):
         """Export project to video with karaoke subtitles"""

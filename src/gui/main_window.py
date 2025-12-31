@@ -24,6 +24,7 @@ class MainWindow(QMainWindow):
         self.config = config
         self.current_project = None  # Track active project
         self.setWindowTitle("NC-KTV - Music Video Karaoke Maker")
+        self.setWindowIcon(QIcon("assets/logo.png"))
         self.resize(1200, 800)
         
         # Check prerequisites

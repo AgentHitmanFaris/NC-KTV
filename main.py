@@ -57,10 +57,20 @@ def main():
     app.setOrganizationName("NC-KTV")
     
     # Set App Icon
-    from PyQt6.QtGui import QIcon
+    from PyQt6.QtGui import QIcon, QPixmap
+    from PyQt6.QtWidgets import QSplashScreen
     icon_path = Path(__file__).parent / "assets" / "logo.png"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
+        
+        # Show splash screen
+        splash_pixmap = QPixmap(str(icon_path)).scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        splash = QSplashScreen(splash_pixmap)
+        splash.show()
+        splash.showMessage("Loading NC-KTV...", Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter)
+        app.processEvents()
+    else:
+        splash = None
     
     # Load configuration
     config = Config()
@@ -68,6 +78,10 @@ def main():
     # Create and show main window
     window = MainWindow(config)
     window.show()
+    
+    # Close splash screen
+    if splash:
+        splash.finish(window)
     
     # Run application
     sys.exit(app.exec())
