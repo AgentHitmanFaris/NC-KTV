@@ -2,12 +2,33 @@
 
 All notable changes to NC-KTV will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachanglog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [1.6.0] - 2025-12-31
+## [0.6.0] - 2026-01-01
+
+### Added
+- **Lyrics File Import**: Import from .txt or .lrc files with timestamp parsing
+- **Playback Speed Control**: Adjust speed (0.5x - 2.0x) for easier synchronization
+- **Cross-Project Import**: Import lyrics, audio, or metadata from other .nctv files
+- **Model Manager**: One-click Whisper model downloads with progress tracking
+- **Encrypted .nctv Format**: Secure binary project files with AES-256-GCM encryption
+- **Save Prompts**: Warns before closing with unsaved changes
+
+### Changed
+- Improved dirty state tracking across all edit operations
+- Enhanced project file format with chunked streaming for large files
+- Updated preferences dialog with model management tab
+
+### Fixed
+- Fixed AI transcription crash (missing `clear()` method in sync_data.py)
+- Fixed import paths for ModelManagerWidget
+
+---
+
+## [0.5.0] - 2025-12-31
 
 ### Added
 - **Multiple Animation Types**: Choose from 5 karaoke animations:
@@ -30,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.5.0] - 2025-12-31
+## [0.4.0] - 2025-12-31
 
 ### Added
 - **Karaoke Video Export**: Generate MP4 videos with burned-in karaoke lyrics
@@ -51,22 +72,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.0-alpha] - 2025-12-30
+## [0.3.0] - 2025-12-30
 
-### Initial Alpha Release
-First development release with core backend functionality.
+### Added
+- **Lyrics Editor Mode**: Professional synchronization interface
+- **AI Auto-Transcription**: Whisper-powered automatic lyric generation
+- **Tap-to-Sync**: Spacebar-based timestamp marking
+- **Waveform Visualization**: Visual audio representation
+- **Click-to-Jump**: Click table rows to seek playback
 
-#### Features
-- **Vocal Removal**: UVR 5 integration with GPU acceleration
-- **Wizard Mode**: Step-by-step file processing
-- **Project Management**: JSON-based .nctv project files
-- **Progress Tracking**: Real-time progress with ETA
+### Changed
+- Redesigned main interface with Wizard → Editor flow
+- Enhanced project structure for better organization
 
-#### Technical
-- Python 3.10.11 embedded
-- PyQt6 6.6+ GUI
-- PyTorch 2.1.0 with CUDA 11.8
-- FFmpeg integration
+---
+
+## [0.2.0] - 2025-12-30
+
+### Added
+- **Vocal Separation**: UVR-powered instrumental/vocal isolation
+- **GPU Acceleration**: CUDA support for faster processing
+- **Model Selection**: Support for multiple UVR models
+
+---
+
+## [0.1.0] - 2025-12-30
+
+### Added
+- Initial project setup
+- Basic wizard interface
+- Audio file support (MP3, WAV, MP4)
 
 ---
 
@@ -78,7 +113,4 @@ First development release with core backend functionality.
 
 ---
 
-[1.6.0]: https://github.com/AgentHitmanFaris/NC-KTV/compare/v1.5.0...v1.6.0
-[1.5.0]: https://github.com/AgentHitmanFaris/NC-KTV/compare/v0.1.0-alpha...v1.5.0
-[0.1.0-alpha]: https://github.com/AgentHitmanFaris/NC-KTV/releases/tag/v0.1.0-alpha
 [0.0.0]: https://github.com/AgentHitmanFaris/NC-KTV/releases/tag/v0.0.0

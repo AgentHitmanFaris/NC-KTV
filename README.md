@@ -6,7 +6,7 @@
 
 **Music Video Karaoke Maker**
 
-![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.10-blue.svg)
 ![Status](https://img.shields.io/badge/status-beta-orange.svg)
@@ -31,6 +31,7 @@ NC-KTV automates the process of creating professional karaoke videos from music 
 - **UVR Integration**: Remove vocals from any song with high precision
 - **GPU Acceleration**: CUDA support for fast processing
 - **Instrumental & Vocal Tracks**: Automatically splits audio for mixing
+- **Multiple Models**: KARA_2 (fast), 5_HP-Karaoke (balanced), 6_HP-Karaoke (quality)
 
 ### Professional Lyrics Editor
 - **Waveform View**: Visualize audio for precise timing
@@ -38,12 +39,22 @@ NC-KTV automates the process of creating professional karaoke videos from music 
 - **Tap-to-Sync**: Spacebar tapping for easy rhythm matching
 - **Word-Level Editing**: Fine-tune individual word timings
 - **Auto-Transcription**: Generate initial lyrics using AI (Whisper)
+- **📥 File Import**: Import from .txt or .lrc files (NEW v0.6.0)
+- **⚡ Speed Control**: Adjust playback 0.5x-2.0x for easier syncing (NEW v0.6.0)
+- **Undo/Redo**: Ctrl+Z/Y to undo changes
+- **Save Prompts**: Warns before closing unsaved work (NEW v0.6.0)
+
+### Project Management
+- **🔐 Encrypted .nctv Format**: Secure binary project files (NEW v0.6.0)
+- **📦 Cross-Project Import**: Share lyrics/audio between projects (NEW v0.6.0)
+- **Model Manager**: One-click Whisper model downloads (NEW v0.6.0)
+- **Auto-Save**: Automatic backups every 5 minutes
 
 ### Karaoke Video Export
 - **1080p MP4 Export**: High-quality video output
-- **Visual Styles**: Neon Gold, Classic Blue, Modern Clean, Fire Red
-- **Dynamic Animations**: Professional karaoke text fills and wipes
-- **Background Video**: Use original music video or custom background
+- **5 Animation Types**: Linear Wipe, Syllable Step, Glow Pulse, Fade In, Bouncing Ball
+- **3 Color Styles**: Neon Gold, Classic Blue, Clean White
+- **Background Options**: Use original video or custom backgrounds
 
 ---
 

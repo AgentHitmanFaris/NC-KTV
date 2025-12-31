@@ -25,7 +25,7 @@ class ProjectSettings:
 class Project:
     """NC-KTV Project management"""
     
-    PROJECT_VERSION = "1.0"
+    PROJECT_VERSION = "0.6"
     PROJECT_EXT = ".nctv"
     
     def __init__(self, source_file: Optional[Path] = None):
@@ -113,7 +113,7 @@ class Project:
         return project
     
     def save(self, file_path: Path):
-        """Save project to file
+        """Save project to encrypted .nctv file
         
         Args:
             file_path: Path to save project file
@@ -131,13 +131,13 @@ class Project:
         # Create parent directory
         file_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Save as JSON
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
+        # Save using encrypted binary format
+        from core.nctv_format import NCTVFormat
+        NCTVFormat.pack(self, file_path)
     
     @classmethod
     def load(cls, file_path: Path) -> 'Project':
-        """Load project from file
+        """Load project from file (supports both .nctv binary and legacy JSON)
         
         Args:
             file_path: Path to project file
@@ -154,6 +154,24 @@ class Project:
         if not file_path.exists():
             raise FileNotFoundError(f"Project file not found: {file_path}")
         
+        # Try new binary format first
+        try:
+            # Check for NCTV magic bytes
+            with open(file_path, 'rb') as f:
+                magic = f.read(4)
+            
+            if magic == b'NCTV':
+                # New encrypted binary format
+                from core.nctv_format import NCTVFormat
+                project = NCTVFormat.unpack(file_path)
+                project.project_file = file_path
+                return project
+        except Exception as e:
+            # If binary format fails, try JSON fallback
+            import logging
+            logging.getLogger(__name__).debug(f"Binary format failed, trying JSON: {e}")
+        
+        # Fallback: Legacy JSON format
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)

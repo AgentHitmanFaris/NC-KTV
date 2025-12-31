@@ -27,6 +27,11 @@ class PreferencesDialog(QDialog):
         self.tabs.addTab(self._create_paths_tab(), "Paths")
         self.tabs.addTab(self._create_ai_tab(), "AI Models")
         
+        # Model Manager tab
+        from gui.dialogs.model_manager_widget import ModelManagerWidget
+        self.model_manager = ModelManagerWidget()
+        self.tabs.addTab(self.model_manager, "📦 Model Manager")
+        
         layout.addWidget(self.tabs)
         
         # Buttons
@@ -106,9 +111,43 @@ class PreferencesDialog(QDialog):
         # Whisper
         form.addRow(QLabel("<b>Lyrics Transcription (Whisper)</b>"))
         self.combo_whisper = QComboBox()
-        self.combo_whisper.addItems(["tiny", "base", "small", "medium", "large"])
-        self.combo_whisper.setCurrentText(self.config.get('lyrics.whisper_model', 'base'))
+        
+        # Auto-detect available Whisper models
+        from pathlib import Path
+        whisper_dir = Path("models/whisper")
+        available_models = []
+        
+        if whisper_dir.exists():
+            # Find all .pt files
+            for model_file in whisper_dir.glob("*.pt"):
+                model_name = model_file.stem  # e.g., "small", "medium"
+                available_models.append(model_name)
+        
+        # Add standard models (in order of quality)
+        standard_models = ["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"]
+        
+        for model in standard_models:
+            if model in available_models:
+                self.combo_whisper.addItem(f"{model} ✓ (Downloaded)", model)
+            else:
+                self.combo_whisper.addItem(f"{model} (Will download)", model)
+        
+        # Set current model
+        current_model = self.config.get('lyrics.whisper_model', 'small')
+        index = self.combo_whisper.findData(current_model)
+        if index >= 0:
+            self.combo_whisper.setCurrentIndex(index)
+        
         form.addRow("Model Size:", self.combo_whisper)
+        
+        # Add info label
+        info_label = QLabel(
+            "💡 Downloaded models have a ✓ mark.\n"
+            "Larger models = better accuracy but slower."
+        )
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("color: #666; font-size: 9pt; font-style: italic;")
+        form.addRow("", info_label)
         
         return widget
         
@@ -127,7 +166,12 @@ class PreferencesDialog(QDialog):
         self.config.set('processing.temp_dir', self.txt_temp.text())
         
         self.config.set('uvr.use_gpu', self.chk_gpu.isChecked())
-        self.config.set('lyrics.whisper_model', self.combo_whisper.currentText())
+        
+        # Get Whisper model from userData (not text, since text has ✓ mark)
+        whisper_model = self.combo_whisper.currentData()
+        if not whisper_model:  # Fallback if no userData
+            whisper_model = self.combo_whisper.currentText().split()[0]
+        self.config.set('lyrics.whisper_model', whisper_model)
         
         # Save to file
         self.config.save()

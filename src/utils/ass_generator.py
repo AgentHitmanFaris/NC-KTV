@@ -70,15 +70,21 @@ Style: Default,Arial,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,
             start_fmt = self._format_time(line.start_time)
             end_fmt = self._format_time(line.end_time)
             
-            # --- Karaoke Wipe Tag Construction ---
+            # --- Map Preview Animations to ASS Format ---
+            # Preview animations: "Linear Wipe", "Syllable Step", "Glow Pulse", "Fade In", "Bouncing Ball"
+            
+            # Karaoke tag type based on animation
+            if self.animation == "Syllable Step":
+                # Instant fill - use \kf (instant fill)
+                tag = "\\kf"
+            else:
+                # Gradual fill - use \k (standard karaoke)
+                tag = "\\k"
+            
             k_text = ""
             
-            # Decide tag type: \k (fill), \kf (fill), \ko (outline)
-            # Typewriter uses standard \k but style makes it appear
-            tag = "\\k" 
-            
             if line.tokens:
-                # Word-level
+                # Word-level timing
                 current_time = line.start_time
                 
                 # Handle initial gap
@@ -90,20 +96,6 @@ Style: Default,Arial,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,
                 for token in line.tokens:
                     duration = token.end_time - token.start_time
                     k_val = int(duration * 100)
-                    
-                    # Effect modifiers per word
-                    effect_mod = ""
-                    
-                    if self.animation == "Scale Pulse":
-                        # Pulse up then down during the word
-                        # \t(t1,t2,accel,tags)
-                        # We want it to pop up at start of its time
-                        # Start of word event is relative 0 for the \t if inside the K tag? No, \t is relative to line start.
-                        # Actually \t is absolute time within the line event.
-                        # Complex logic needed for per-word \t since we are concatting.
-                        # Simplification: Just scale up slightly for the duration?
-                        pass 
-                    
                     k_text += f"{{{tag}{k_val}}}{token.text} "
             else:
                 # Line-level fallback
@@ -111,45 +103,39 @@ Style: Default,Arial,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,
                 k_val = int(duration * 100)
                 k_text = f"{{{tag}{k_val}}}{line.text}"
             
-            # --- Global Animation Tags ---
+            # --- Global Animation Effects ---
             anim_tags = ""
+            
             if self.animation == "Fade In":
+                # Fade in effect
                 anim_tags = "{\\fad(300,300)}"
-            elif self.animation == "Zoom In": # "Zoom In" in Dialog matches "Zoom In"
-                anim_tags = "{\\fscx90\\fscy90\\t(0,200,\\fscx100\\fscy100)}"
-            elif self.animation == "Slide Up":
-                anim_tags = "{\\move(960,1080,960,1030)}"
-            elif self.animation == "Rainbow":
-                # Cycle colors: Red->Yellow->Green->Cyan->Blue->Magenta->Red
-                # 4s cycle
-                anim_tags = "{\\t(0,1000,\\1c&H00FFFF)\\t(1000,2000,\\1c&H00FF00)\\t(2000,3000,\\1c&HFF0000)\\t(3000,4000,\\1c&H0000FF)}"
-            elif self.animation == "Scale Pulse":
-                # Static pulse for whole line for now, per-word is hard in ASS concat
-                anim_tags = "" 
-
+            elif self.animation == "Glow Pulse":
+                # Scale pulse effect (zoom in then back)
+                anim_tags = "{\\fscx90\\fscy90\\t(0,300,\\fscx110\\fscy110)\\t(300,600,\\fscx100\\fscy100)}"
+            elif self.animation in ["Linear Wipe", "Bouncing Ball"]:
+                # Standard karaoke wipe (already handled by \k tag)
+                anim_tags = ""
+            
             final_text = anim_tags + k_text
 
-            # --- Event Generation based on Style ---
+            # --- Select Style Name ---
             style_name = "Default"
-            if self.animation == "Typewriter":
-                 style_name = "Typewriter"
-            elif self.style == "Neon Gold":
-                 style_name = "NeonSharp" # We handle layer 2 below
+            if self.style == "Neon Gold":
+                style_name = "NeonSharp"
             elif self.style == "Classic Blue":
-                 style_name = "Classic"
+                style_name = "Classic"
             elif self.style == "Clean White":
-                 style_name = "Clean"
+                style_name = "Clean"
                  
-            # Double Layer Effects
-            if self.style == "Neon Gold" and self.animation != "Typewriter":
-                # Blur Layer
+            # --- Generate Event Lines ---
+            if self.style == "Neon Gold":
+                # Neon style uses double layer (blur + sharp)
                 glow_line = f"Dialogue: 0,{start_fmt},{end_fmt},NeonBlur,,0,0,0,,{{\\blur15}}{final_text}"
                 content.append(glow_line)
-                # Sharp Layer
                 sharp_line = f"Dialogue: 1,{start_fmt},{end_fmt},NeonSharp,,0,0,0,,{{\\blur1}}{final_text}"
                 content.append(sharp_line)
             else:
-                # Single Layer
+                # Single layer for other styles
                 line_str = f"Dialogue: 0,{start_fmt},{end_fmt},{style_name},,0,0,0,,{final_text}"
                 content.append(line_str)
             

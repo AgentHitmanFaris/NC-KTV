@@ -78,6 +78,10 @@ class LyricsData:
         """Add a lyric line"""
         self.lines.append(line)
     
+    def clear(self):
+        """Clear all lyrics lines"""
+        self.lines = []
+    
     def get_total_duration(self) -> float:
         """Get total duration of lyrics"""
         if not self.lines:

@@ -13,7 +13,7 @@ gui:
   autosave_interval: 300
   show_tooltips: true
   start_mode: wizard
-  theme: light
+  theme: dark
 karaoke:
   default_style: classic
   font_family: Arial
@@ -26,7 +26,7 @@ karaoke:
 lyrics:
   confidence_threshold: 0.5
   language: auto
-  whisper_model: base
+  whisper_model: medium
   word_level_timing: true
 processing:
   audio_format: wav

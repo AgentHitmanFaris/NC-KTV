@@ -85,6 +85,11 @@ class EditorMode(QWidget):
         toolbar.addWidget(self.lbl_project)
         toolbar.addStretch()
         
+        btn_import = QPushButton("📥 Import...")
+        btn_import.clicked.connect(self._import_from_project)
+        btn_import.setToolTip("Import components from another project")
+        toolbar.addWidget(btn_import)
+        
         btn_save = QPushButton("💾 Save Project")
         btn_save.clicked.connect(self._save_project)
         toolbar.addWidget(btn_save)
@@ -110,14 +115,19 @@ class EditorMode(QWidget):
         btn_mode_input.setCheckable(True)
         btn_mode_input.setChecked(True)
         btn_mode_input.clicked.connect(lambda: self._switch_tab('input'))
+        self.mode_tabs.addWidget(btn_mode_input)
         
-        btn_mode_sync = QPushButton("⏱️ Sync Timing")
+        btn_import_file = QPushButton("📄 Import Lyrics...")
+        btn_import_file.clicked.connect(self._import_lyrics_file)
+        btn_import_file.setToolTip("Import lyrics from .txt or .lrc file")
+        self.mode_tabs.addWidget(btn_import_file)
+        
+        btn_mode_sync = QPushButton("🎵 Sync Mode")
         btn_mode_sync.setCheckable(True)
         btn_mode_sync.clicked.connect(lambda: self._switch_tab('sync'))
+        self.mode_tabs.addWidget(btn_mode_sync)
         
         self.mode_btns = {'input': btn_mode_input, 'sync': btn_mode_sync}
-        self.mode_tabs.addWidget(btn_mode_input)
-        self.mode_tabs.addWidget(btn_mode_sync)
         
         # Auto-Transcribe Button
         btn_auto = QPushButton("✨ Auto-Transcribe (AI)")
@@ -147,6 +157,10 @@ class EditorMode(QWidget):
         self.sync_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.sync_table.customContextMenuRequested.connect(self._show_context_menu)
         self.sync_table.itemChanged.connect(self._on_table_item_changed)
+        
+        # Jump to timestamp when clicking on row
+        self.sync_table.itemClicked.connect(self._on_table_row_clicked)
+        
         self.sync_table.hide()
         
         self.editor_stack.addWidget(self.text_editor)
@@ -215,6 +229,18 @@ class EditorMode(QWidget):
         self.combo_source.currentIndexChanged.connect(self._change_audio_source)
         source_layout.addWidget(self.combo_source)
         
+        source_layout.addSpacing(10)
+        
+        # Preview Mode Dropdown
+        source_layout.addWidget(QLabel("Preview:"))
+        self.combo_preview = QComboBox()
+        self.combo_preview.addItems(["With Video", "Lyrics Only"])
+        self.combo_preview.setToolTip("Preview mode: With Video shows background, Lyrics Only shows centered text")
+        self.combo_preview.currentTextChanged.connect(self._change_preview_mode)
+        source_layout.addWidget(self.combo_preview)
+        
+        source_layout.addSpacing(10)
+        
         # Animation Type Select
         source_layout.addWidget(QLabel("Animation:"))
         self.combo_animation = QComboBox()
@@ -230,6 +256,17 @@ class EditorMode(QWidget):
         self.btn_color.setFixedWidth(40)
         self.btn_color.clicked.connect(self._pick_color)
         source_layout.addWidget(self.btn_color)
+        
+        source_layout.addSpacing(10)
+        
+        # Playback Speed Control
+        source_layout.addWidget(QLabel("Speed:"))
+        self.combo_speed = QComboBox()
+        self.combo_speed.addItems(["0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x"])
+        self.combo_speed.setCurrentText("1.0x")
+        self.combo_speed.setToolTip("Playback speed for easier synchronization")
+        self.combo_speed.currentTextChanged.connect(self._change_playback_speed)
+        source_layout.addWidget(self.combo_speed)
         
         source_layout.addStretch()
         
@@ -337,6 +374,29 @@ class EditorMode(QWidget):
                 self.bg_video_player.setSource(QUrl())
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
+    
+    def closeEvent(self, event):
+        """Handle close event - prompt to save if there are unsaved changes"""
+        if self.has_unsaved_changes():
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before closing?",
+                QMessageBox.StandardButton.Save | 
+                QMessageBox.StandardButton.Discard | 
+                QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save
+            )
+            
+            if reply == QMessageBox.StandardButton.Save:
+                self._save_project()
+                event.accept()
+            elif reply == QMessageBox.StandardButton.Discard:
+                event.accept()
+            else:  # Cancel
+                event.ignore()
+        else:
+            event.accept()
         
     def _setup_project(self):
         """Load project data"""
@@ -419,8 +479,9 @@ class EditorMode(QWidget):
             
     def _on_text_changed(self):
         """Handle text input changes"""
+        # Mark as dirty when text is edited
+        self.is_dirty = True
         # We parse only when switching to sync mode to avoid overhead
-        pass
         
     def _parse_lyrics_from_text(self):
         """Parse text editor content into LyricsData"""
@@ -479,14 +540,44 @@ class EditorMode(QWidget):
             self.sync_table.setItem(i, 2, item_text)
             
     def keyPressEvent(self, event: QKeyEvent):
-        """Handle keyboard shortcuts for syncing"""
+        """Handle keyboard shortcuts"""
+        # Global shortcuts (work in all modes)
+        if event.key() == Qt.Key.Key_Z and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._perform_undo()
+            event.accept()
+            return
+        
+        # Redo: Support both Ctrl+Y and Ctrl+Shift+Z (standard on some systems)
+        elif (event.key() == Qt.Key.Key_Y and event.modifiers() & Qt.KeyboardModifier.ControlModifier) or \
+             (event.key() == Qt.Key.Key_Z and event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
+            self._perform_redo()
+            event.accept()
+            return
+            
+        elif event.key() == Qt.Key.Key_F1:
+            self._show_shortcuts_help()
+            event.accept()
+            return
+        
+        # Sync mode specific shortcuts
         if not self.sync_mode_active:
             super().keyPressEvent(event)
             return
-            
+        
+        # CRITICAL: Only handle spacebar if text editor does NOT have focus
+        # This prevents spacebar from deleting text while typing
         if event.key() == Qt.Key.Key_Space:
-            # Tap to sync logic
-            self._handle_tap_sync()
+            focused_widget = self.focusWidget()
+            # Only trigger sync if focus is NOT on text editor
+            if focused_widget != self.text_editor:
+                # Tap to sync logic
+                self._handle_tap_sync()
+                event.accept()
+                return
+            else:
+                # Let text editor handle the spacebar normally
+                super().keyPressEvent(event)
+                return
             
         # Nudge controls
         # Left/Right: Nudge Start Time
@@ -495,22 +586,31 @@ class EditorMode(QWidget):
             amount = -0.1
             is_end = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             self._nudge_timestamp(amount, is_end)
+            event.accept()
             
         elif event.key() == Qt.Key.Key_Right:
             amount = 0.1
             is_end = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             self._nudge_timestamp(amount, is_end)
-            
-        elif event.key() == Qt.Key.Key_F1:
-            self._show_shortcuts_help()
-            
-        # Undo/Redo (works in both modes)
-        elif event.key() == Qt.Key.Key_Z and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            self._perform_undo()
-            
-        elif event.key() == Qt.Key.Key_Y and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            self._perform_redo()
+            event.accept()
+        
+        else:
+            super().keyPressEvent(event)
 
+    def _on_table_row_clicked(self, item):
+        """Jump to timestamp when user clicks on a lyrics line"""
+        row = item.row()
+        
+        if row < 0 or row >= len(self.lyrics_data.lines):
+            return
+        
+        line = self.lyrics_data.lines[row]
+        # Jump to start time of this line
+        if line.start_time >= 0:
+            seek_ms = int(line.start_time * 1000)
+            self.player.media_player.setPosition(seek_ms)
+            logger.info(f"Jumped to line {row}: {line.start_time:.2f}s")
+    
     def _on_table_item_changed(self, item):
         """Handle manual edits in the table"""
         row = item.row()
@@ -518,6 +618,9 @@ class EditorMode(QWidget):
         
         if row < 0 or row >= len(self.lyrics_data.lines):
             return
+        
+        # Save undo state before modification
+        self._save_undo_state()
             
         line = self.lyrics_data.lines[row]
         text = item.text()
@@ -797,7 +900,100 @@ class EditorMode(QWidget):
             # Update button to show selected color
             self.btn_color.setStyleSheet(f"background-color: {color.name()};")
 
+    def _import_lyrics_file(self):
+        """Import lyrics from external file (.txt or .lrc)"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Lyrics File",
+            "",
+            "Lyrics Files (*.txt *.lrc);;Text Files (*.txt);;LRC Files (*.lrc);;All Files (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            if file_path.endswith('.lrc'):
+                # Parse LRC format
+                self._parse_lrc_file(content)
+            else:
+                # Plain text - just load into editor
+                self.text_editor.setPlainText(content)
+            
+            self.is_dirty = True
+            QMessageBox.information(self, "Success", f"Imported lyrics from {Path(file_path).name}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to import file:\n{e}")
+    
+    def _parse_lrc_file(self, content: str):
+        """Parse LRC format and populate lyrics with timestamps"""
+        import re
+        
+        # LRC format: [mm:ss.xx]Lyric text
+        lrc_pattern = r'\[(\d{2}):(\d{2}\.\d{2})\](.*)'
+        
+        lines_with_time = []
+        for line in content.splitlines():
+            match = re.match(lrc_pattern, line)
+            if match:
+                minutes = int(match.group(1))
+                seconds = float(match.group(2))
+                text = match.group(3).strip()
+                start_time = minutes * 60 + seconds
+                
+                if text:  # Skip empty lines
+                    lines_with_time.append((start_time, text))
+        
+        if lines_with_time:
+            # Sort by timestamp
+            lines_with_time.sort(key=lambda x: x[0])
+            
+            # Clear existing lyrics
+            self._save_undo_state()
+            self.lyrics_data.clear()
+            
+            # Add lines with timestamps
+            for i, (start_time, text) in enumerate(lines_with_time):
+                # Calculate end time (start of next line, or +3 seconds for last line)
+                end_time = lines_with_time[i + 1][0] if i < len(lines_with_time) - 1 else start_time + 3.0
+                self.lyrics_data.add_line(text, start_time, end_time)
+            
+            # Update UI
+            self.text_editor.setPlainText("\n".join(line[1] for line in lines_with_time))
+            self._refresh_table()
+            
+            # Switch to sync mode to show timestamps
+            self._switch_tab('sync')
+    
+    def _change_playback_speed(self, speed_text: str):
+        """Change playback speed (0.5x - 2.0x)"""
+        # Extract float from "1.0x" format
+        speed = float(speed_text.replace('x', ''))
+        
+        # Set playback rate for both players
+        if hasattr(self, 'player') and self.player.media_player:
+            self.player.media_player.setPlaybackRate(speed)
+            logger.info(f"Playback speed changed to {speed}x")
 
+    def _change_preview_mode(self, mode: str):
+        """Change preview mode between 'With Video' and 'Lyrics Only'"""
+        show_video = (mode == "With Video")
+        
+        if hasattr(self, 'video_item'):
+            self.video_item.setVisible(show_video)
+        
+        if hasattr(self, 'preview_widget'):
+            if show_video:
+                # Video visible: lyrics at bottom
+                self.lyrics_proxy.setPos(0, 800)
+            else:
+                # No video: lyrics centered
+                self.lyrics_proxy.setPos(0, 440)  # Centered vertically (1080/2 - 100)
+    
     def _show_shortcuts_help(self):
         """Show keyboard shortcuts help dialog"""
         from gui.dialogs.shortcuts_dialog import ShortcutsDialog
@@ -807,6 +1003,7 @@ class EditorMode(QWidget):
     def _save_undo_state(self):
         """Save current state to undo stack before making changes"""
         self.undo_manager.push_state(self.lyrics_data)
+        self.is_dirty = True  # Mark as modified
         
     def _perform_undo(self):
         """Undo last lyrics change"""
@@ -901,6 +1098,53 @@ class EditorMode(QWidget):
         
         if not ok:
             return
+        
+        # Model selection - auto-detect available models
+        from pathlib import Path
+        whisper_dir = Path("models/whisper")
+        available_models = []
+        
+        if whisper_dir.exists():
+            for model_file in whisper_dir.glob("*.pt"):
+                available_models.append(model_file.stem)
+        
+        # If no models found, use default from config (will download)
+        if not available_models:
+            model_name = self.config.get('lyrics.whisper_model', 'small')
+        # If only one model, use it automatically
+        elif len(available_models) == 1:
+            model_name = available_models[0]
+        # If multiple models, show selection
+        else:
+            model_descriptions = {
+                "tiny": "Fastest (low quality)",
+                "base": "Fast (decent quality)",
+                "small": "Balanced (recommended)",
+                "medium": "High quality (slower)",
+                "large": "Best quality (very slow)",
+                "large-v2": "Best quality v2 (very slow)",
+                "large-v3": "Best quality v3 (very slow)"
+            }
+            
+            model_choices = []
+            for model in sorted(available_models):
+                desc = model_descriptions.get(model, "")
+                if desc:
+                    model_choices.append(f"{model} - {desc}")
+                else:
+                    model_choices.append(model)
+            
+            model_choice, ok = QInputDialog.getItem(
+                self, "Select Whisper Model",
+                "Choose AI transcription model:",
+                model_choices, 0, False
+            )
+            
+            if not ok:
+                return
+            
+            # Extract model name
+            model_name = model_choice.split(' - ')[0].strip()
             
         selected_lang_code = None
         selected_lang_name = lang # Keep full name for display
@@ -916,8 +1160,8 @@ class EditorMode(QWidget):
         self.progress.setWindowModality(Qt.WindowModality.WindowModal)
         self.progress.show()
         
-        # Worker
-        self.transcriber = TranscriptionWorker(audio_source, language=selected_lang_code)
+        # Worker - pass model_name
+        self.transcriber = TranscriptionWorker(audio_source, model_name=model_name, language=selected_lang_code)
         
         # Custom progress update to avoid "ms" confusion
         def update_label(msg):
@@ -976,6 +1220,29 @@ class EditorMode(QWidget):
         
         QMessageBox.information(self, "Success", f"Transcribed {len(segments)} lines!")
 
+    def _import_from_project(self):
+        """Import components from another .nctv project"""
+        from gui.dialogs.import_dialog import ImportDialog
+        
+        dialog = ImportDialog(self.project, self)
+        if dialog.exec():
+            # Import successful - refresh UI
+            self.lyrics_data = self.project.lyrics
+            
+            # Update text editor
+            text = "\n".join(line.text for line in self.lyrics_data.lines)
+            self.text_editor.blockSignals(True)
+            self.text_editor.setPlainText(text)
+            self.text_editor.blockSignals(False)
+            
+            # Refresh sync table
+            self._refresh_table()
+            
+            # Mark as modified
+            self.is_dirty = True
+            
+            logger.info("Project components imported successfully")
+    
     def _save_project(self):
         """Save project"""
         # Default filename
@@ -1009,6 +1276,7 @@ class EditorMode(QWidget):
             default_path = Path(f"output/{self.project.project_name}_autosave.nctv")
             self.project.lyrics = self.lyrics_data
             self.project.save(default_path)
+            self.is_dirty = False  # Clear dirty flag after successful auto-save
             logger.info(f"Auto-saved project to: {default_path}")
         except Exception as e:
             logger.warning(f"Auto-save failed: {e}")
@@ -1036,9 +1304,18 @@ class EditorMode(QWidget):
         video_input = self.project.source_file
         is_video = video_input.suffix.lower() in ['.mp4', '.avi', '.mkv', '.mov']
         
+        background_options = None
         if not is_video:
-            QMessageBox.warning(self, "Export Limit", "Currently only supports exporting if the source is a video file.\nStatic image background support coming soon.")
-            return
+            # Show video options dialog
+            from gui.dialogs.video_options_dialog import VideoOptionsDialog
+            bg_dialog = VideoOptionsDialog(self)
+            if not bg_dialog.exec():
+                return  # User cancelled
+            
+            background_options = bg_dialog.get_options()
+            if not background_options:
+                QMessageBox.warning(self, "Invalid Selection", "Please select a valid background option.")
+                return
 
         # 3. Generate Subtitles
         ass_gen = ASSGenerator(self.lyrics_data, style=style, animation=animation)
@@ -1057,20 +1334,100 @@ class EditorMode(QWidget):
         
         cmd = ["ffmpeg", "-y"]
         
-        if has_stems:
-            cmd.extend(["-i", str(video_input)])
-            cmd.extend(["-i", str(inst_path)])
-            cmd.extend(["-i", str(voc_path)])
-            # Use async=1 to fix audio timestamp drift
-            # Use duration=longest to prevent early cuts
-            filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
-            cmd.extend(["-filter_complex", filter_complex])
-            cmd.extend(["-map", "[v]", "-map", "[a]"])
-            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        # Handle different background types
+        if is_video:
+            # Original video background
+            if has_stems:
+                cmd.extend(["-i", str(video_input)])
+                cmd.extend(["-i", str(inst_path)])
+                cmd.extend(["-i", str(voc_path)])
+                # Use async=1 to fix audio timestamp drift
+                # Use duration=longest to prevent early cuts
+                filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
+                cmd.extend(["-filter_complex", filter_complex])
+                cmd.extend(["-map", "[v]", "-map", "[a]"])
+                cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+            else:
+                cmd.extend(["-i", str(video_input)])
+                cmd.extend(["-vf", f"ass='{ass_path_unix}'"])
+                cmd.extend(["-c:a", "copy"]) # Use copy for max fidelity if no mixing
+        
         else:
-            cmd.extend(["-i", str(video_input)])
-            cmd.extend(["-vf", f"ass='{ass_path_unix}'"])
-            cmd.extend(["-c:a", "copy"]) # Use copy for max fidelity if no mixing
+            # Audio-only source, use selected background
+            bg_type = background_options['type']
+            
+            # Get audio duration for generating video
+            import subprocess
+            duration_result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration", 
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(video_input)],
+                capture_output=True, text=True
+            )
+            duration = float(duration_result.stdout.strip()) if duration_result.stdout.strip() else 60
+            
+            if bg_type == 'video':
+                # Use selected video as background
+                bg_video = background_options['path']
+                if has_stems:
+                    cmd.extend(["-stream_loop", "-1", "-i", str(bg_video)])  # Loop video
+                    cmd.extend(["-i", str(inst_path)])
+                    cmd.extend(["-i", str(voc_path)])
+                    filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
+                    cmd.extend(["-filter_complex", filter_complex])
+                    cmd.extend(["-map", "[v]", "-map", "[a]"])
+                    cmd.extend(["-shortest"])  # Cut when audio ends
+                    cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+                else:
+                    cmd.extend(["-stream_loop", "-1", "-i", str(bg_video)])
+                    cmd.extend(["-i", str(video_input)])
+                    cmd.extend(["-filter_complex", f"[0:v]ass='{ass_path_unix}'[v]"])
+                    cmd.extend(["-map", "[v]", "-map", "1:a"])
+                    cmd.extend(["-shortest"])
+                    cmd.extend(["-c:a", "copy"])
+            
+            elif bg_type == 'image':
+                # Use static image as background
+                bg_image = background_options['path']
+                if has_stems:
+                    cmd.extend(["-loop", "1", "-i", str(bg_image)])
+                    cmd.extend(["-i", str(inst_path)])
+                    cmd.extend(["-i", str(voc_path)])
+                    filter_complex = f"[0:v]scale=1920:1080,ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
+                    cmd.extend(["-filter_complex", filter_complex])
+                    cmd.extend(["-map", "[v]", "-map", "[a]"])
+                    cmd.extend(["-t", str(duration)])
+                    cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+                else:
+                    cmd.extend(["-loop", "1", "-i", str(bg_image)])
+                    cmd.extend(["-i", str(video_input)])
+                    filter_complex = f"[0:v]scale=1920:1080,ass='{ass_path_unix}'[v]"
+                    cmd.extend(["-filter_complex", filter_complex])
+                    cmd.extend(["-map", "[v]", "-map", "1:a"])
+                    cmd.extend(["-t", str(duration)])
+                    cmd.extend(["-c:a", "copy"])
+            
+            elif bg_type == 'color':
+                # Generate solid color background
+                color = background_options['color']
+                color_hex = color.name().replace('#', '0x')
+                
+                if has_stems:
+                    cmd.extend(["-f", "lavfi", "-i", f"color=c={color_hex}:s=1920x1080:r=30"])
+                    cmd.extend(["-i", str(inst_path)])
+                    cmd.extend(["-i", str(voc_path)])
+                    filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
+                    cmd.extend(["-filter_complex", filter_complex])
+                    cmd.extend(["-map", "[v]", "-map", "[a]"])
+                    cmd.extend(["-t", str(duration)])
+                    cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+                else:
+                    cmd.extend(["-f", "lavfi", "-i", f"color=c={color_hex}:s=1920x1080:r=30"])
+                    cmd.extend(["-i", str(video_input)])
+                    filter_complex = f"[0:v]ass='{ass_path_unix}'[v]"
+                    cmd.extend(["-filter_complex", filter_complex])
+                    cmd.extend(["-map", "[v]", "-map", "1:a"])
+                    cmd.extend(["-t", str(duration)])
+                    cmd.extend(["-c:a", "copy"])
         
         # Video encoding settings for compatibility
         cmd.extend(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium"])

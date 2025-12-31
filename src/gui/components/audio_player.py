@@ -42,6 +42,12 @@ class AudioPlayer(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
+        # Waveform visualization
+        from gui.components.waveform_widget import WaveformWidget
+        self.waveform = WaveformWidget()
+        self.waveform.seek_requested.connect(self.media_player.setPosition)
+        layout.addWidget(self.waveform)
+        
         # Seek bar
         seek_layout = QHBoxLayout()
         self.lbl_current = QLabel("00:00")
@@ -141,6 +147,12 @@ class AudioPlayer(QWidget):
         
         self.media_player.setSource(QUrl.fromLocalFile(str(absolute_path)))
         self.btn_play.setEnabled(True)
+        
+        # Load waveform visualization
+        try:
+            self.waveform.load_audio(file_path)
+        except Exception as e:
+            logger.warning(f"Could not load waveform: {e}")
     
     def _on_error(self):
         """Handle media player error"""
@@ -180,6 +192,11 @@ class AudioPlayer(QWidget):
             self.slider_seek.setValue(position)
         
         self.lbl_current.setText(self._format_time(position))
+        
+        # Update waveform cursor
+        if hasattr(self, 'waveform'):
+            self.waveform.set_position(position)
+        
         self.position_changed.emit(position)
         
     def _on_duration_changed(self, duration):

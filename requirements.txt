@@ -27,6 +27,10 @@ thefuzz>=0.20.0
 pyyaml>=6.0
 tqdm>=4.65.0
 
+# Encryption & Compression (for .nctv binary format)
+cryptography>=41.0.0
+zstandard>=0.21.0
+
 # Testing
 pytest>=7.3.0
 pytest-qt>=4.2.0
