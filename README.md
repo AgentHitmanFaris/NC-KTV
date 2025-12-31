@@ -27,21 +27,21 @@ NC-KTV automates the process of creating professional karaoke videos from music 
 
 ## Features
 
-### 🎵 AI Vocal Separation
+### AI Vocal Separation
 - **UVR Integration**: Remove vocals from any song with high precision
 - **GPU Acceleration**: CUDA support for fast processing
 - **Instrumental & Vocal Tracks**: Automatically splits audio for mixing
 
-### 📝 Professional Lyrics Editor
+### Professional Lyrics Editor
 - **Waveform View**: Visualize audio for precise timing
 - **Dual-Line Preview**: See active and upcoming lyrics in real-time
 - **Tap-to-Sync**: Spacebar tapping for easy rhythm matching
 - **Word-Level Editing**: Fine-tune individual word timings
 - **Auto-Transcription**: Generate initial lyrics using AI (Whisper)
 
-### 🎬 Karaoke Video Export
+### Karaoke Video Export
 - **1080p MP4 Export**: High-quality video output
-- **Visual Styles**: "Neon Gold", "Classic Blue", "Modern Clean", "Fire Red"
+- **Visual Styles**: Neon Gold, Classic Blue, Modern Clean, Fire Red
 - **Dynamic Animations**: Professional karaoke text fills and wipes
 - **Background Video**: Use original music video or custom background
 
@@ -79,13 +79,13 @@ See [DOCS.md](DOCS.md) for detailed installation instructions.
 ### 2. Lyrics Editor
 - **Input**: Paste lyrics or use "Auto-Transcribe"
 - **Sync**: Play track and use **Spacebar** to set line starts
-- **Fine-tune**: Right-click → "Edit Word Timings" for precision
+- **Fine-tune**: Right-click context menu to "Edit Word Timings" for precision
 - **Preview**: Watch the real-time karaoke preview
 
 ### 3. Export
 - Click **"Export Video"**
 - Choose animation style
-- Wait for rendering!
+- Wait for rendering
 
 ---
 
@@ -124,6 +124,6 @@ MIT License - see [LICENSE](LICENSE).
 
 <div align="center">
 
-**Made with ❤️ for the karaoke community**
+**Made for the karaoke community**
 
 </div>

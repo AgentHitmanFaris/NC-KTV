@@ -1,57 +1,42 @@
-# NC-KTV Configuration
-
-# UVR Settings
-uvr:
-  models_path: "models/"  # Path to UVR model files
-  default_model: "MDX_Net"  # Options: "VR_Models", "MDX_Net"
-  use_gpu: true
-  gpu_device: 0  # CUDA device ID
-  batch_size: 4
-
-# Processing Settings
-processing:
-  temp_dir: "temp/"
-  output_dir: "output/"
-  audio_format: "wav"  # Intermediate format
-  sample_rate: 44100
-  num_workers: 4  # Parallel processing threads
-
-# Lyrics Synchronization
-lyrics:
-  whisper_model: "base"  # Options: tiny, base, small, medium, large
-  language: "auto"  # Auto-detect or specify (en, es, fr, etc.)
-  word_level_timing: true
-  confidence_threshold: 0.5
-
-# Karaoke Video Settings
-karaoke:
-  default_style: "classic"  # Options: classic, modern, minimal
-  font_family: "Arial"
-  font_size: 48
-  primary_color: "#FFFFFF"  # White
-  highlight_color: "#FFD700"  # Gold
-  outline_color: "#000000"  # Black
-  outline_width: 2
-  position: "bottom"  # Options: top, bottom, center
-  
-# Export Settings
-export:
-  video_codec: "libx264"
-  video_quality: "high"  # Options: low, medium, high
-  audio_bitrate: "320k"
-  output_format: "mp4"
-
-# GUI Settings
-gui:
-  theme: "dark"  # Options: light, dark
-  start_mode: "wizard"  # Options: wizard, editor
-  show_tooltips: true
-  autosave: true
-  autosave_interval: 300  # seconds
-
-# Advanced Settings
 advanced:
-  enable_batch_processing: false
-  max_video_length: 3600  # seconds (1 hour)
-  cache_waveforms: true
   cache_size_mb: 1024
+  cache_waveforms: true
+  enable_batch_processing: false
+  max_video_length: 3600
+export:
+  audio_bitrate: 320k
+  output_format: mp4
+  video_codec: libx264
+  video_quality: high
+gui:
+  autosave: true
+  autosave_interval: 300
+  show_tooltips: true
+  start_mode: wizard
+  theme: light
+karaoke:
+  default_style: classic
+  font_family: Arial
+  font_size: 48
+  highlight_color: '#FFD700'
+  outline_color: '#000000'
+  outline_width: 2
+  position: bottom
+  primary_color: '#FFFFFF'
+lyrics:
+  confidence_threshold: 0.5
+  language: auto
+  whisper_model: base
+  word_level_timing: true
+processing:
+  audio_format: wav
+  num_workers: 4
+  output_dir: output/
+  sample_rate: 44100
+  temp_dir: temp/
+uvr:
+  batch_size: 4
+  default_model: MDX_Net
+  gpu_device: 0
+  models_path: models/
+  use_gpu: true

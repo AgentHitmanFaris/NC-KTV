@@ -381,6 +381,11 @@ class EditorMode(QWidget):
              
     def _sync_video_state(self, is_playing):
         """Sync background video player state with main audio player"""
+        
+        # Update preview widget state (stops animation timer if paused)
+        if hasattr(self, 'preview_widget'):
+            self.preview_widget.set_playing(is_playing)
+            
         if is_playing:
             self.bg_video_player.play()
         else:
@@ -388,21 +393,6 @@ class EditorMode(QWidget):
             # Resync position on pause to ensure frames match
             self.bg_video_player.setPosition(self.player.media_player.position())
 
-    def _on_player_position(self, ms):
-        """Handle playback position updates for preview"""
-        # Sync background video if it drifted too much (>100ms)
-        # But don't spam setPosition as it causes stutter.
-        # Ideally QMediaPlayer syncs reasonably well if started together.
-        # We only force sync if drift is large.
-        
-        vid_pos = self.bg_video_player.position()
-        diff = abs(vid_pos - ms)
-        
-        if diff > 200: # 200ms tolerance
-             self.bg_video_player.setPosition(ms)
-        
-        if not self.sync_mode_active:
-            return
 
         
     def _switch_tab(self, mode: str):
@@ -554,13 +544,20 @@ class EditorMode(QWidget):
 
     def _show_context_menu(self, position):
         """Show context menu for table"""
+        from PyQt6.QtGui import QCursor
         from PyQt6.QtWidgets import QMenu
         menu = QMenu()
         edit_action = menu.addAction("🔍 Edit Word Timings")
-        action = menu.exec(self.sync_table.mapToGlobal(position))
+        delete_action = menu.addAction("🗑️ Delete Line")
+        
+        # Calculate action
+        # Use QCursor.pos() for safer global positioning
+        action = menu.exec(QCursor.pos())
         
         if action == edit_action:
             self._open_word_editor()
+        elif action == delete_action:
+            self._delete_selected_line()
 
     def _open_word_editor(self):
         """Open dialog to edit word-level timestamps"""
@@ -586,6 +583,20 @@ class EditorMode(QWidget):
             self.preview_widget.set_line(self.lyrics_data.lines[row_idx])
             self.is_dirty = True
 
+    def _delete_selected_line(self):
+        """Delete current line"""
+        rows = self.sync_table.selectionModel().selectedRows()
+        if not rows: return
+        
+        row_idx = rows[0].row()
+        self._save_undo_state()
+        
+        # Remove from data
+        self.lyrics_data.lines.pop(row_idx)
+        
+        # Update UI
+        self._refresh_table()
+        self.is_dirty = True
     def _nudge_timestamp(self, amount: float, is_end: bool = False):
         """Nudge timestamp of currently selected or active line"""
         self._save_undo_state()  # Save state before modification
@@ -650,7 +661,12 @@ class EditorMode(QWidget):
     def _on_player_position(self, ms):
         """Update UI based on playback position"""
         # Sync background video if needed
-        # ... logic ...
+        if hasattr(self, 'bg_video_player'):
+            vid_pos = self.bg_video_player.position()
+            # Tolerance: 80ms (approx 2-3 frames at 30fps)
+            # If drift is too large, snap video to audio
+            if abs(vid_pos - ms) > 80 and self.player.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+                self.bg_video_player.setPosition(ms)
         
         current_seconds = ms / 1000.0
         
@@ -662,7 +678,12 @@ class EditorMode(QWidget):
         current_index = -1
         
         for i, line in enumerate(self.lyrics_data.lines):
-             # Log first line for debug
+             # Loop logic
+             if self.chk_loop.isChecked() and self.active_line_index == i:
+                 if current_seconds >= line.end_time and line.end_time > 0:
+                     # Loop back to start
+                     self.player.media_player.setPosition(int(line.start_time * 1000))
+                     return
              # if i == 0: logger.info(f"Line 0: {line.start_time} - {line.end_time}")
              
              if line.start_time <= current_seconds:
@@ -744,15 +765,20 @@ class EditorMode(QWidget):
         # Load new audio
         self.player.load_audio(path)
         
+        # If switching to Original Source, and it's a video, ensure bg_video_player uses it too?
+        # Actually bg_video_player ALWAYS plays source_file (visuals), while audio player plays stems.
+        # But if we switch audio to Source, we are playing same file twice?
+        # Yes, but one for audio one for video.
+        # Ideally if we play source, we could just use self.player for both?
+        # No, keep separate for architecture consistency (Karaoke overlay needs separate view).
+        
         # Use QTimer to restore position after media loads (more reliable than signal)
         from PyQt6.QtCore import QTimer
-        
         def restore_state():
             self.player.media_player.setPosition(current_pos)
+            self.bg_video_player.setPosition(current_pos)
             if was_playing:
                 self.player.media_player.play()
-                # Also sync video
-                self.bg_video_player.setPosition(current_pos)
                 self.bg_video_player.play()
         
         # Wait 200ms for media to initialize before restoring
@@ -895,10 +921,21 @@ class EditorMode(QWidget):
         
         # Custom progress update to avoid "ms" confusion
         def update_label(msg):
-             if "Transcribing" in msg and selected_lang_name != "Auto Detect":
-                 self.progress.setLabelText(f"Transcribing ({selected_lang_name})...")
-             else:
-                 self.progress.setLabelText(msg)
+             # Check if progress dialog is valid and not deleted
+             if not self.progress or self.progress.isHidden():
+                 return
+                 
+             try:
+                 if self.progress.wasCanceled():
+                     return
+
+                 if "Transcribing" in msg and selected_lang_name != "Auto Detect":
+                     self.progress.setLabelText(f"Transcribing ({selected_lang_name})...")
+                 else:
+                     self.progress.setLabelText(msg)
+             except RuntimeError:
+                 # Dialog might be deleted if closed violently
+                 pass
                  
         self.transcriber.progress_updated.connect(update_label)
         self.transcriber.transcription_complete.connect(self._on_transcription_complete)
@@ -980,12 +1017,13 @@ class EditorMode(QWidget):
         """Export project to video with karaoke subtitles"""
         from utils.ass_generator import ASSGenerator
         from gui.dialogs.export_dialog import ExportDialog
-        import subprocess
+        from workers.export_worker import ExportWorker
         
-        # 1. Open Export Dialog
+        # 1. Open Export Dialog with current animation from preview
         default_name = f"{self.project.project_name}_karaoke.mp4"
+        current_animation = self.preview_widget.animation_type
         
-        dialog = ExportDialog(self, default_name)
+        dialog = ExportDialog(self, default_name, current_animation)
         if not dialog.exec():
             return
             
@@ -995,12 +1033,7 @@ class EditorMode(QWidget):
         animation = options['animation']
         
         # 2. Check source video
-        # We need a visual source. Either the original file is video, or we need a background image/color.
-        # User requested "if it has video mp4".
-        
-        # Determine input video
         video_input = self.project.source_file
-        # Simple check: extensions
         is_video = video_input.suffix.lower() in ['.mp4', '.avi', '.mkv', '.mov']
         
         if not is_video:
@@ -1014,54 +1047,58 @@ class EditorMode(QWidget):
         temp_ass = self.project.get_temp_dir() / "subs.ass"
         with open(temp_ass, "w", encoding="utf-8") as f:
             f.write(ass_content)
-            
-        progress = QProgressDialog("Rendering Video... (Check Console)", "Cancel", 0, 0, self)
-        progress.show()
         
-        # 4. FFmpeg Command
-        # We want to use the high quality separated audio if available
+        # 4. Build FFmpeg Command
         inst_path = self.project.instrumental_file
         voc_path = self.project.vocals_file
-        
         has_stems = inst_path and inst_path.exists() and voc_path and voc_path.exists()
         
-        # Escape paths for filter_complex is tricky (windows backslashes).
-        # Safest is to use forward slashes for filter graph
         ass_path_unix = str(temp_ass).replace("\\", "/").replace(":", "\\:")
         
         cmd = ["ffmpeg", "-y"]
         
         if has_stems:
-            # Inputs: 0:Video, 1:Inst, 2:Vocals
             cmd.extend(["-i", str(video_input)])
             cmd.extend(["-i", str(inst_path)])
             cmd.extend(["-i", str(voc_path)])
-            
-            # Filter: Burn subs on video, Mix audio
-            # Note: fonts might require fontconfig or valid path. Standard Arial usually ok.
-            filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=first[a]"
+            # Use async=1 to fix audio timestamp drift
+            # Use duration=longest to prevent early cuts
+            filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
             cmd.extend(["-filter_complex", filter_complex])
             cmd.extend(["-map", "[v]", "-map", "[a]"])
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
         else:
-            # Just burn subs, keep original audio
             cmd.extend(["-i", str(video_input)])
             cmd.extend(["-vf", f"ass='{ass_path_unix}'"])
-            cmd.extend(["-c:a", "copy"])
+            cmd.extend(["-c:a", "copy"]) # Use copy for max fidelity if no mixing
         
+        # Video encoding settings for compatibility
+        cmd.extend(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium"])
         cmd.append(str(out_path))
         
         logger.info(f"Running export command: {cmd}")
         
-        try:
-            # Run blocking for now (should be worker, but quick implementation)
-            subprocess.run(cmd, check=True)
-            progress.close()
-            QMessageBox.information(self, "Success", f"Exported to:\n{out_path}")
-            
-            # Auto-play result?
+        # 5. Show Progress Dialog
+        self.export_progress = QProgressDialog("Starting Export...", "Cancel", 0, 0, self)
+        self.export_progress.setWindowTitle("Exporting Video")
+        self.export_progress.setMinimumDuration(0)
+        self.export_progress.show()
+        
+        # 6. Run in Background Thread
+        self.export_worker = ExportWorker(cmd, out_path)
+        self.export_worker.progress.connect(lambda msg: self.export_progress.setLabelText(msg))
+        self.export_worker.finished.connect(self._on_export_finished)
+        self.export_worker.start()
+        
+    def _on_export_finished(self, success, message):
+        """Handle export completion"""
+        self.export_progress.close()
+        
+        if success:
+            QMessageBox.information(self, "Success", f"Exported to:\n{message}")
+            # Auto-play result
             import os
-            os.startfile(out_path)
-            
-        except Exception as e:
-            progress.close()
-            QMessageBox.critical(self, "Export Failed", f"FFmpeg Error:\n{e}")
+            os.startfile(message)
+        else:
+            QMessageBox.critical(self, "Export Failed", f"Error:\n{message}")
+

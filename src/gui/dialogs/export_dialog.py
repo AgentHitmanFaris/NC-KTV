@@ -8,7 +8,7 @@ from pathlib import Path
 class ExportDialog(QDialog):
     """Dialog for video export options"""
     
-    def __init__(self, parent=None, default_filename="karaoke.mp4"):
+    def __init__(self, parent=None, default_filename="karaoke.mp4", current_animation="Linear Wipe"):
         super().__init__(parent)
         self.setWindowTitle("Export Video")
         self.resize(500, 300)
@@ -33,22 +33,18 @@ class ExportDialog(QDialog):
         self.combo_style.addItems(["Neon Gold", "Classic Blue", "Clean White"])
         form.addRow("Visual Style:", self.combo_style)
         
-        # 3. Animation Type
-        self.combo_anim = QComboBox()
-        self.combo_anim.addItems([
-            "Standard (Wipe)", 
-            "Zoom In", 
-            "Slide Up",
-            "Fade In/Out"
-        ])
-        form.addRow("Animation:", self.combo_anim)
-        
-        # 4. Audio Options
-        self.chk_inst = QCheckBox("Maximize Instrumental Volume")
-        self.chk_inst.setChecked(True)
-        # form.addRow("Audio:", self.chk_inst)
+        # 3. Animation - show current animation from preview
+        self.lbl_animation = QLabel(f"Using: {current_animation}")
+        self.lbl_animation.setStyleSheet("font-weight: bold; color: #4CAF50;")
+        form.addRow("Animation:", self.lbl_animation)
+        self.current_animation = current_animation
         
         self.layout.addLayout(form)
+        
+        # Info label
+        info = QLabel("ℹ️ Animation from preview will be applied to export")
+        info.setStyleSheet("color: #888; font-style: italic;")
+        self.layout.addWidget(info)
         
         self.layout.addStretch()
         
@@ -84,6 +80,5 @@ class ExportDialog(QDialog):
         return {
             "path": self.output_path,
             "style": self.combo_style.currentText(),
-            "animation": self.combo_anim.currentText(),
-            "enhance_audio": self.chk_inst.isChecked()
+            "animation": self.current_animation,
         }

@@ -224,9 +224,9 @@ class MainWindow(QMainWindow):
 
     
     def _new_project(self):
-        """Create new project"""
-        # TODO: Implement
-        QMessageBox.information(self, "New Project", "New project creation coming soon!")
+        """Create new project (Switch to Wizard)"""
+        if self._check_unsaved_changes():
+            self._switch_mode('wizard')
     
     def _open_project(self):
         """Open existing project"""
@@ -251,8 +251,11 @@ class MainWindow(QMainWindow):
     
     def _show_preferences(self):
         """Show preferences dialog"""
-        # TODO: Implement
-        QMessageBox.information(self, "Preferences", "Preferences dialog coming soon!")
+        from gui.dialogs.preferences_dialog import PreferencesDialog
+        dialog = PreferencesDialog(self.config, self)
+        if dialog.exec():
+            # Apply immediate changes if needed (e.g. theme)
+            pass
     
     def _show_about(self):
         """Show about dialog"""

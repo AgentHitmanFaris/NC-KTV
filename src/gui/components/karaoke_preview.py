@@ -38,9 +38,26 @@ class KaraokePreviewWidget(QWidget):
         self.current_line = None
         self.next_line = None
         self.prev_line = None
+        
+        # Timing & Interpolation
         self.current_time = 0.0
+        self.last_audio_time = 0.0
+        self.is_playing = False
+        
+        # Monotonic timer for interpolation
+        from PyQt6.QtCore import QElapsedTimer
+        self.delta_timer = QElapsedTimer()
+        self.delta_timer.start()
+        self.last_update_time = self.delta_timer.elapsed()
+        
         self.anim_start_time = None
         self.animation_type = AnimationType.LINEAR_WIPE
+        
+        # Animation loop
+        from PyQt6.QtCore import QTimer
+        self.anim_timer = QTimer(self)
+        self.anim_timer.setInterval(16) # ~60fps
+        self.anim_timer.timeout.connect(self._update_animation)
         
         # Style
         self.font = QFont("Arial", 40, QFont.Weight.Bold)
@@ -55,6 +72,21 @@ class KaraokePreviewWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet("background-color: transparent;")
         
+    def _update_animation(self):
+        """Called every 16ms to interpolate time and trigger repaint"""
+        if not self.is_playing:
+            return
+            
+        now = self.delta_timer.elapsed()
+        elapsed_sec = (now - self.last_update_time) / 1000.0
+        
+        # Clamp interpolation to avoid runaway if UI freezes
+        if elapsed_sec > 0.2: 
+            elapsed_sec = 0.2
+            
+        self.current_time = self.last_audio_time + elapsed_sec
+        self.update()
+
     def set_animation_type(self, anim_type: str):
         """Set the animation type"""
         if anim_type in AnimationType.all():
@@ -79,10 +111,28 @@ class KaraokePreviewWidget(QWidget):
             self.update()
 
     def set_current_time(self, seconds: float):
-        """Set current playback time in seconds"""
-        if abs(self.current_time - seconds) > 0.001:
-            self.current_time = seconds
-            self.update()
+        """Set current playback time in seconds (from audio player)"""
+        # Update raw audio time reference
+        self.last_audio_time = seconds
+        self.last_update_time = self.delta_timer.elapsed()
+        
+        # Start smooth animation loop if not running
+        if not self.anim_timer.isActive():
+            self.anim_timer.start()
+        self.is_playing = True
+            
+        # Force immediate sync if drift is huge (seek happened)
+        if abs(self.current_time - seconds) > 0.5:
+             self.current_time = seconds
+             
+    def set_playing(self, playing: bool):
+        """Update playing state"""
+        self.is_playing = playing
+        # Snap time slightly on pause to ensure we stop exactly where audio is
+        if not playing:
+            self.current_time = self.last_audio_time
+            self.anim_timer.stop()
+            self.update() # Constant update to show stopped state
             
     def set_text(self, text: str):
         """Compatibility method"""
@@ -99,7 +149,7 @@ class KaraokePreviewWidget(QWidget):
             placeholder_font = QFont(self.font)
             placeholder_font.setPointSize(60)
             painter.setFont(placeholder_font)
-            painter.setPen(QColor(200, 200, 200))
+            painter.setPen(QColor(200, 200, 200, 100))
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Waiting for Lyrics...")
             return
         
@@ -109,15 +159,17 @@ class KaraokePreviewWidget(QWidget):
         y_top_exit = rect.height() * 0.1
         y_below = rect.height() * 1.2
         
-        # Scroll animation
+        # Scroll animation (Entrance/Exit)
         anim_progress = 1.0
         if self.anim_start_time is not None:
             elapsed = self.anim_start_time.msecsTo(QTime.currentTime())
+            # For entering lines, we probably don't need high-precision QElapsedTimer 
+            # as much as the karaoke fill, so QTime is roughly fine here, 
+            # provided we don't wrap midnight during the 400ms transition.
             duration = 400
             if elapsed < duration:
                 anim_progress = elapsed / duration
                 anim_progress = 1.0 - (1.0 - anim_progress)**4
-                self.update()
             else:
                 self.anim_start_time = None
                 
