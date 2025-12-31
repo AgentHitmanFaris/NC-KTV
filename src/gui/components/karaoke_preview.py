@@ -16,10 +16,14 @@ class AnimationType:
     GLOW_PULSE = "Glow Pulse"
     FADE_IN = "Fade In"
     BOUNCING_BALL = "Bouncing Ball"
+    RAINBOW = "Rainbow"
+    TYPEWRITER = "Typewriter"
+    SCALE_PULSE = "Scale Pulse"
     
     @classmethod
     def all(cls):
-        return [cls.LINEAR_WIPE, cls.SYLLABLE_STEP, cls.GLOW_PULSE, cls.FADE_IN, cls.BOUNCING_BALL]
+        return [cls.LINEAR_WIPE, cls.SYLLABLE_STEP, cls.GLOW_PULSE, cls.FADE_IN, 
+                cls.BOUNCING_BALL, cls.RAINBOW, cls.TYPEWRITER, cls.SCALE_PULSE]
 
 
 class KaraokePreviewWidget(QWidget):
@@ -56,6 +60,11 @@ class KaraokePreviewWidget(QWidget):
         if anim_type in AnimationType.all():
             self.animation_type = anim_type
             self.update()
+            
+    def set_active_color(self, color):
+        """Set custom active/fill color"""
+        self.active_color = color
+        self.update()
         
     def set_line(self, line, next_line=None):
         """Set the current lyric line object and optional next line"""
@@ -199,6 +208,15 @@ class KaraokePreviewWidget(QWidget):
             
         elif self.animation_type == AnimationType.BOUNCING_BALL:
             self._draw_bouncing_ball(painter, line, path, x, text_width, fm, rect)
+            
+        elif self.animation_type == AnimationType.RAINBOW:
+            self._draw_rainbow(painter, line, path, x, text_width, fm)
+            
+        elif self.animation_type == AnimationType.TYPEWRITER:
+            self._draw_typewriter(painter, line, path, x, text_width, fm)
+            
+        elif self.animation_type == AnimationType.SCALE_PULSE:
+            self._draw_scale_pulse(painter, line, path, x, text_width, fm, rect, progress)
 
     def _get_line_progress(self, line):
         """Get overall progress through the line (0.0 to 1.0)"""
@@ -482,3 +500,88 @@ class KaraokePreviewWidget(QWidget):
                                    ball_radius * 0.6, ball_radius * 0.4))
         painter.restore()
 
+    def _draw_rainbow(self, painter, line, path, x, text_width, fm):
+        """Draw with rainbow gradient that cycles through colors"""
+        import math
+        from PyQt6.QtGui import QLinearGradient
+        
+        wipe_width = self._calculate_wipe_width(line, fm, text_width)
+        
+        if wipe_width > 0:
+            painter.save()
+            clip_rect = QRectF(x, 0, wipe_width, self.height())
+            painter.setClipRect(clip_rect, Qt.ClipOperation.ReplaceClip)
+            
+            # Create rainbow gradient based on time
+            gradient = QLinearGradient(x, 0, x + text_width, 0)
+            
+            # Animate the starting hue
+            hue_offset = (self.current_time * 50) % 360
+            
+            for i in range(7):  # 7 rainbow colors
+                pos = i / 6.0
+                hue = (hue_offset + i * 51) % 360  # 360/7 ≈ 51
+                color = QColor.fromHsv(int(hue), 255, 255)
+                gradient.setColorAt(pos, color)
+            
+            painter.setBrush(gradient)
+            painter.drawPath(path)
+            painter.restore()
+
+    def _draw_typewriter(self, painter, line, path, x, text_width, fm):
+        """Reveal text character by character"""
+        progress = self._get_line_progress(line)
+        
+        # Calculate how many characters to show
+        total_chars = len(line.text)
+        chars_to_show = int(total_chars * progress)
+        
+        if chars_to_show > 0:
+            # Calculate width of revealed portion
+            revealed_text = line.text[:chars_to_show]
+            revealed_width = fm.horizontalAdvance(revealed_text)
+            
+            painter.save()
+            clip_rect = QRectF(x, 0, revealed_width, self.height())
+            painter.setClipRect(clip_rect, Qt.ClipOperation.ReplaceClip)
+            painter.setBrush(self.active_color)
+            painter.drawPath(path)
+            painter.restore()
+
+    def _draw_scale_pulse(self, painter, line, path, x, text_width, fm, rect, progress):
+        """Words enlarge when active"""
+        import math
+        
+        # First draw the wipe
+        wipe_width = self._calculate_wipe_width(line, fm, text_width)
+        
+        if wipe_width > 0:
+            painter.save()
+            clip_rect = QRectF(x, 0, wipe_width, self.height())
+            painter.setClipRect(clip_rect, Qt.ClipOperation.ReplaceClip)
+            painter.setBrush(self.active_color)
+            painter.drawPath(path)
+            painter.restore()
+        
+        # Apply scale animation based on progress
+        # Scale up at the start, scale down at the end
+        if progress > 0 and progress < 1:
+            scale_factor = 1.0 + 0.1 * math.sin(progress * math.pi)  # Max 1.1x at middle
+            
+            painter.save()
+            
+            # Transform from center
+            center_x = rect.center().x()
+            center_y = rect.center().y()
+            
+            painter.translate(center_x, center_y)
+            painter.scale(scale_factor, scale_factor)
+            painter.translate(-center_x, -center_y)
+            
+            # Redraw with transform
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self.active_color.lighter(110))
+            painter.setOpacity(0.3)  # Subtle overlay
+            painter.drawPath(path)
+            
+            painter.restore()

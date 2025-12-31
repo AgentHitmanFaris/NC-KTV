@@ -223,6 +223,14 @@ class EditorMode(QWidget):
         self.combo_animation.currentTextChanged.connect(self._change_animation_type)
         source_layout.addWidget(self.combo_animation)
         
+        # Color Picker Button
+        from PyQt6.QtWidgets import QColorDialog
+        self.btn_color = QPushButton("🎨")
+        self.btn_color.setToolTip("Custom Fill Color")
+        self.btn_color.setFixedWidth(40)
+        self.btn_color.clicked.connect(self._pick_color)
+        source_layout.addWidget(self.btn_color)
+        
         source_layout.addStretch()
         
         player_layout.addLayout(source_layout)
@@ -753,6 +761,16 @@ class EditorMode(QWidget):
     def _change_animation_type(self, anim_type: str):
         """Change the karaoke animation style"""
         self.preview_widget.set_animation_type(anim_type)
+
+    def _pick_color(self):
+        """Open color picker for custom animation color"""
+        from PyQt6.QtWidgets import QColorDialog
+        color = QColorDialog.getColor(self.preview_widget.active_color, self, "Pick Fill Color")
+        if color.isValid():
+            self.preview_widget.set_active_color(color)
+            # Update button to show selected color
+            self.btn_color.setStyleSheet(f"background-color: {color.name()};")
+
 
     def _show_shortcuts_help(self):
         """Show keyboard shortcuts help dialog"""
