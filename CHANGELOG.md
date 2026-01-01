@@ -2,8 +2,26 @@
 
 All notable changes to NC-KTV will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachanglog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.6.1] - 2026-01-01
+
+### Added
+- **Global Timing Offset**: Adjust all lyrics timing to compensate for AI transcription delay
+- **Adjustable Preview Lead Time**: Configure how early upcoming lyrics appear in karaoke mode
+
+### Changed
+- **Improved Transcription Source Priority**: Now uses original audio by default for better accuracy
+- **Enhanced Karaoke Preview Logic**: Better handling of current/upcoming line transitions
+- **Refined Timing Synchronization**: Eliminated perceived playback delay in lyrics display
+
+### Fixed
+- Fixed typo in CHANGELOG.md (keepachanglog → keepachangelog)
+- Fixed typo in wiki documentation (Using-the-Lyrics-Editor.md)
+- Fixed lyrics display timing to match actual audio playback accurately
 
 ---
 

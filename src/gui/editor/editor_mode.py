@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QTableWidget, QTableWidgetItem, 
     QPushButton, QLabel, QGroupBox, QHeaderView,
     QMessageBox, QProgressDialog, QFileDialog, QComboBox,
-    QGraphicsView, QGraphicsScene, QAbstractItemView
+    QGraphicsView, QGraphicsScene, QAbstractItemView, QDoubleSpinBox
 )
 from PyQt6.QtMultimediaWidgets import QVideoWidget, QGraphicsVideoItem
 from PyQt6.QtCore import Qt, QTimer, QSizeF, QUrl
@@ -208,6 +208,23 @@ class EditorMode(QWidget):
         btn_edit_words.clicked.connect(self._open_word_editor)
         nudge_layout.addWidget(btn_edit_words)
         
+        nudge_layout.addSpacing(15)
+        
+        # Global Timing Offset
+        nudge_layout.addWidget(QLabel("Global Offset:"))
+        self.spin_timing_offset = QDoubleSpinBox()
+        self.spin_timing_offset.setRange(-5.0, 5.0)
+        self.spin_timing_offset.setValue(0.0)
+        self.spin_timing_offset.setSingleStep(0.1)
+        self.spin_timing_offset.setDecimals(1)
+        self.spin_timing_offset.setSuffix(" s")
+        self.spin_timing_offset.setToolTip("Shift ALL lyrics (fixes AI delay)\nTry -0.5 to -1.0")
+        self.spin_timing_offset.setMaximumWidth(95)
+        self.spin_timing_offset.valueChanged.connect(self._apply_timing_offset)
+        nudge_layout.addWidget(self.spin_timing_offset)
+        
+        nudge_layout.addSpacing(15)
+        
         # Help Button
         btn_help = QPushButton("❓ Help (F1)")
         btn_help.clicked.connect(self._show_shortcuts_help)
@@ -241,6 +258,29 @@ class EditorMode(QWidget):
         
         source_layout.addSpacing(10)
         
+        # Timing Mode (Karaoke vs Lyrics Video)
+        source_layout.addWidget(QLabel("Timing:"))
+        self.combo_timing_mode = QComboBox()
+        self.combo_timing_mode.addItems(["Karaoke", "Lyrics Video"])
+        self.combo_timing_mode.setToolTip("Karaoke: Show next line early for reading ahead\nLyrics Video: Show next line after singing")
+        self.combo_timing_mode.setCurrentText("Karaoke")
+        self.combo_timing_mode.currentTextChanged.connect(self._change_timing_mode)
+        source_layout.addWidget(self.combo_timing_mode)
+        
+        # Preview Time for Karaoke mode
+        source_layout.addWidget(QLabel("Preview:"))
+        self.spin_preview_time = QDoubleSpinBox()
+        self.spin_preview_time.setRange(0.0, 5.0)
+        self.spin_preview_time.setValue(1.0)  # Default 1 second (reduced from 2)
+        self.spin_preview_time.setSingleStep(0.1)
+        self.spin_preview_time.setDecimals(1)
+        self.spin_preview_time.setSuffix(" s")
+        self.spin_preview_time.setToolTip("How early to show lyrics in Karaoke mode\n(0.5-1.5s recommended)")
+        self.spin_preview_time.setMaximumWidth(85)
+        source_layout.addWidget(self.spin_preview_time)
+        
+        source_layout.addSpacing(10)
+        
         # Animation Type Select
         source_layout.addWidget(QLabel("Animation:"))
         self.combo_animation = QComboBox()
@@ -268,7 +308,25 @@ class EditorMode(QWidget):
         self.combo_speed.currentTextChanged.connect(self._change_playback_speed)
         source_layout.addWidget(self.combo_speed)
         
+        source_layout.addSpacing(10)
+        
+        # Romanization Controls
+        source_layout.addWidget(QLabel("Display:"))
+        self.combo_romanize_mode = QComboBox()
+        self.combo_romanize_mode.addItems(["Original", "Romanized", "Both"])
+        self.combo_romanize_mode.setToolTip("Choose text display mode:\n• Original: Show original script\n• Romanized: Show romanized text only\n• Both: Show both (dual-line)")
+        self.combo_romanize_mode.setCurrentText("Original")
+        self.combo_romanize_mode.currentTextChanged.connect(self._change_romanize_mode)
+        source_layout.addWidget(self.combo_romanize_mode)
+        
+        self.combo_language = QComboBox()
+        self.combo_language.addItems(["Auto", "Korean", "Japanese", "Hindi", "Tamil"])
+        self.combo_language.setToolTip("Language for romanization (Auto-detect recommended)")
+        self.combo_language.setCurrentText("Auto")
+        source_layout.addWidget(self.combo_language)
+        
         source_layout.addStretch()
+
         
         player_layout.addLayout(source_layout)
         
@@ -561,7 +619,8 @@ class EditorMode(QWidget):
         
         # Sync mode specific shortcuts
         if not self.sync_mode_active:
-            super().keyPressEvent(event)
+            # Don't accept - let event propagate to system
+            event.ignore()
             return
         
         # CRITICAL: Only handle spacebar if text editor does NOT have focus
@@ -780,6 +839,12 @@ class EditorMode(QWidget):
         found_line = None
         current_index = -1
         
+        # Get timing mode
+        timing_mode = self.combo_timing_mode.currentText() if hasattr(self, 'combo_timing_mode') else "Karaoke"
+        # Get adjustable preview time (default 1.0 second)
+        preview_seconds = self.spin_preview_time.value() if hasattr(self, 'spin_preview_time') else 1.0
+        early_preview = preview_seconds if timing_mode == "Karaoke" else 0.0
+        
         for i, line in enumerate(self.lyrics_data.lines):
              # Loop logic
              if self.chk_loop.isChecked() and self.active_line_index == i:
@@ -787,9 +852,13 @@ class EditorMode(QWidget):
                      # Loop back to start
                      self.player.media_player.setPosition(int(line.start_time * 1000))
                      return
-             # if i == 0: logger.info(f"Line 0: {line.start_time} - {line.end_time}")
              
-             if line.start_time <= current_seconds:
+             # FIXED: Use adjusted time for START (show early), but current_seconds for END (don't cut off)
+             # This makes lyrics appear early but stay visible until they actually finish
+             adjusted_start = current_seconds + early_preview
+             
+             if line.start_time <= adjusted_start:
+                # Use ACTUAL current_seconds for end check (not adjusted)
                 if line.end_time == 0 or current_seconds < line.end_time + 0.5:
                     found_line = line
                     current_index = i
@@ -803,9 +872,18 @@ class EditorMode(QWidget):
             next_line = None
             if current_index + 1 < len(self.lyrics_data.lines):
                 next_line = self.lyrics_data.lines[current_index + 1]
-                
-            self.preview_widget.set_line(found_line, next_line)
-            self.preview_widget.set_current_time(current_seconds)
+            
+            # RENDERING OPTIMIZATION: Check if we're very close to the next line
+            # Pre-load it to avoid visual lag at transition
+            rendering_lookahead = 0.15  # 150ms lookahead for smoother transitions
+            if next_line and (next_line.start_time - current_seconds) <= rendering_lookahead:
+                # About to transition - pre-update to reduce lag
+                self.preview_widget.set_line(next_line, None)
+                self.preview_widget.set_current_time(current_seconds)
+            else:
+                # Normal display
+                self.preview_widget.set_line(found_line, next_line)
+                self.preview_widget.set_current_time(current_seconds)
             
             # --- Auto-Scroll Table ---
             # Avoid spamming selection updates if already selected
@@ -994,6 +1072,96 @@ class EditorMode(QWidget):
                 # No video: lyrics centered
                 self.lyrics_proxy.setPos(0, 440)  # Centered vertically (1080/2 - 100)
     
+    def _change_timing_mode(self, mode: str):
+        """Change timing mode between Karaoke and Lyrics Video"""
+        if hasattr(self, 'preview_widget'):
+            self.preview_widget.set_timing_mode(mode)
+    
+    def _change_romanize_mode(self, mode: str):
+        """Change romanization display mode"""
+        if mode in ["Romanized", "Both"]:
+            # Need romanized text - generate if not exists
+            if not any(line.romanized_text for line in self.lyrics_data.lines):
+                self._romanize_all_lyrics()
+        
+        # Update preview widget with mode
+        if hasattr(self.preview_widget, 'set_romanization_mode'):
+            self.preview_widget.set_romanization_mode(mode)
+        
+        # Refresh display
+        self._refresh_table()
+        
+        # Update current preview
+        if self.active_line_index >= 0 and self.active_line_index < len(self.lyrics_data.lines):
+            line = self.lyrics_data.lines[self.active_line_index]
+            next_line = self.lyrics_data.lines[self.active_line_index + 1] if self.active_line_index + 1 < len(self.lyrics_data.lines) else None
+            self.preview_widget.set_line(line, next_line)
+
+    
+    def _romanize_all_lyrics(self):
+        """Apply romanization to all lyrics lines"""
+        from utils.romanizer import get_romanizer
+        romanizer = get_romanizer()
+        
+        # Get selected language
+        lang_text = self.combo_language.currentText().lower()
+        
+        for line in self.lyrics_data.lines:
+            # Romanize line text
+            line.romanized_text = romanizer.romanize(line.text, lang_text)
+            
+            # Romanize tokens if they exist
+            for token in line.tokens:
+                token.romanized_text = romanizer.romanize(token.text, lang_text)
+        
+        self.is_dirty = True
+        self.status_bar.setText("Lyrics romanized successfully")
+    
+    def _clear_romanization(self):
+        """Clear romanization from all lyrics"""
+        for line in self.lyrics_data.lines:
+            line.romanized_text = None
+            for token in line.tokens:
+                token.romanized_text = None
+        
+        self.is_dirty = True
+
+    
+    
+    def _apply_timing_offset(self, offset_seconds: float):
+        """Apply global timing offset to all lyrics to compensate for AI transcription delay"""
+        if not hasattr(self, '_original_lyrics_times'):
+            # Store original times on first offset change
+            self._original_lyrics_times = []
+            for line in self.lyrics_data.lines:
+                self._original_lyrics_times.append((line.start_time, line.end_time))
+        
+        # Apply offset to all lines
+        for i, line in enumerate(self.lyrics_data.lines):
+            if i < len(self._original_lyrics_times):
+                orig_start, orig_end = self._original_lyrics_times[i]
+                line.start_time = max(0.0, orig_start + offset_seconds)
+                line.end_time = max(0.0, orig_end + offset_seconds)
+                
+                # Also adjust tokens if they exist
+                if line.tokens:
+                    for token in line.tokens:
+                        # Shift token times proportionally
+                        token.start_time = max(0.0, token.start_time + offset_seconds)
+                        token.end_time = max(0.0, token.end_time + offset_seconds)
+        
+        # Refresh table display
+        self._refresh_table()
+        self.is_dirty = True
+        
+        # Show feedback
+        if offset_seconds != 0:
+            direction = "earlier" if offset_seconds < 0 else "later"
+            self.status_bar.setText(f"⏱️ All lyrics shifted {abs(offset_seconds):.1f}s {direction}")
+        else:
+            self.status_bar.setText("⏱️ Timing offset reset")
+
+    
     def _show_shortcuts_help(self):
         """Show keyboard shortcuts help dialog"""
         from gui.dialogs.shortcuts_dialog import ShortcutsDialog
@@ -1043,19 +1211,18 @@ class EditorMode(QWidget):
         from workers.transcription_worker import TranscriptionWorker
         
         # Check if we have audio to transcribe
-        # Audio Source Logic
-        # Strictly prefer vocals file. Fallback to source only if vocals missing.
-        # NEVER use instrumental.
-        audio_source = self.project.vocals_file
-        source_type = "Vocals Track"
+        # Audio Source Logic: Use original source for best transcription
+        # Falls back to vocals if source not available
+        audio_source = self.project.source_file
+        source_type = "Original Source Audio"
         
         if not audio_source or not audio_source.exists():
-            logger.warning("Vocals file not found, falling back to source file.")
-            audio_source = self.project.source_file
-            source_type = "Original Source Audio"
+            logger.warning("Source file not found, using vocals track.")
+            audio_source = self.project.vocals_file
+            source_type = "Vocals Track"
             
         if not audio_source or not audio_source.exists():
-            QMessageBox.warning(self, "No Audio", "No suitable audio file found for transcription.\nNeed Vocals or Source file.")
+            QMessageBox.warning(self, "No Audio", "No suitable audio file found for transcription.\nNeed Source or Vocals file.")
             return
 
         # Explicitly warn if using source, as it might have music

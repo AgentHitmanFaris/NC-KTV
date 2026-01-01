@@ -23,6 +23,12 @@ matplotlib>=3.7.0
 python-Levenshtein>=0.21.0
 thefuzz>=0.20.0
 
+# Romanization Libraries
+pykakasi>=2.2.0  # Japanese romanization
+korean-romanizer>=0.1.0  # Korean romanization
+indic-transliteration>=2.3.0  # Hindi/Indian languages romanization
+
+
 # Utilities
 pyyaml>=6.0
 tqdm>=4.65.0

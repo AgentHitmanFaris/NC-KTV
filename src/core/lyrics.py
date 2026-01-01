@@ -15,6 +15,7 @@ class LyricsLine:
     start_time: float = 0.0  # Seconds
     end_time: float = 0.0    # Seconds
     tokens: List['LyricsToken'] = field(default_factory=list)
+    romanized_text: Optional[str] = None  # Romanized version for non-Latin scripts
     
     @property
     def duration(self) -> float:
@@ -23,12 +24,15 @@ class LyricsLine:
     
     def to_dict(self) -> dict:
         """Convert to dictionary"""
-        return {
+        data = {
             'text': self.text,
             'start_time': self.start_time,
             'end_time': self.end_time,
             'tokens': [t.to_dict() for t in self.tokens]
         }
+        if self.romanized_text:
+            data['romanized_text'] = self.romanized_text
+        return data
     
     @classmethod
     def from_dict(cls, data: dict) -> 'LyricsLine':
@@ -36,7 +40,8 @@ class LyricsLine:
         line = cls(
             text=data.get('text', ''),
             start_time=data.get('start_time', 0.0),
-            end_time=data.get('end_time', 0.0)
+            end_time=data.get('end_time', 0.0),
+            romanized_text=data.get('romanized_text')
         )
         if 'tokens' in data:
             line.tokens = [LyricsToken.from_dict(t) for t in data['tokens']]
@@ -49,20 +54,25 @@ class LyricsToken:
     text: str
     start_time: float = 0.0
     end_time: float = 0.0
+    romanized_text: Optional[str] = None  # Romanized version
     
     def to_dict(self) -> dict:
-        return {
+        data = {
             'text': self.text,
             'start_time': self.start_time,
             'end_time': self.end_time
         }
+        if self.romanized_text:
+            data['romanized_text'] = self.romanized_text
+        return data
     
     @classmethod
     def from_dict(cls, data: dict) -> 'LyricsToken':
         return cls(
             text=data.get('text', ''),
             start_time=data.get('start_time', 0.0),
-            end_time=data.get('end_time', 0.0)
+            end_time=data.get('end_time', 0.0),
+            romanized_text=data.get('romanized_text')
         )
 
 

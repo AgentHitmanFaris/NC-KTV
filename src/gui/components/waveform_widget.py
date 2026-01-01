@@ -35,38 +35,64 @@ class WaveformWidget(QWidget):
         self.setMaximumHeight(120)
         
     def load_audio(self, file_path: Path):
-        """Load audio file and extract waveform data"""
-        try:
-            import librosa
-            logger.info(f"Loading waveform from: {file_path}")
+        """Load audio file and extract waveform data (asynchronously)"""
+        # Start loading in background thread to avoid blocking UI
+        from PyQt6.QtCore import QThread, pyqtSignal
+        
+        class WaveformLoader(QThread):
+            loaded = pyqtSignal(object, int)  # waveform_data, duration_ms
             
-            # Load audio with librosa (auto-resamples to 22050 Hz by default)
-            y, sr = librosa.load(str(file_path), sr=None, mono=True)
-            
-            # Downsample waveform for visualization (approx 2000 samples)
-            target_samples = 2000
-            hop_length = max(1, len(y) // target_samples)
-            
-            # Extract envelope using RMS
-            self.waveform_data = librosa.feature.rms(y=y, frame_length=hop_length*4, hop_length=hop_length)[0]
-            
-            # Normalize to [-1, 1]
-            if self.waveform_data.max() > 0:
-                self.waveform_data = self.waveform_data / self.waveform_data.max()
-            
-            # Get duration
-            self.duration_ms = int((len(y) / sr) * 1000)
-            
-            logger.info(f"Waveform loaded: {len(self.waveform_data)} samples, {self.duration_ms}ms duration")
-            self.update()
-            
-        except ImportError:
-            logger.warning("librosa not installed, waveform disabled. Install: pip install librosa")
-            self.waveform_data = None
-            
-        except Exception as e:
-            logger.error(f"Failed to load waveform: {e}")
-            self.waveform_data = None
+            def __init__(self, path):
+                super().__init__()
+                self.path = path
+                
+            def run(self):
+                try:
+                    import librosa
+                    logger.info(f"Loading waveform from: {self.path}")
+                    
+                    # Load audio with librosa (auto-resamples to 22050 Hz by default)
+                    y, sr = librosa.load(str(self.path), sr=None, mono=True)
+                    
+                    # Downsample waveform for visualization (approx 2000 samples)
+                    target_samples = 2000
+                    hop_length = max(1, len(y) // target_samples)
+                    
+                    # Extract envelope using RMS
+                    waveform_data = librosa.feature.rms(y=y, frame_length=hop_length*4, hop_length=hop_length)[0]
+                    
+                    # Normalize to [-1, 1]
+                    if waveform_data.max() > 0:
+                        waveform_data = waveform_data / waveform_data.max()
+                    
+                    # Get duration
+                    duration_ms = int((len(y) / sr) * 1000)
+                    
+                    logger.info(f"Waveform loaded: {len(waveform_data)} samples, {duration_ms}ms duration")
+                    self.loaded.emit(waveform_data, duration_ms)
+                    
+                except ImportError:
+                    logger.warning("librosa not installed, waveform disabled. Install: pip install librosa")
+                    self.loaded.emit(None, 0)
+                    
+                except Exception as e:
+                    logger.error(f"Failed to load waveform: {e}")
+                    self.loaded.emit(None, 0)
+        
+        # Show placeholder immediately
+        self.waveform_data = None
+        self.update()
+        
+        # Start background loading
+        self._loader = WaveformLoader(file_path)
+        self._loader.loaded.connect(self._on_waveform_loaded)
+        self._loader.start()
+    
+    def _on_waveform_loaded(self, waveform_data, duration_ms):
+        """Callback when waveform finishes loading"""
+        self.waveform_data = waveform_data
+        self.duration_ms = duration_ms
+        self.update()
     
     def set_position(self, position_ms: int):
         """Update playback position"""
@@ -81,9 +107,16 @@ class WaveformWidget(QWidget):
         # Background
         painter.fillRect(self.rect(), self.background_color)
         
-        if self.waveform_data is None or len(self.waveform_data) == 0:
+        if self.waveform_data is None:
             painter.setPen(QColor(150, 150, 150))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Waveform unavailable")
+            # Show loading message if loader is active
+            if hasattr(self, '_loader') and self._loader.isRunning():
+                painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Loading waveform...")
+            else:
+                painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Waveform unavailable")
+            return
+        
+        if len(self.waveform_data) == 0:
             return
         
         # Draw waveform

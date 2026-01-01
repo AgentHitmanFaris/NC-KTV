@@ -44,6 +44,13 @@ class KaraokePreviewWidget(QWidget):
         self.last_audio_time = 0.0
         self.is_playing = False
         
+        # Romanization state
+        self.romanization_mode = "Original"  # Options: "Original", "Romanized", "Both"
+        
+        # Timing mode for upcoming lyrics
+        self.timing_mode = "Karaoke"  # Options: "Karaoke" (show early), "Lyrics Video" (show after)
+        self.early_preview_seconds = 2.0  # Show next line 2 seconds early in Karaoke mode
+        
         # Monotonic timer for interpolation
         from PyQt6.QtCore import QElapsedTimer
         self.delta_timer = QElapsedTimer()
@@ -62,6 +69,7 @@ class KaraokePreviewWidget(QWidget):
         # Style
         self.font = QFont("Arial", 40, QFont.Weight.Bold)
         self.secondary_font = QFont("Arial", 28, QFont.Weight.Bold)
+        self.romanized_font = QFont("Arial", 24, QFont.Weight.Normal)  # Smaller for romanized text
         self.inactive_color = QColor(255, 255, 255)
         self.active_color = QColor(255, 215, 0)
         self.secondary_color = QColor(200, 200, 200, 180)
@@ -71,6 +79,7 @@ class KaraokePreviewWidget(QWidget):
         self.setMinimumHeight(200)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet("background-color: transparent;")
+
         
     def _update_animation(self):
         """Called every 16ms to interpolate time and trigger repaint"""
@@ -137,6 +146,22 @@ class KaraokePreviewWidget(QWidget):
     def set_text(self, text: str):
         """Compatibility method"""
         pass
+    
+    def set_romanization_enabled(self, enabled: bool):
+        """Enable or disable romanization display (legacy method)"""
+        self.romanization_mode = "Both" if enabled else "Original"
+        self.update()  # Trigger repaint
+    
+    def set_romanization_mode(self, mode: str):
+        """Set romanization display mode: 'Original', 'Romanized', or 'Both'"""
+        self.romanization_mode = mode
+        self.update()  # Trigger repaint
+    
+    def set_timing_mode(self, mode: str):
+        """Set timing mode: 'Karaoke' or 'Lyrics Video'"""
+        self.timing_mode = mode
+        # No need to update() - will apply on next line change
+
 
     def paintEvent(self, event):
         """Draw the widget with scroll animation"""
@@ -206,11 +231,41 @@ class KaraokePreviewWidget(QWidget):
         
         base_font = self.font if is_main else self.secondary_font
         
+        # Determine display mode and text
+        display_text = line.text
+        # Allow romanization for both main and secondary (next) lines
+        has_romanized = hasattr(line, 'romanized_text') and line.romanized_text
+        
+        # Handle different display modes
+        if self.romanization_mode == "Romanized" and has_romanized:
+            # Show only romanized text (single line)
+            self._draw_single_text_line(painter, line, rect, line.romanized_text, base_font, is_main, no_wipe)
+            
+        elif self.romanization_mode == "Both" and has_romanized:
+            # Show both (dual-line)
+            original_rect = QRectF(rect.left(), rect.top(), rect.width(), rect.height() * 0.55)
+            romanized_rect = QRectF(rect.left(), rect.top() + rect.height() * 0.55, rect.width(), rect.height() * 0.45)
+            
+            # Draw original text (top line)
+            self._draw_single_text_line(painter, line, original_rect, display_text, base_font, is_main, no_wipe)
+            
+            # Draw romanized text (bottom line, smaller, no wipe)
+            # Use even smaller font for next line's romanized text
+            rom_font = self.romanized_font if is_main else QFont("Arial", 18, QFont.Weight.Normal)
+            self._draw_single_text_line(painter, line, romanized_rect, line.romanized_text, rom_font, is_main=False, no_wipe=True)
+            
+        else:
+            # Original mode or no romanized text available
+            self._draw_single_text_line(painter, line, rect, display_text, base_font, is_main, no_wipe)
+
+    
+    def _draw_single_text_line(self, painter, line, rect, text, base_font, is_main=True, no_wipe=False):
+        """Draw a single text line with karaoke effect"""
         # Scale font to fit
         scaled_font = QFont(base_font)
         painter.setFont(scaled_font)
         fm = painter.fontMetrics()
-        text_width = fm.horizontalAdvance(line.text)
+        text_width = fm.horizontalAdvance(text)
         
         max_width = rect.width() - 40
         if text_width > max_width and max_width > 0:
@@ -219,14 +274,14 @@ class KaraokePreviewWidget(QWidget):
             scaled_font.setPointSize(new_size)
             painter.setFont(scaled_font)
             fm = painter.fontMetrics()
-            text_width = fm.horizontalAdvance(line.text)
+            text_width = fm.horizontalAdvance(text)
             
         x = rect.center().x() - (text_width / 2)
         y = rect.center().y() + (fm.ascent() / 2)
         
         # Build text path
         path = QPainterPath()
-        path.addText(x, y, scaled_font, line.text)
+        path.addText(x, y, scaled_font, text)
         
         # Draw outline
         painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -241,6 +296,7 @@ class KaraokePreviewWidget(QWidget):
         
         if is_main and not no_wipe:
             self._apply_animation(painter, line, path, x, text_width, fm, rect)
+
 
     def _apply_animation(self, painter, line, path, x, text_width, fm, rect):
         """Apply the selected animation type"""
