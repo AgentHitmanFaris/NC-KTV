@@ -24,6 +24,12 @@ class LyricLine:
     start_time: float  # seconds
     end_time: float  # seconds
     words: List[LyricWord] = field(default_factory=list)
+    romanized_text: Optional[str] = None  # Romanized version for non-Latin scripts
+    
+    @property
+    def duration(self) -> float:
+        """Duration of the line in seconds"""
+        return max(0.0, self.end_time - self.start_time)
     
     def add_word(self, word: str, start: float, end: float, confidence: float = 1.0):
         """Add a word to this line"""
@@ -81,6 +87,11 @@ class LyricsData:
     def clear(self):
         """Clear all lyrics lines"""
         self.lines = []
+    
+    def import_from_text(self, text: str):
+        """Import lyrics from plain text (one line per line)"""
+        self.lines = [LyricLine(text=line.strip(), start_time=0.0, end_time=0.0) 
+                      for line in text.splitlines() if line.strip()]
     
     def get_total_duration(self) -> float:
         """Get total duration of lyrics"""

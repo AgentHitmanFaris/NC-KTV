@@ -8,7 +8,8 @@ from PyQt6.QtWidgets import (
     QTextEdit, QTableWidget, QTableWidgetItem, 
     QPushButton, QLabel, QGroupBox, QHeaderView,
     QMessageBox, QProgressDialog, QFileDialog, QComboBox,
-    QGraphicsView, QGraphicsScene, QAbstractItemView, QDoubleSpinBox
+    QGraphicsView, QGraphicsScene, QAbstractItemView, QDoubleSpinBox,
+    QLineEdit
 )
 from PyQt6.QtMultimediaWidgets import QVideoWidget, QGraphicsVideoItem
 from PyQt6.QtCore import Qt, QTimer, QSizeF, QUrl
@@ -20,6 +21,7 @@ from core.project import Project
 from core.lyrics import LyricsData, LyricsLine
 from gui.components.audio_player import AudioPlayer
 from gui.components.karaoke_preview import KaraokePreviewWidget
+from gui.components.timeline_widget import TimelineWidget
 from utils.config import Config
 
 
@@ -94,6 +96,12 @@ class EditorMode(QWidget):
         btn_save.clicked.connect(self._save_project)
         toolbar.addWidget(btn_save)
         
+        # Timing Calibration button (Phase 6.3 - Timing Sync)
+        btn_timing = QPushButton("⚙️ Timing Calibration")
+        btn_timing.setToolTip("Fix timing drift & validate sample rates")
+        btn_timing.clicked.connect(self._open_timing_calibration)
+        toolbar.addWidget(btn_timing)
+        
         btn_export = QPushButton("🎬 Export Video")
         btn_export.clicked.connect(self._export_video)
         btn_export.setStyleSheet("background-color: #E91E63; color: white; font-weight: bold;")
@@ -129,11 +137,18 @@ class EditorMode(QWidget):
         
         self.mode_btns = {'input': btn_mode_input, 'sync': btn_mode_sync}
         
-        # Auto-Transcribe Button
         btn_auto = QPushButton("✨ Auto-Transcribe (AI)")
         btn_auto.clicked.connect(self._start_auto_transcription)
         btn_auto.setStyleSheet("background-color: #673AB7; color: white; font-weight: bold;")
         self.mode_tabs.addWidget(btn_auto)
+        
+        # Timeline View Toggle (Phase 6)
+        self.btn_timeline = QPushButton("📊 Timeline View")
+        self.btn_timeline.setCheckable(True)
+        self.btn_timeline.setChecked(False)
+        self.btn_timeline.clicked.connect(self._toggle_timeline_view)
+        self.btn_timeline.setToolTip("Show/hide multi-track timeline editor")
+        self.mode_tabs.addWidget(self.btn_timeline)
         
         self.mode_tabs.addStretch()
         
@@ -163,8 +178,28 @@ class EditorMode(QWidget):
         
         self.sync_table.hide()
         
+        # 3. Timeline View (Phase 6)
+        self.timeline_widget = TimelineWidget()
+        self.timeline_widget.set_timeline_data(self.project.timeline)
+        self.timeline_widget.playhead_moved.connect(self._on_timeline_seek)
+        self.timeline_widget.clip_selected.connect(self._on_clip_selected)
+        self.timeline_widget.clip_moved.connect(self._on_clip_moved)
+        self.timeline_widget.clip_resized.connect(self._on_clip_resized)
+        self.timeline_widget.clip_split.connect(self._on_clip_split)
+        self.timeline_widget.clip_deleted.connect(self._on_clip_deleted)
+        self.timeline_widget.effect_requested.connect(self._on_effect_requested)
+        self.timeline_widget.hide()  # Hidden by default, can be toggled
+        
         self.editor_stack.addWidget(self.text_editor)
-        self.editor_stack.addWidget(self.sync_table)
+        
+        # Add vertical splitter for sync table and timeline
+        self.sync_timeline_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.sync_timeline_splitter.addWidget(self.sync_table)
+        self.sync_timeline_splitter.addWidget(self.timeline_widget)
+        self.sync_timeline_splitter.setStretchFactor(0, 2)  # Table gets more space
+        self.sync_timeline_splitter.setStretchFactor(1, 1)  # Timeline gets less
+        
+        self.editor_stack.addWidget(self.sync_timeline_splitter)
         
         left_layout.addWidget(self.editor_stack)
         
@@ -495,6 +530,10 @@ class EditorMode(QWidget):
             has_timestamps = any(l.end_time > 0 for l in self.lyrics_data.lines)
             if has_timestamps:
                 self._switch_tab('sync')
+        
+        # Initialize timeline with default tracks (Phase 6.1 Polish)
+        self._initialize_timeline()
+        
         logger.info("[DEBUG] _setup_project finished")
              
     def _sync_video_state(self, is_playing):
@@ -609,6 +648,49 @@ class EditorMode(QWidget):
         elif (event.key() == Qt.Key.Key_Y and event.modifiers() & Qt.KeyboardModifier.ControlModifier) or \
              (event.key() == Qt.Key.Key_Z and event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
             self._perform_redo()
+            event.accept()
+            return
+        
+        # Timeline playback shortcuts (J/K/L - Phase 6.1 Polish)
+        # CRITICAL: Only handle if NOT editing in table or text editor
+        elif event.key() == Qt.Key.Key_J:  # Play backwards (rewind)
+            focused_widget = self.focusWidget()
+            # Skip if editing in table or text editor
+            if isinstance(focused_widget, (QLineEdit, QTextEdit)) or \
+               (hasattr(self, 'sync_table') and self.sync_table.state() == QAbstractItemView.State.EditingState):
+                event.ignore()
+                return
+            
+            current_ms = self.player.media_player.position()
+            new_ms = max(0, current_ms - 5000)  # Rewind 5 seconds
+            self.player.media_player.setPosition(new_ms)
+            event.accept()
+            return
+        
+        elif event.key() == Qt.Key.Key_K:  # Pause/Play toggle
+            focused_widget = self.focusWidget()
+            # Skip if editing in table or text editor
+            if isinstance(focused_widget, (QLineEdit, QTextEdit)) or \
+               (hasattr(self, 'sync_table') and self.sync_table.state() == QAbstractItemView.State.EditingState):
+                event.ignore()
+                return
+            
+            self.player.toggle_playback()
+            event.accept()
+            return
+        
+        elif event.key() == Qt.Key.Key_L:  # Play forwards (fast forward)
+            focused_widget = self.focusWidget()
+            # Skip if editing in table or text editor
+            if isinstance(focused_widget, (QLineEdit, QTextEdit)) or \
+               (hasattr(self, 'sync_table') and self.sync_table.state() == QAbstractItemView.State.EditingState):
+                event.ignore()
+                return
+            
+            current_ms = self.player.media_player.position()
+            duration_ms = self.player.media_player.duration()
+            new_ms = min(duration_ms, current_ms + 5000)  # Forward 5 seconds
+            self.player.media_player.setPosition(new_ms)
             event.accept()
             return
             
@@ -832,6 +914,10 @@ class EditorMode(QWidget):
         
         current_seconds = ms / 1000.0
         
+        # Update timeline playhead (Phase 6)
+        if hasattr(self, 'timeline_widget'):
+            self.timeline_widget.set_current_time(current_seconds)
+        
         # Debugging
         # logger.info(f"Position: {current_seconds:.2f}s, Lines: {len(self.lyrics_data.lines)}")
         
@@ -979,73 +1065,65 @@ class EditorMode(QWidget):
             self.btn_color.setStyleSheet(f"background-color: {color.name()};")
 
     def _import_lyrics_file(self):
-        """Import lyrics from external file (.txt or .lrc)"""
+        """Import lyrics from subtitle/lyrics file"""
+        from utils.subtitle_parser import get_import_filter, import_subtitle, detect_subtitle_format
+        
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Import Lyrics File",
+            "Import Lyrics",
             "",
-            "Lyrics Files (*.txt *.lrc);;Text Files (*.txt);;LRC Files (*.lrc);;All Files (*.*)"
+            get_import_filter()
         )
         
         if not file_path:
             return
         
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            file_path = Path(file_path)
+            format_type = detect_subtitle_format(file_path)
             
-            if file_path.endswith('.lrc'):
-                # Parse LRC format
-                self._parse_lrc_file(content)
+            if format_type == 'unknown' and file_path.suffix.lower() == '.txt':
+                # Plain text - one line per text line, no timestamps
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = [line.strip() for line in f if line.strip()]
+                
+                self.lyrics_data.lines.clear()
+                from sync.sync_data import LyricLine
+                for text in lines:
+                    line = LyricLine(text=text, start_time=0.0, end_time=0.0)
+                    self.lyrics_data.lines.append(line)
+                
+                logger.info(f"Imported {len(lines)} lines from text file (no timestamps)")
             else:
-                # Plain text - just load into editor
-                self.text_editor.setPlainText(content)
+                # Use unified subtitle parser
+                self.lyrics_data = import_subtitle(file_path)
+                logger.info(f"Imported {len(self.lyrics_data.lines)} lines from {format_type.upper()} file")
             
+            # CRITICAL: Sync text editor with imported lyrics to prevent timestamp reset
+            lyrics_text = "\n".join(line.text for line in self.lyrics_data.lines)
+            self.text_editor.blockSignals(True)  # Prevent triggering _on_text_changed
+            self.text_editor.setPlainText(lyrics_text)
+            self.text_editor.blockSignals(False)
+            
+            # Update UI - populate sync table
+            self._refresh_table()
+            self._initialize_timeline()
             self.is_dirty = True
-            QMessageBox.information(self, "Success", f"Imported lyrics from {Path(file_path).name}")
+            
+            # Show success message
+            msg = f"✅ Imported {len(self.lyrics_data.lines)} lines"
+            if format_type != 'unknown':
+                msg += " with timestamps"
+            
+            QMessageBox.information(self, "Import Successful", msg)
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to import file:\n{e}")
-    
-    def _parse_lrc_file(self, content: str):
-        """Parse LRC format and populate lyrics with timestamps"""
-        import re
-        
-        # LRC format: [mm:ss.xx]Lyric text
-        lrc_pattern = r'\[(\d{2}):(\d{2}\.\d{2})\](.*)'
-        
-        lines_with_time = []
-        for line in content.splitlines():
-            match = re.match(lrc_pattern, line)
-            if match:
-                minutes = int(match.group(1))
-                seconds = float(match.group(2))
-                text = match.group(3).strip()
-                start_time = minutes * 60 + seconds
-                
-                if text:  # Skip empty lines
-                    lines_with_time.append((start_time, text))
-        
-        if lines_with_time:
-            # Sort by timestamp
-            lines_with_time.sort(key=lambda x: x[0])
-            
-            # Clear existing lyrics
-            self._save_undo_state()
-            self.lyrics_data.clear()
-            
-            # Add lines with timestamps
-            for i, (start_time, text) in enumerate(lines_with_time):
-                # Calculate end time (start of next line, or +3 seconds for last line)
-                end_time = lines_with_time[i + 1][0] if i < len(lines_with_time) - 1 else start_time + 3.0
-                self.lyrics_data.add_line(text, start_time, end_time)
-            
-            # Update UI
-            self.text_editor.setPlainText("\n".join(line[1] for line in lines_with_time))
-            self._refresh_table()
-            
-            # Switch to sync mode to show timestamps
-            self._switch_tab('sync')
+            logger.error(f"Failed to import lyrics: {e}")
+            QMessageBox.critical(
+                self,
+                "Import Failed",
+                f"Failed to import lyrics:\n{str(e)}"
+            )
     
     def _change_playback_speed(self, speed_text: str):
         """Change playback speed (0.5x - 2.0x)"""
@@ -1374,8 +1452,22 @@ class EditorMode(QWidget):
             
         # 2. Populate data with timestamps
         self.lyrics_data.clear()
+        from sync.sync_data import LyricLine, LyricWord
         for seg in segments:
-            self.lyrics_data.add_line(seg['text'], seg['start'], seg['end'], seg.get('words', []))
+            line = LyricLine(
+                text=seg['text'],
+                start_time=seg['start'],
+                end_time=seg['end']
+            )
+            # Add word-level timing if available
+            for word_data in seg.get('words', []):
+                line.words.append(LyricWord(
+                    word=word_data.get('word', word_data.get('text', '')),
+                    start_time=word_data.get('start', 0.0),
+                    end_time=word_data.get('end', 0.0),
+                    confidence=word_data.get('confidence', 1.0)
+                ))
+            self.lyrics_data.lines.append(line)
         
         self.is_dirty = True
             
@@ -1448,6 +1540,25 @@ class EditorMode(QWidget):
         except Exception as e:
             logger.warning(f"Auto-save failed: {e}")
 
+    def _open_timing_calibration(self):
+        """Open timing calibration dialog"""
+        from gui.components.timing_calibration import TimingCalibrationDialog
+        
+        dialog = TimingCalibrationDialog(self.project, self)
+        if dialog.exec():
+            # Apply settings
+            dialog.apply_settings()
+            self.is_dirty = True
+            logger.info("Timing calibration settings applied")
+            
+            # Show confirmation
+            QMessageBox.information(
+                self,
+                "Timing Updated",
+                f"Global offset set to: {dialog.get_global_offset():.3f}s\n\n"
+                "Play the track to verify timing is correct."
+            )
+    
     def _export_video(self):
         """Export project to video with karaoke subtitles"""
         from utils.ass_generator import ASSGenerator
@@ -1626,3 +1737,220 @@ class EditorMode(QWidget):
         else:
             QMessageBox.critical(self, "Export Failed", f"Error:\n{message}")
 
+
+    # === Phase 6: Timeline Methods ===
+    
+    def _toggle_timeline_view(self):
+        """Toggle timeline widget visibility"""
+        if self.btn_timeline.isChecked():
+            # Reinitialize timeline to ensure lyrics are populated
+            self._initialize_timeline()
+            self.timeline_widget.show()
+            logger.info('Timeline view enabled')
+        else:
+            self.timeline_widget.hide()
+            logger.info('Timeline view disabled')
+    
+    def _on_timeline_seek(self, seconds: float):
+        """Handle seek from timeline widget"""
+        seek_ms = int(seconds * 1000)
+        self.player.media_player.setPosition(seek_ms)
+        logger.info(f'Timeline seek to {seconds:.2f}s')
+    
+    def _on_clip_selected(self, clip_id: str):
+        """Handle clip selection in timeline"""
+        logger.info(f'Clip selected: {clip_id}')
+        # TODO: Highlight corresponding lyrics line in sync table if it's a lyrics clip
+        for track in self.project.timeline.tracks:
+            clip = track.get_clip(clip_id)
+            if clip and 'line_index' in clip.properties:
+                line_idx = clip.properties['line_index']
+                if 0 <= line_idx < self.sync_table.rowCount():
+                    self.sync_table.selectRow(line_idx)
+                break
+    
+    def _on_clip_moved(self, clip_id: str, new_start_time: float):
+        """Handle clip being moved to new position"""
+        logger.info(f'Clip {clip_id} moved to {new_start_time:.2f}s')
+        
+        # Update project timeline
+        for track in self.project.timeline.tracks:
+            clip = track.get_clip(clip_id)
+            if clip:
+                clip.move_to(new_start_time)
+                
+                # If it's a lyrics clip, update the lyrics data
+                if 'line_index' in clip.properties:
+                    line_idx = clip.properties['line_index']
+                    if 0 <= line_idx < len(self.lyrics_data.lines):
+                        duration = clip.duration
+                        self.lyrics_data.lines[line_idx].start_time = new_start_time
+                        self.lyrics_data.lines[line_idx].end_time = new_start_time + duration
+                        self._refresh_table()
+                
+                self.is_dirty = True
+                self.timeline_widget.timeline_canvas.update()
+                break
+    
+    def _on_clip_resized(self, clip_id: str, new_duration: float):
+        """Handle clip being resized"""
+        logger.info(f'Clip {clip_id} resized to {new_duration:.2f}s duration')
+        
+        # Update project timeline
+        for track in self.project.timeline.tracks:
+            clip = track.get_clip(clip_id)
+            if clip:
+                # If it's a lyrics clip, update the lyrics data
+                if 'line_index' in clip.properties:
+                    line_idx = clip.properties['line_index']
+                    if 0 <= line_idx < len(self.lyrics_data.lines):
+                        self.lyrics_data.lines[line_idx].end_time = clip.start_time + new_duration
+                        self._refresh_table()
+                
+                self.is_dirty = True
+                self.timeline_widget.timeline_canvas.update()
+                break
+    
+    def _on_clip_split(self, clip_id: str, split_time: float):
+        """Handle clip being split at specified time"""
+        logger.info(f'Splitting clip {clip_id} at {split_time:.2f}s')
+        
+        # Find and split the clip
+        for track in self.project.timeline.tracks:
+            clip = track.get_clip(clip_id)
+            if clip:
+                # Split the clip
+                right_clip = clip.split_at(split_time)
+                
+                if right_clip:
+                    track.add_clip(right_clip)
+                    
+                    # If it's a lyrics clip, we should split the lyrics line too
+                    if 'line_index' in clip.properties:
+                        line_idx = clip.properties['line_index']
+                        if 0 <= line_idx < len(self.lyrics_data.lines):
+                            QMessageBox.information(
+                                self,
+                                "Lyrics Split",
+                                "Clip split successfully! Note: You may want to manually edit the lyrics text for each half."
+                            )
+                    
+                    self.is_dirty = True
+                    self.timeline_widget.timeline_canvas.update()
+                break
+    
+    def _on_clip_deleted(self, clip_id: str):
+        """Handle clip deletion"""
+        logger.info(f'Deleting clip {clip_id}')
+        
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self,
+            "Delete Clip",
+            "Are you sure you want to delete this clip?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            for track in self.project.timeline.tracks:
+                if track.remove_clip(clip_id):
+                    self.timeline_widget.selected_clip_id = None
+                    self.timeline_widget.timeline_canvas.update()
+                    self.is_dirty = True
+                    logger.info(f'Clip {clip_id} deleted from track {track.track_id}')
+                    break
+    
+    def _on_effect_requested(self, clip_id: str):
+        """Handle request to add effect to clip"""
+        logger.info(f'Effect requested for clip {clip_id}')
+        
+        # Find the clip
+        selected_clip = None
+        for track in self.project.timeline.tracks:
+            clip = track.get_clip(clip_id)
+            if clip:
+                selected_clip = clip
+                break
+        
+        if not selected_clip:
+            return
+        
+        # Open effect panel dialog
+        from gui.components.effect_panel import EffectPanelDialog
+        
+        dialog = EffectPanelDialog(selected_clip, self)
+        if dialog.exec():
+            # Effects are already modified in place
+            self.is_dirty = True
+            self.timeline_widget.timeline_canvas.update()
+            logger.info(f'Effects updated for clip {clip_id}')
+    
+    def _initialize_timeline(self):
+        """Initialize timeline with default tracks and populate with lyrics clips (Phase 6.1 Polish)"""
+        from core.timeline_data import Track, Clip, TrackType
+        import uuid
+        
+        timeline = self.project.timeline
+        
+        # Clear existing tracks (in case of re-initialization)
+        timeline.tracks.clear()
+        
+        # Create default tracks
+        # 1. Audio Track (Instrumental)
+        audio_track = Track(
+            track_id="audio_instrumental",
+            track_type=TrackType.AUDIO,
+            name="Instrumental"
+        )
+        timeline.add_track(audio_track)
+        
+        # 2. Audio Track (Vocals) if available
+        if self.project.vocals_file:
+            vocals_track = Track(
+                track_id="audio_vocals",
+                track_type=TrackType.AUDIO,
+                name="Vocals"
+            )
+            timeline.add_track(vocals_track)
+        
+        # 3. Video Track if source is video
+        if self.project.source_file:
+            src_path = Path(self.project.source_file)
+            if src_path.suffix.lower() in ['.mp4', '.avi', '.mkv', '.mov']:
+                video_track = Track(
+                    track_id="video_background",
+                    track_type=TrackType.VIDEO,
+                    name="Background Video"
+                )
+                timeline.add_track(video_track)
+        
+        # 4. Lyrics Track - Populate with lyrics lines as clips
+        lyrics_track = Track(
+            track_id="lyrics_main",
+            track_type=TrackType.LYRICS,
+            name="Lyrics"
+        )
+        
+        # Add lyrics as clips
+        for i, line in enumerate(self.lyrics_data.lines):
+            if line.start_time >= 0 and line.end_time > line.start_time:
+                clip = Clip(
+                    clip_id=f"lyric_{i}_{uuid.uuid4().hex[:8]}",
+                    track_id="lyrics_main",
+                    start_time=line.start_time,
+                    duration=line.duration,
+                    properties={
+                        'text': line.text,
+                        'line_index': i
+                    }
+                )
+                lyrics_track.add_clip(clip)
+        
+        timeline.add_track(lyrics_track)
+        
+        # Update timeline widget
+        if hasattr(self, 'timeline_widget'):
+            self.timeline_widget.set_timeline_data(timeline)
+        
+        logger.info(f"Timeline initialized with {len(timeline.tracks)} tracks, {len(lyrics_track.clips)} lyric clips")

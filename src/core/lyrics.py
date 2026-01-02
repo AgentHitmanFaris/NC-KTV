@@ -17,6 +17,11 @@ class LyricsLine:
     tokens: List['LyricsToken'] = field(default_factory=list)
     romanized_text: Optional[str] = None  # Romanized version for non-Latin scripts
     
+    # Timeline effects (Phase 6)
+    effects: List[dict] = field(default_factory=list)  # List of Effect dicts
+    animation_curve: Optional[str] = None  # 'linear', 'ease-in', 'ease-out', 'ease-in-out', 'custom'
+    custom_curve_points: Optional[List[tuple]] = None  # Bezier control points for custom curves
+    
     @property
     def duration(self) -> float:
         """Duration of the line in seconds"""
@@ -32,6 +37,12 @@ class LyricsLine:
         }
         if self.romanized_text:
             data['romanized_text'] = self.romanized_text
+        if self.effects:
+            data['effects'] = self.effects
+        if self.animation_curve:
+            data['animation_curve'] = self.animation_curve
+        if self.custom_curve_points:
+            data['custom_curve_points'] = self.custom_curve_points
         return data
     
     @classmethod
@@ -41,7 +52,10 @@ class LyricsLine:
             text=data.get('text', ''),
             start_time=data.get('start_time', 0.0),
             end_time=data.get('end_time', 0.0),
-            romanized_text=data.get('romanized_text')
+            romanized_text=data.get('romanized_text'),
+            effects=data.get('effects', []),
+            animation_curve=data.get('animation_curve'),
+            custom_curve_points=data.get('custom_curve_points')
         )
         if 'tokens' in data:
             line.tokens = [LyricsToken.from_dict(t) for t in data['tokens']]

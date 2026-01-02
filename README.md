@@ -4,16 +4,16 @@
 
 # NC-KTV
 
-**Music Video Karaoke Maker**
+**Professional Music Video Karaoke Maker**
 
-![Version](https://img.shields.io/badge/version-0.6.1-blue.svg)
+![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.10-blue.svg)
 ![Status](https://img.shields.io/badge/status-beta-orange.svg)
 
-Professional Windows desktop application for creating karaoke videos with automatic vocal removal and synchronized lyrics.
+Windows desktop application for creating professional karaoke videos with AI-powered vocal separation, automatic transcription, and synchronized lyrics.
 
-[Features](#features) • [Installation](#installation) • [Usage](#usage) • [Docs](DOCS.md) • [Changelog](CHANGELOG.md)
+[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Technical Docs](DOCS.md) • [Changelog](CHANGELOG.md)
 
 </div>
 
@@ -21,82 +21,147 @@ Professional Windows desktop application for creating karaoke videos with automa
 
 ## Overview
 
-NC-KTV automates the process of creating professional karaoke videos from music files or videos. It combines AI-powered vocal separation (UVR), automatic transcription (Whisper), and a professional lyrics editor to let you create karaoke tracks in minutes.
+NC-KTV automates the entire karaoke video creation workflow:
+1. **Import** any audio/video file
+2. **Separate** vocals from instrumentals using AI
+3. **Transcribe** lyrics automatically or import from files
+4. **Sync** lyrics with precise timing controls
+5. **Export** professional karaoke videos
 
 ---
 
 ## Features
 
-### AI Vocal Separation
-- **UVR Integration**: Remove vocals from any song with high precision
-- **GPU Acceleration**: CUDA support for fast processing
-- **Instrumental & Vocal Tracks**: Automatically splits audio for mixing
-- **Multiple Models**: KARA_2 (fast), 5_HP-Karaoke (balanced), 6_HP-Karaoke (quality)
+### 🎤 AI Vocal Separation
+- **UVR Integration**: High-quality vocal removal using MDX-Net and VR models
+- **GPU Acceleration**: CUDA support for 5-10x faster processing
+- **Multiple Models**: KARA_2 (quality), 6_HP-Karaoke (balanced), 5_HP-Karaoke (fast)
 
-### Professional Lyrics Editor
-- **Waveform View**: Visualize audio for precise timing
-- **Dual-Line Preview**: See active and upcoming lyrics in real-time
-- **Tap-to-Sync**: Spacebar tapping for easy rhythm matching
+### 📝 Professional Lyrics Editor
+- **Waveform Visualization**: See audio peaks for precise timing
+- **Dual-Line Preview**: Live karaoke preview with active/upcoming lines
+- **Tap-to-Sync**: Spacebar timing for natural rhythm matching
 - **Word-Level Editing**: Fine-tune individual word timings
-- **Auto-Transcription**: Generate initial lyrics using AI (Whisper)
-- **📥 File Import**: Import from .txt or .lrc files (NEW v0.6.0)
-- **⚡ Speed Control**: Adjust playback 0.5x-2.0x for easier syncing (NEW v0.6.0)
-- **Undo/Redo**: Ctrl+Z/Y to undo changes
-- **Save Prompts**: Warns before closing unsaved work (NEW v0.6.0)
+- **AI Transcription**: Whisper-powered automatic lyric generation
+- **Multi-Format Import**: SRT, LRC, VTT, TTML, ASS/SSA subtitles
+- **Romanization**: Automatic Korean/Japanese → Latin script
 
-### Project Management
-- **🔐 Encrypted .nctv Format**: Secure binary project files (NEW v0.6.0)
-- **📦 Cross-Project Import**: Share lyrics/audio between projects (NEW v0.6.0)
-- **Model Manager**: One-click Whisper model downloads (NEW v0.6.0)
-- **Auto-Save**: Automatic backups every 5 minutes
+### ⏱️ Advanced Timeline
+- **Multi-Track Editing**: Separate tracks for audio, video, effects, lyrics
+- **Clip Manipulation**: Drag, resize, split, delete clips
+- **Effect System**: 8 effect types with custom Bezier curves
+- **Snap-to-Grid**: Precise alignment with configurable grid
+- **Sample-Accurate Timing**: Eliminates drift with AudioClock system
 
-### Karaoke Video Export
-- **1080p MP4 Export**: High-quality video output
-- **5 Animation Types**: Linear Wipe, Syllable Step, Glow Pulse, Fade In, Bouncing Ball
-- **3 Color Styles**: Neon Gold, Classic Blue, Clean White
-- **Background Options**: Use original video or custom backgrounds
+### 🎬 Flexible Video Export
+| Mode | Video | Audio | Use Case |
+|------|-------|-------|----------|
+| **Karaoke Video** | Music Video | Instrumental | Sing-along karaoke |
+| **Lyrics Music Video** | Music Video | Original | Music video with subtitles |
+| **Karaoke (No Video)** | Solid Color | Instrumental | Classic karaoke style |
+| **Lyrics Video** | Solid Color | Original | Lyric video |
+
+### 🎨 Animation Styles
+- Linear Wipe (classic fill)
+- Syllable Step (word-by-word)
+- Glow Pulse (pulsing effect)
+- Fade In (opacity animation)
+- Bouncing Ball (retro style)
+
+---
+
+## Subtitle Format Support
+
+| Format | Extensions | Import | Export |
+|--------|------------|:------:|:------:|
+| SubRip | .srt | ✅ | ✅ |
+| LRC Lyrics | .lrc | ✅ | ✅ |
+| WebVTT | .vtt | ✅ | ✅ |
+| TTML/DFXP | .ttml, .dfxp, .xml | ✅ | - |
+| ASS/SSA | .ass, .ssa | ✅ | ✅ |
+| Plain Text | .txt | ✅ | - |
 
 ---
 
 ## Installation
 
 ### Prerequisites
-1. **Windows 10/11** (64-bit)
-2. **FFmpeg** in system PATH
-3. **NVIDIA GPU** recommended (CUDA 11.8)
+- **Windows 10/11** (64-bit)
+- **FFmpeg** in PATH ([Download](https://ffmpeg.org/download.html))
+- **NVIDIA GPU** with CUDA 11.8+ (recommended)
 
-### Quick Start
+### Quick Install
 ```powershell
-# Clone and setup
+# Clone repository
 git clone https://github.com/AgentHitmanFaris/NC-KTV.git
 cd NC-KTV
+
+# Setup Python environment
 .\setup_python.ps1
 
-# Run
+# Launch application
 .\python_embed\python.exe main.py
+```
+
+### Verify Installation
+```powershell
+# Check FFmpeg
+ffmpeg -version
+
+# Check CUDA
+.\python_embed\python.exe -c "import torch; print(f'CUDA: {torch.cuda.is_available()}')"
 ```
 
 See [DOCS.md](DOCS.md) for detailed installation instructions.
 
 ---
 
-## Usage
+## Quick Start
 
 ### 1. Wizard Mode
-- **Select File**: Drag and drop your audio or video file
-- **Separate**: Click "Start Processing" to separate vocals
-- **Edit**: Click "Edit Lyrics" to enter the Editor
+```
+📁 Select File → 🎵 Start Processing → ✏️ Edit Lyrics
+```
 
 ### 2. Lyrics Editor
-- **Input**: Paste lyrics or use "Auto-Transcribe"
-- **Sync**: Play track and use **Spacebar** to set line starts
-- **Fine-tune**: Right-click context menu to "Edit Word Timings" for precision
-- **Preview**: Watch the real-time karaoke preview
+- **Input Tab**: Paste or import lyrics
+- **Sync Tab**: Use Spacebar to mark line timings
+- **Preview**: Watch real-time karaoke display
 
 ### 3. Export
-- Click **"Export Video"**
-- Choose animation style
+- **Ctrl+E**: Open export dialog
+- Choose export mode and style
 - Wait for rendering
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| Space | Set line start time |
+| ↑/↓ | Navigate lines |
+| J/K/L | Rewind/Pause/Forward |
+| Ctrl+S | Save project |
+| Ctrl+Z | Undo |
+| Ctrl+E | Export video |
+| F1 | Help |
+
+---
+
+## Architecture
+
+```
+NC-KTV/
+├── src/
+│   ├── core/           # Core processing (audio, video, timing)
+│   ├── gui/            # PyQt6 user interface
+│   ├── sync/           # Lyrics data structures
+│   └── utils/          # Utilities (parsers, exporters)
+├── models/             # UVR and Whisper models
+├── assets/             # Icons and resources
+└── Testing/            # Sample projects
+```
+
+See [DOCS.md](DOCS.md) for technical documentation with mathematical formulas.
 
 ---
 
@@ -106,14 +171,30 @@ See [DOCS.md](DOCS.md) for detailed installation instructions.
 - [x] Phase 3: Lyrics Processing & Syncing
 - [x] Phase 4: Video Generation & Styles
 - [x] Phase 5: Word-Level Precision
-- [ ] Phase 6: Advanced Timeline Effects
-- [ ] Phase 7: Community Themes
+- [x] Phase 6: Advanced Timeline & Effects
+- [ ] Phase 7: Community Themes & Plugins
+
+---
+
+## Performance
+
+| Operation | GPU (RTX 3060) | CPU Only |
+|-----------|----------------|----------|
+| Vocal Separation (3 min) | 15-30s | 2-5 min |
+| AI Transcription | 10-20s | 1-2 min |
+| Video Export (1080p) | 30-60s | 3-5 min |
 
 ---
 
 ## Contributing
 
-Contributions welcome! See [DOCS.md](DOCS.md) for guidelines.
+Contributions welcome! Please read [DOCS.md](DOCS.md) for guidelines.
+
+```
+<type>(<scope>): <subject>
+
+Types: feat, fix, docs, style, refactor, perf, test, chore
+```
 
 ---
 
@@ -125,16 +206,17 @@ MIT License - see [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-- **[UVR](https://github.com/Anjok07/ultimatevocalremovergui)** - Vocal removal models
+- **[UVR](https://github.com/Anjok07/ultimatevocalremovergui)** - Vocal removal AI models
 - **[audio-separator](https://github.com/nomadkaraoke/python-audio-separator)** - Python UVR wrapper
+- **[OpenAI Whisper](https://github.com/openai/whisper)** - Speech recognition
 - **[PyTorch](https://pytorch.org/)** - Deep learning framework
 - **[PyQt6](https://www.riverbankcomputing.com/software/pyqt/)** - GUI framework
-- **[OpenAI Whisper](https://github.com/openai/whisper)** - Speech recognition
+- **[FFmpeg](https://ffmpeg.org/)** - Video processing
 
 ---
 
 <div align="center">
 
-**Made for the karaoke community**
+**Made for the karaoke community** 🎤
 
 </div>

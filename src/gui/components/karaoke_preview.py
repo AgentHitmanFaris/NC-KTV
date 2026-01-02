@@ -7,6 +7,7 @@ Supports multiple animation types
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, QRectF, QTime
 from PyQt6.QtGui import QPainter, QFont, QColor, QPainterPath, QPen, QRadialGradient
+from core.effect_compositor import EffectCompositor
 
 
 class AnimationType:
@@ -44,12 +45,17 @@ class KaraokePreviewWidget(QWidget):
         self.last_audio_time = 0.0
         self.is_playing = False
         
-        # Romanization state
+        # Romanization support
         self.romanization_mode = "Original"  # Options: "Original", "Romanized", "Both"
         
         # Timing mode for upcoming lyrics
         self.timing_mode = "Karaoke"  # Options: "Karaoke" (show early), "Lyrics Video" (show after)
         self.early_preview_seconds = 2.0  # Show next line 2 seconds early in Karaoke mode
+        
+        # Effect compositor for timeline effects (Phase 6.3)
+        self.effect_compositor = EffectCompositor()
+        self.current_clip = None  # Current lyrics clip with effects
+        self.clip_start_time = 0.0  # Clip start time for effect calculations
         
         # Monotonic timer for interpolation
         from PyQt6.QtCore import QElapsedTimer

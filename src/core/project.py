@@ -10,6 +10,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 
 from sync.sync_data import LyricsData
+from core.timeline_data import TimelineData
+from core.audio_clock import AudioClock, validate_sample_rates
 
 
 @dataclass
@@ -25,7 +27,7 @@ class ProjectSettings:
 class Project:
     """NC-KTV Project management"""
     
-    PROJECT_VERSION = "0.6"
+    PROJECT_VERSION = "0.7"  # Bumped for timeline support
     PROJECT_EXT = ".nctv"
     
     def __init__(self, source_file: Optional[Path] = None):
@@ -38,6 +40,18 @@ class Project:
         self.project_name = self.source_file.stem if source_file else "Untitled"
         self.settings = ProjectSettings()
         self.lyrics = LyricsData()
+        
+        # Timeline data (Phase 6)
+        self.timeline = TimelineData()
+        
+        # Audio clock for timing sync (Phase 6.3 - Timing Fix)
+        self.audio_clock = AudioClock()
+        self.timing_metadata = {
+            'sample_rate_validated': False,
+            'transcription_source': 'original',  # 'original' or 'vocals'
+            'uvr_delay_measured': 0.0,
+            'global_offset': 0.0
+        }
         
         # File paths
         self.audio_file: Optional[Path] = None
@@ -62,6 +76,9 @@ class Project:
             'source_file': str(self.source_file) if self.source_file else None,
             'settings': asdict(self.settings),
             'lyrics': self.lyrics.to_dict(),
+            'timeline': self.timeline.to_dict(),  # Phase 6: Timeline data
+            'audio_clock': self.audio_clock.to_dict(),  # Phase 6.3: Timing sync
+            'timing_metadata': self.timing_metadata,
             'files': {
                 'audio': str(self.audio_file) if self.audio_file else None,
                 'instrumental': str(self.instrumental_file) if self.instrumental_file else None,
@@ -96,6 +113,27 @@ class Project:
         # Load lyrics
         if 'lyrics' in data:
             project.lyrics = LyricsData.from_dict(data['lyrics'])
+        
+        # Load timeline (Phase 6) - backward compatible with v0.6
+        if 'timeline' in data:
+            project.timeline = TimelineData.from_dict(data['timeline'])
+        else:
+            # Legacy projects without timeline - create empty timeline
+            project.timeline = TimelineData()
+        
+        # Load audio clock (Phase 6.3) - backward compatible
+        if 'audio_clock' in data:
+            project.audio_clock = AudioClock.from_dict(data['audio_clock'])
+        else:
+            project.audio_clock = AudioClock()
+        
+        # Load timing metadata
+        project.timing_metadata = data.get('timing_metadata', {
+            'sample_rate_validated': False,
+            'transcription_source': 'original',
+            'uvr_delay_measured': 0.0,
+            'global_offset': 0.0
+        })
         
         # Load file paths
         files = data.get('files', {})
@@ -220,3 +258,21 @@ class Project:
             return False, f"Source file not found: {self.source_file}"
         
         return True, "OK"
+    
+    def validate_sample_rates_sync(self) -> Dict:
+        """Validate sample rates across all audio files"""
+        audio_files = {
+            'source': self.source_file,
+            'instrumental': self.instrumental_file,
+            'vocals': self.vocals_file
+        }
+        
+        results = validate_sample_rates(audio_files)
+        
+        if results['valid']:
+            # Update audio clock sample rate
+            if results['recommended_rate']:
+                self.audio_clock.set_sample_rate(results['recommended_rate'])
+                self.timing_metadata['sample_rate_validated'] = True
+        
+        return results
