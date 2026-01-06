@@ -6,7 +6,7 @@
 
 **Professional Music Video Karaoke Maker**
 
-![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.10-blue.svg)
 ![Status](https://img.shields.io/badge/status-beta-orange.svg)
@@ -42,9 +42,10 @@ NC-KTV automates the entire karaoke video creation workflow:
 - **Dual-Line Preview**: Live karaoke preview with active/upcoming lines
 - **Tap-to-Sync**: Spacebar timing for natural rhythm matching
 - **Word-Level Editing**: Fine-tune individual word timings
-- **AI Transcription**: Whisper-powered automatic lyric generation
+- **AI Transcription**: Faster-Whisper integration (4x faster than standard models)
 - **Multi-Format Import**: SRT, LRC, VTT, TTML, ASS/SSA subtitles
 - **Romanization**: Automatic Korean/Japanese → Latin script
+- **Local Model Detection**: Automatically finds and uses installed AI models
 
 ### ⏱️ Advanced Timeline
 - **Multi-Track Editing**: Separate tracks for audio, video, effects, lyrics
@@ -62,11 +63,12 @@ NC-KTV automates the entire karaoke video creation workflow:
 | **Lyrics Video** | Solid Color | Original | Lyric video |
 
 ### 🎨 Animation Styles
-- Linear Wipe (classic fill)
-- Syllable Step (word-by-word)
-- Glow Pulse (pulsing effect)
-- Fade In (opacity animation)
-- Bouncing Ball (retro style)
+- **Linear Wipe**: Classic fill animation
+- **Syllable Step**: Word-by-word highlighting
+- **Glow Pulse**: Dynamic pulsing effect
+- **Fade In**: Smooth opacity transitions
+- **Bouncing Ball**: Retro bouncing indicator
+- **Match Preview**: Export with exact preview styling
 
 ---
 
@@ -88,7 +90,7 @@ NC-KTV automates the entire karaoke video creation workflow:
 ### Prerequisites
 - **Windows 10/11** (64-bit)
 - **FFmpeg** in PATH ([Download](https://ffmpeg.org/download.html))
-- **NVIDIA GPU** with CUDA 11.8+ (recommended)
+- **NVIDIA GPU** with CUDA 12.x (recommended for GPU acceleration)
 
 ### Quick Install
 ```powershell
@@ -178,10 +180,11 @@ See [DOCS.md](DOCS.md) for technical documentation with mathematical formulas.
 
 ## Performance
 
-| Operation | GPU (RTX 3060) | CPU Only |
-|-----------|----------------|----------|
+| Operation | GPU (Faster-Whisper) | CPU Only |
+|-----------|----------------------|----------|
 | Vocal Separation (3 min) | 15-30s | 2-5 min |
-| AI Transcription | 10-20s | 1-2 min |
+| AI Transcription (Faster-Whisper) | 10-20s | 40-80s |
+| AI Transcription (Standard) | 40-80s | 2-4 min |
 | Video Export (1080p) | 30-60s | 3-5 min |
 
 ---
@@ -208,7 +211,8 @@ MIT License - see [LICENSE](LICENSE).
 
 - **[UVR](https://github.com/Anjok07/ultimatevocalremovergui)** - Vocal removal AI models
 - **[audio-separator](https://github.com/nomadkaraoke/python-audio-separator)** - Python UVR wrapper
-- **[OpenAI Whisper](https://github.com/openai/whisper)** - Speech recognition
+- **[Faster-Whisper](https://github.com/SYSTRAN/faster-whisper)** - Optimized speech recognition (CTranslate2)
+- **[OpenAI Whisper](https://github.com/openai/whisper)** - Original speech recognition models
 - **[PyTorch](https://pytorch.org/)** - Deep learning framework
 - **[PyQt6](https://www.riverbankcomputing.com/software/pyqt/)** - GUI framework
 - **[FFmpeg](https://ffmpeg.org/)** - Video processing

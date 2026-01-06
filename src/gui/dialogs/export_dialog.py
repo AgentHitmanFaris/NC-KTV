@@ -132,7 +132,7 @@ class ExportDialog(QDialog):
         
         # Animation Style
         animation_layout = QHBoxLayout()
-        self.lbl_animation = QLabel(f"{current_animation}")
+        self.lbl_animation = QLabel(f"{self.current_animation}")
         self.lbl_animation.setStyleSheet("font-weight: bold; color: #4CAF50;")
         animation_layout.addWidget(self.lbl_animation)
         animation_layout.addWidget(QLabel("(from preview)"))
@@ -141,7 +141,7 @@ class ExportDialog(QDialog):
         
         # Visual Style
         self.combo_style = QComboBox()
-        self.combo_style.addItems(["Neon Gold", "Classic Blue", "Clean White", "Custom"])
+        self.combo_style.addItems(["Match Preview", "Neon Gold", "Classic Blue", "Clean White", "Custom"])
         options_layout.addRow("Lyrics Style:", self.combo_style)
         
         options_group.setLayout(options_layout)
@@ -255,11 +255,16 @@ class ExportDialog(QDialog):
         # Check if video source is available
         video_idx = self.combo_video_source.currentIndex()
         if video_idx == 0:  # Music video
-            if not self.project or not self.project.source_file:
+            if self.project:
+                print(f"[DEBUG] Source File: {self.project.source_file}")
+                if self.project.source_file:
+                    print(f"[DEBUG] Exists: {self.project.source_file.exists()}")
+            
+            if not self.project or not self.project.source_file or not self.project.source_file.exists():
                 QMessageBox.warning(
                     self,
                     "No Music Video",
-                    "Music video source not available. Please choose a different video source."
+                    f"Music video source not available.\nPath: {self.project.source_file}"
                 )
                 return
         

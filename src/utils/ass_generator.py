@@ -4,10 +4,11 @@ ASS (Advanced Substation Alpha) Generator for Karaoke
 from core.lyrics import LyricsData
 
 class ASSGenerator:
-    def __init__(self, lyrics_data: LyricsData, style: str = "Neon Gold", animation: str = "Standard (Wipe)"):
+    def __init__(self, lyrics_data: LyricsData, style: str = "Neon Gold", animation: str = "Standard (Wipe)", custom_style=None):
         self.lyrics = lyrics_data
         self.style = style
-        self.animation = animation # Matches AnimationType values
+        self.animation = animation
+        self.custom_style = custom_style or {}
         
     def generate(self) -> str:
         """Generate ASS file content"""
@@ -33,11 +34,31 @@ PlayResY: 1080
         base_header = """[V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding"""
         
-        # Helper to get color codes
-        # ASS Color is &HBBGGRR
-        # &H00FFFFFF is White
-        # &H000000FF is Red
-        
+        # Helper for ASS color: &HAABBGGRR
+        def to_ass_color(color_obj, alpha=0):
+            if isinstance(color_obj, str):
+                # Assume hex string but ASS needs &H
+                return "&H00FFFFFF" 
+            # If it's a QColor or similar tuple
+            try:
+                # Assuming RGBA or close
+                # We need to flip to BGR
+                return f"&H{alpha:02X}{color_obj.blue():02X}{color_obj.green():02X}{color_obj.red():02X}"
+            except:
+                return "&H00FFFFFF"
+
+        if self.style == "Match Preview" and self.custom_style:
+            # Generate style from preview settings
+            # We use 'Preview' as the style name
+            primary = to_ass_color(self.custom_style.get('active_color'), 0)
+            secondary = to_ass_color(self.custom_style.get('inactive_color'), 0) # Secondary is often the "wait" color in ASS karaoke
+            outline = to_ass_color(self.custom_style.get('outline_color'), 0)
+            
+            # Simple styles
+            return base_header + f"""
+Style: Preview,Arial,60,{primary},{secondary},{outline},&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,20,20,50,1
+"""
+
         if self.animation == "Typewriter":
             # For Typewriter, Secondary Color (unfilled) must be TRANSPARENT (&HFF......)
             # So text "appears" as it fills
@@ -98,10 +119,18 @@ Style: Default,Arial,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,
                     k_val = int(duration * 100)
                     k_text += f"{{{tag}{k_val}}}{token.text} "
             else:
-                # Line-level fallback
-                duration = line.end_time - line.start_time
-                k_val = int(duration * 100)
-                k_text = f"{{{tag}{k_val}}}{line.text}"
+                # Line-level fallback: Simulate word timing by splitting text
+                words = line.text.split(' ')
+                if not words:
+                    continue
+                    
+                total_duration = line.end_time - line.start_time
+                word_duration = total_duration / len(words)
+                k_val = int(word_duration * 100)
+                
+                for i, word in enumerate(words):
+                    space = " " if i < len(words) - 1 else ""
+                    k_text += f"{{{tag}{k_val}}}{word}{space}"
             
             # --- Global Animation Effects ---
             anim_tags = ""
@@ -120,7 +149,9 @@ Style: Default,Arial,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,
 
             # --- Select Style Name ---
             style_name = "Default"
-            if self.style == "Neon Gold":
+            if self.style == "Match Preview":
+                style_name = "Preview"
+            elif self.style == "Neon Gold":
                 style_name = "NeonSharp"
             elif self.style == "Classic Blue":
                 style_name = "Classic"

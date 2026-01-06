@@ -141,6 +141,17 @@ Format: `H:MM:SS.cc`
 t = (H \times 3600) + (MM \times 60) + SS + \frac{cc}{100}
 ```
 
+```math
+t = (H \times 3600) + (MM \times 60) + SS + \frac{cc}{100}
+```
+
+### 4b. Inverse Conversion (Export)
+The system also supports losslessly converting `LyricsData` back to these formats for interoperability.
+1. **Normalization**: All timestamps are internally float seconds.
+2. **Formatting**:
+   - `float_to_vtt(t)` -> `HH:MM:SS.mmm`
+   - `float_to_ass(t)` -> `H:MM:SS.cc`
+
 ---
 
 ## Effect Compositor (Bezier Math)

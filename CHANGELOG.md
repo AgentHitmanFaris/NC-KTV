@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-01-06
+
+### Added
+
+#### AI Transcription Upgrades
+- **Faster-Whisper Integration**: CTranslate2-based engine for 4x faster transcription
+- **Hybrid Model Loading**: Supports both `.pt` (OpenAI format) and optimized Faster-Whisper models
+- **Local Model Detection**: Automatically scans `models/whisper` for installed models
+- **Smart GPU Fallback**: Attempts GPU (float16) → GPU (int8) → CPU for maximum compatibility
+- **Custom DLL Loading**: Recursively searches for cuDNN/cuBLAS libraries in model folders
+
+#### Export Enhancements
+- **"Match Preview" Style**: Export videos with exact colors and styling from the karaoke preview widget
+- **Custom Color Support**: Pass active, inactive, and outline colors from preview to ASS generator
+- **Filtered Model List**: Model selection dialog now shows only locally available models
+
+### Changed
+- **CUDA Requirements**: Updated to CUDA 12.x (with automatic fallback for compatibility)
+- **Model Selection UI**: Removed download-only models from the selection list for cleaner UX
+- **Transcription Worker**: Refactored to intelligently switch between `whisper` and `faster-whisper` engines
+
+### Technical
+- Enhanced `src/utils/config.py` - Added `get_available_models()` with recursive `.bin` file search
+- Enhanced `src/gui/editor/editor_mode.py` - Model path resolution and display name mapping
+- Enhanced `src/workers/transcription_worker.py` - Dual-engine support with DLL path management
+- Enhanced `src/utils/ass_generator.py` - "Match Preview" style generation from custom colors
+- Enhanced `src/gui/dialogs/export_dialog.py` - Added "Match Preview" to lyrics style dropdown
+
+### Fixed
+- Fixed model loading for local `.pt` files by resolving full paths
+- Fixed GPU initialization errors with robust try/catch fallback logic
+- Fixed cuDNN DLL discovery in deeply nested installer directories
+
+---
+
 ## [0.8.0] - 2026-01-03
 
 ### Added

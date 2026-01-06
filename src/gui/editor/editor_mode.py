@@ -23,6 +23,7 @@ from gui.components.audio_player import AudioPlayer
 from gui.components.karaoke_preview import KaraokePreviewWidget
 from gui.components.timeline_widget import TimelineWidget
 from utils.config import Config
+from utils.subtitle_parser import export_subtitle, detect_subtitle_format, get_import_filter
 
 
 import logging
@@ -101,6 +102,12 @@ class EditorMode(QWidget):
         btn_timing.setToolTip("Fix timing drift & validate sample rates")
         btn_timing.clicked.connect(self._open_timing_calibration)
         toolbar.addWidget(btn_timing)
+
+        # Export Subtitles Button
+        btn_export_subs = QPushButton("📝 Export Subs")
+        btn_export_subs.setToolTip("Export lyrics to SRT, ASS, VTT, etc.")
+        btn_export_subs.clicked.connect(self._export_subtitles)
+        toolbar.addWidget(btn_export_subs)
         
         btn_export = QPushButton("🎬 Export Video")
         btn_export.clicked.connect(self._export_video)
@@ -1371,13 +1378,51 @@ class EditorMode(QWidget):
                 "large-v3": "Best quality v3 (very slow)"
             }
             
-            model_choices = []
-            for model in sorted(available_models):
-                desc = model_descriptions.get(model, "")
-                if desc:
-                    model_choices.append(f"{model} - {desc}")
+            # Merge with detected models
+            detected = self.config.get_available_models('whisper')
+            
+            # Map detected files to simple names if possible
+            detected_map = {}
+            from pathlib import Path
+            
+            for d in detected:
+                # If d is "small.pt" -> "small"
+                if d.endswith('.pt'):
+                    simple = Path(d).stem
+                    detected_map[simple] = d
+                elif "faster-whisper" in str(d):
+                     # Folder path like "models/whisper/models--Systran--faster-whisper-large-v3"
+                     # Map to nice name: "large-v3 (Faster)"
+                     # Extract model size from path if possible
+                     path_obj = Path(d)
+                     name = path_obj.name
+                     # Try to simplify name: "models--Systran--faster-whisper-large-v3" -> "large-v3-faster"
+                     simple = name.replace("models--Systran--faster-whisper-", "").replace("faster-whisper-", "") + " (Local Faster)"
+                     detected_map[simple] = d
                 else:
-                    model_choices.append(model)
+                    detected_map[d] = d
+            
+            # Build list - ONLY SHOW LOCAL MODELS
+            model_choices = []
+            
+            # First, add standard models that are actually installed
+            processed_simples = set()
+            
+            for model_id in sorted(model_descriptions.keys()):
+                # Only show if we have it locally
+                if model_id in detected_map:
+                    desc = model_descriptions[model_id]
+                    desc += " [Installed]"
+                    processed_simples.add(model_id)
+                    model_choices.append(f"{model_id} - {desc}")
+                
+            # Then add any "custom" detected models that aren't standard
+            for simple, full_path in detected_map.items():
+                if simple not in processed_simples:
+                    # If it's a path, just show simple name
+                    model_choices.append(f"{simple} - Local Custom Model")
+            
+            model_choices.sort()
             
             model_choice, ok = QInputDialog.getItem(
                 self, "Select Whisper Model",
@@ -1389,7 +1434,19 @@ class EditorMode(QWidget):
                 return
             
             # Extract model name
-            model_name = model_choice.split(' - ')[0].strip()
+            model_name_display = model_choice.split(' - ')[0].strip()
+            
+            # Resolve to full path/ID for worker
+            # If the user selected a "standard" name like "large-v3", and we have a custom path for it NOT mapped in detected_map?
+            # Actually, standard names are keys in detected_map if they match .pt files.
+            # But what if "large-v3" maps to the Folder Path we found?
+            # It won't match "large-v3" exactly because our custom logic added " (Local Faster)".
+            
+            # If the user selected "large-v3 (Local Faster)", we need to map that back to the full path string.
+            if model_name_display in detected_map:
+                model_name = detected_map[model_name_display]
+            else:
+                model_name = model_name_display
             
         selected_lang_code = None
         selected_lang_name = lang # Keep full name for display
@@ -1559,6 +1616,54 @@ class EditorMode(QWidget):
                 "Play the track to verify timing is correct."
             )
     
+    def _export_subtitles(self):
+        """Export lyrics to subtitle file"""
+        from utils.subtitle_parser import SUPPORTED_FORMATS
+        
+        # Build filter string manually or add get_export_filter to parser
+        # For now, we reuse the import filter as it covers supported formats
+        # Or build a specific one for export
+        
+        filters = []
+        for fmt, info in SUPPORTED_FORMATS.items():
+            if info['export']:
+                exts = ' '.join(f'*{ext}' for ext in info['extensions'])
+                filters.append(f"{info['name']} ({exts})")
+        
+        filter_str = ';;'.join(filters)
+        
+        default_name = f"{self.project.project_name}.srt"
+        
+        file_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export Subtitles",
+            default_name,
+            filter_str
+        )
+        
+        if not file_path:
+            return
+            
+        try:
+            from utils.subtitle_parser import export_subtitle
+            
+            output_path = Path(file_path)
+            export_subtitle(self.lyrics_data, output_path)
+            
+            QMessageBox.information(
+                self, 
+                "Export Successful", 
+                f"Lyrics exported to:\n{output_path.name}"
+            )
+            
+        except Exception as e:
+            logger.error(f"Subtitle export failed: {e}")
+            QMessageBox.critical(
+                self,
+                "Export Failed",
+                f"Failed to export subtitles:\n{str(e)}"
+            )
+
     def _export_video(self):
         """Export project to video with karaoke subtitles"""
         from utils.ass_generator import ASSGenerator
@@ -1596,7 +1701,15 @@ class EditorMode(QWidget):
                 return
 
         # 3. Generate Subtitles
-        ass_gen = ASSGenerator(self.lyrics_data, style=style, animation=animation)
+        custom_style = {}
+        if style == "Match Preview":
+            custom_style = {
+                'active_color': self.preview_widget.active_color,
+                'inactive_color': self.preview_widget.inactive_color,
+                'outline_color': self.preview_widget.outline_color
+            }
+            
+        ass_gen = ASSGenerator(self.lyrics_data, style=style, animation=animation, custom_style=custom_style)
         ass_content = ass_gen.generate()
         
         temp_ass = self.project.get_temp_dir() / "subs.ass"
@@ -1608,14 +1721,16 @@ class EditorMode(QWidget):
         voc_path = self.project.vocals_file
         has_stems = inst_path and inst_path.exists() and voc_path and voc_path.exists()
         
-        ass_path_unix = str(temp_ass).replace("\\", "/").replace(":", "\\:")
+        ass_path_unix = str(temp_ass).replace("\\", "/").replace(":", "\\:").replace("'", r"\'")
         
         cmd = ["ffmpeg", "-y"]
         
         # Handle different background types
+        audio_source_opt = options.get('audio_source', 'mixed')
+        
         if is_video:
             # Original video background
-            if has_stems:
+            if has_stems and audio_source_opt == 'mixed':
                 cmd.extend(["-i", str(video_input)])
                 cmd.extend(["-i", str(inst_path)])
                 cmd.extend(["-i", str(voc_path)])
@@ -1625,7 +1740,17 @@ class EditorMode(QWidget):
                 cmd.extend(["-filter_complex", filter_complex])
                 cmd.extend(["-map", "[v]", "-map", "[a]"])
                 cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+            
+            elif has_stems and audio_source_opt == 'instrumental':
+                 cmd.extend(["-i", str(video_input)])
+                 cmd.extend(["-i", str(inst_path)])
+                 filter_complex = f"[0:v]ass='{ass_path_unix}'[v]"
+                 cmd.extend(["-filter_complex", filter_complex])
+                 cmd.extend(["-map", "[v]", "-map", "1:a"])
+                 cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+                 
             else:
+                # Original Audio or fallback
                 cmd.extend(["-i", str(video_input)])
                 cmd.extend(["-vf", f"ass='{ass_path_unix}'"])
                 cmd.extend(["-c:a", "copy"]) # Use copy for max fidelity if no mixing

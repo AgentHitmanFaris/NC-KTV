@@ -59,6 +59,43 @@ class Config:
                 return default
         
         return value
+        
+    def get_available_models(self, model_type: str = 'whisper'):
+        """Scan for available models in configured directories"""
+        import os
+        models = []
+        
+        # Determine scan path
+        if model_type == 'whisper':
+           base_path = Path("models/whisper")
+           exts = ['.pt', '.bin']
+           
+           if base_path.exists():
+                # 1. Standard .pt files
+                for f in base_path.glob('*.pt'):
+                    models.append(f.name)
+                
+                # 2. Faster Whisper directories (recursive search for model.bin)
+                # This finds folders like "models--Systran--faster-whisper-large-v3"
+                for p in base_path.rglob('model.bin'):
+                    # We store the relative path string
+                    try:
+                        rel_path = p.parent.relative_to(base_path)
+                        # We prepend a prefix or just format it so we know it's a path
+                        # Actually, storing the full relative path string is safer
+                        models.append(str(p.parent))
+                    except ValueError:
+                        models.append(str(p.parent))
+
+        elif model_type == 'uvr':
+           base_path = Path("models")
+           exts = ['.pth', '.onnx']
+           if base_path.exists():
+                for f in base_path.glob('*'):
+                    if f.suffix in exts:
+                        models.append(f.name)
+        
+        return sorted(list(set(models)))
     
     def set(self, key: str, value: Any):
         """Set configuration value

@@ -9,7 +9,7 @@ export:
   video_codec: libx264
   video_quality: high
 gui:
-  autosave: true
+  autosave: false
   autosave_interval: 300
   show_tooltips: true
   start_mode: wizard
@@ -26,7 +26,7 @@ karaoke:
 lyrics:
   confidence_threshold: 0.5
   language: auto
-  whisper_model: medium
+  whisper_model: large-v3
   word_level_timing: true
 processing:
   audio_format: wav
