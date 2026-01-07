@@ -118,7 +118,7 @@ class Config:
         """Get default configuration"""
         return {
             'uvr': {
-                'models_path': 'models/',
+                'models_path': 'models/uvr',
                 'default_model': 'MDX_Net',
                 'use_gpu': True,
                 'gpu_device': 0,
@@ -138,7 +138,7 @@ class Config:
                 'confidence_threshold': 0.5
             },
             'karaoke': {
-                'default_style': 'classic',
+                'default_style': 'Bouncing Ball',
                 'font_family': 'Arial',
                 'font_size': 48,
                 'primary_color': '#FFFFFF',
@@ -154,11 +154,14 @@ class Config:
                 'output_format': 'mp4'
             },
             'gui': {
-                'theme': 'dark',
-                'start_mode': 'wizard',
+                'theme': 'builtin-dark',
+                'start_mode': 'editor',
                 'show_tooltips': True,
                 'autosave': True,
                 'autosave_interval': 300
+            },
+            'plugins': {
+                'enabled': []  # List of enabled plugin IDs
             },
             'advanced': {
                 'enable_batch_processing': False,

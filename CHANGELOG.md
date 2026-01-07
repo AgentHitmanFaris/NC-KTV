@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.10.1] - 2026-01-07
+
+### Added
+- **OpenAI Model Support**: Explicitly lists `.pt` files as "(OpenAI)" in model selector
+- **Polished Model List**: Cleaner names for local and cached models (e.g. "medium [Installed]")
+
+### Fixed
+- **Startup Crash**: Fixed `TypeError` in project initialization when starting in Editor mode
+- **Runtime Crash**: Fixed Access Violation (0xC0000005) by removing conflicting CuDNN DLL loading
+- **Model Redownload**: Fixed bug where internal path construction caused local models to be ignored
+- **Startup Logic**: Fixed "Project creation cancelled" message appearing erroneously
+
+### Changed
+- **Default DLL Loading**: Reverted to standard embedded Python library loading for maximum stability
+
+## [0.10.0] - 2026-01-07
+
+### Added
+
+#### Phase 7: Community Themes & Plugins 🎨
+- **Plugin Architecture**: Extensible plugin system for custom effects and export templates
+- **Plugin Manager**: GUI for installing, enabling, and configuring plugins
+- **Plugin API**: Safe API for plugins to access NC-KTV features
+- **Theme System**: YAML-based theme files for UI and karaoke styling
+- **Theme Manager**: Visual theme browser with live preview and import/export
+- **Built-in Themes**: Dark and Light themes with customizable color palettes
+- **Example Plugin**: "Hello World" effect plugin with full documentation
+- **Plugin Types**: Support for Effect, Export Template, and UI Extension plugins
+- **Package Format**: `.nckplugin` and `.ncktheme` packages for easy distribution
+
+#### Developer Tools
+- **Plugin Development Guide**: Comprehensive documentation with examples
+- **Theme Creation Guide**: Complete guide to creating custom themes
+- **Plugin Manifest Format**: JSON-based plugin metadata with permissions system
+- **Hot Reloading**: Reload plugins without restarting application
+
+### Changed
+- **Configuration System**: Added `plugins.enabled` array to track enabled plugins
+- **Main Window**: Added "Themes" and "Plugins" menu items in Settings menu
+- **Default Theme**: Changed from 'dark' to 'builtin-dark' for new theme system
+
+### Technical
+- Created `src/core/plugin_base.py` (350 lines) - Plugin base classes and interfaces
+- Created `src/core/plugin_manager.py` (450 lines) - Plugin discovery and lifecycle
+- Created `src/utils/theme_manager.py` (400 lines) - Theme loading and application
+- Created `src/gui/dialogs/theme_manager_dialog.py` (300 lines) - Theme management UI
+- Created `src/gui/dialogs/plugin_manager_dialog.py` (350 lines) - Plugin management UI
+- Created `plugins/examples/hello_effect/` - Example effect plugin
+- Created `PLUGIN_DEVELOPMENT.md` - Plugin developer documentation
+- Created `THEME_CREATION.md` - Theme creation guide
+- Enhanced `src/utils/config.py` - Added plugins configuration section
+- Enhanced `src/gui/main_window.py` - Integrated plugin and theme managers
+
+---
+
 ## [0.9.0] - 2026-01-06
 
 ### Added

@@ -38,57 +38,7 @@ class TranscriptionWorker(QThread):
             self.models_dir.mkdir(parents=True, exist_ok=True)
             
             # --- DLL LOADING FIX ---
-            # Try to find user-provided cuDNN folders (e.g. cudn12/bin) and add to PATH
-            # This helps if the user downloaded DLLs but didn't put them in System32
-            import os
-            
-            # Search in project root and models dir
-            search_roots = [Path("."), self.models_dir]
-            
-            # Also check specific model folders if we are using partial loading
-            if str(self.models_dir) in str(self.model_name):
-                 search_roots.append(Path(self.model_name))
-            
-            for root in search_roots:
-                if not root.exists(): continue
-            for root in search_roots:
-                if not root.exists(): continue
-                
-                # Recursively find any 'bin' folder or folder containing 'cudnn64*.dll'
-                # Use rglob but limit depth potentially? No, rglob is fine.
-                # Method 1: Look for cudnn64*.dll and add its folder
-                for dll in root.rglob("cudnn64*.dll"):
-                    dll_dir = dll.parent
-                    p_str = str(dll_dir.absolute())
-                    if p_str not in os.environ['PATH']:
-                        print(f"Adding DLL path: {p_str}")
-                        os.environ['PATH'] = p_str + os.pathsep + os.environ['PATH']
-                        try:
-                            # os.add_dll_directory works on Python 3.8+ Windows
-                            os.add_dll_directory(p_str)
-                        except:
-                            pass
-                
-                # Keep original check just in case
-                for p in root.glob("cudn*/bin"):
-                     if p.is_dir():
-                        p_str = str(p.absolute())
-                        if p_str not in os.environ['PATH']:
-                            os.environ['PATH'] = p_str + os.pathsep + os.environ['PATH']
-                            try: os.add_dll_directory(p_str)
-                            except: pass
-                                
-            # Add torch lib for zlibwapi.dll if present
-            torch_lib = Path("python_embed/Lib/site-packages/torch/lib")
-            if torch_lib.exists():
-                p_str = str(torch_lib.absolute())
-                if p_str not in os.environ['PATH']:
-                    os.environ['PATH'] = p_str + os.pathsep + os.environ['PATH']
-                    try:
-                        os.add_dll_directory(p_str)
-                    except:
-                        pass
-            # -----------------------
+            # Reverted to standard embedded python loading to prevent conflicts
             
             # Load model (Faster Whisper)
             # WhisperModel(model_size_or_path, device="cuda" or "cpu", compute_type="float16" or "int8")
@@ -96,10 +46,62 @@ class TranscriptionWorker(QThread):
             import torch
             
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            compute_type = "float16" if device == "cuda" else "int8"
+            
+            # Intelligent GPU detection for optimal precision
+            compute_type = "int8"  # Default for CPU
+            gpu_info = ""
             
             if device == "cuda":
-                self.progress_updated.emit("Using GPU (CUDA) for accelerated transcription...")
+                try:
+                    gpu_name = torch.cuda.get_device_name(0)
+                    gpu_info = f" ({gpu_name})"
+                    
+                    # Detect GPU architecture and choose optimal precision
+                    gpu_lower = gpu_name.lower()
+                    
+                    # Pascal Architecture (GTX 10-series): Use INT8
+                    # - GTX 1060, 1070, 1080, Titan X/Xp
+                    # - Limited FP16 support (emulated, not native)
+                    if any(x in gpu_lower for x in ["gtx 10", "titan x", "tesla p"]):
+                        compute_type = "int8"
+                        self.progress_updated.emit(
+                            f"Using GPU{gpu_info} with INT8 precision\n"
+                            f"(Optimized for Pascal architecture - faster than FP16 on this GPU)"
+                        )
+                    
+                    # Turing/Ampere/Ada Architecture (RTX series): Use FP16
+                    # - RTX 20/30/40 series, A-series GPUs
+                    # - Native FP16 tensor cores
+                    elif any(x in gpu_lower for x in ["rtx", "tesla t4", "tesla a", "a100", "a6000", "l4", "l40"]):
+                        compute_type = "float16"
+                        self.progress_updated.emit(
+                            f"Using GPU{gpu_info} with FP16 precision\n"
+                            f"(Utilizing native tensor cores for maximum speed)"
+                        )
+                    
+                    # Maxwell and older (GTX 9-series and below): Use INT8
+                    elif any(x in gpu_lower for x in ["gtx 9", "gtx 8", "gtx 7"]):
+                        compute_type = "int8"
+                        self.progress_updated.emit(
+                            f"Using GPU{gpu_info} with INT8 precision\n"
+                            f"(Optimized for Maxwell/Kepler architecture)"
+                        )
+                    
+                    # Unknown/Future GPUs: Try FP16 with fallback
+                    else:
+                        compute_type = "float16"
+                        self.progress_updated.emit(
+                            f"Using GPU{gpu_info} with FP16 precision\n"
+                            f"(Will fallback to INT8 if compatibility issues occur)"
+                        )
+                        
+                except Exception as e:
+                    # If we can't detect GPU, use safer INT8
+                    compute_type = "int8"
+                    self.progress_updated.emit(
+                        f"Using GPU (CUDA) with INT8 precision\n"
+                        f"(GPU detection failed: {e})"
+                    )
             else:
                 self.progress_updated.emit("Using CPU for transcription (slower)...")
             
@@ -147,7 +149,17 @@ class TranscriptionWorker(QThread):
                 
                 def _run_faster_whisper(dev, compute):
                     # Helper to run transcription
-                    model = WhisperModel(self.model_name, device=dev, compute_type=compute, download_root=download_root)
+                    
+                    # Check for local model folder first
+                    local_model_path = self.models_dir / self.model_name
+                    if local_model_path.exists():
+                        # Use exact local path
+                        load_path = str(local_model_path)
+                    else:
+                        # Use name (allows auto-download)
+                        load_path = self.model_name
+
+                    model = WhisperModel(load_path, device=dev, compute_type=compute, download_root=download_root)
                     
                     if self._is_cancelled: return None
                     
@@ -174,23 +186,36 @@ class TranscriptionWorker(QThread):
                         collected.append(s)
                     return collected
 
-                # Try GPU first if available
+                # Execute transcription with optimal compute type
                 segments_raw = None
                 
                 if device == "cuda":
                     try:
-                        segments_raw = _run_faster_whisper("cuda", compute_type) # Try float16
+                        segments_raw = _run_faster_whisper("cuda", compute_type)
                     except Exception as e:
-                        print(f"GPU (float16) failed: {e}")
+                        print(f"GPU ({compute_type}) failed: {e}")
                         
-                        # Try GPU with int8/float32 fallback
-                        try:
-                            self.progress_updated.emit("GPU (float16) failed, retrying GPU with int8...")
-                            segments_raw = _run_faster_whisper("cuda", "int8")
-                        except Exception as e2:
-                            print(f"GPU (int8) failed: {e2}")
-                            self.progress_updated.emit("GPU Error, switching to CPU...")
-                            # Fallback to CPU
+                        # Fallback strategy based on what failed
+                        if compute_type == "float16":
+                            # FP16 failed (unknown GPU), try INT8 on GPU
+                            try:
+                                self.progress_updated.emit("GPU (FP16) failed, retrying with INT8...")
+                                segments_raw = _run_faster_whisper("cuda", "int8")
+                            except Exception as e2:
+                                print(f"GPU (int8) failed: {e2}")
+                                self.progress_updated.emit("GPU failed completely, switching to CPU...")
+                                segments_raw = _run_faster_whisper("cpu", "int8")
+                        else:
+                            # INT8 failed on GPU (rare), go straight to CPU
+                            msg = f"GPU failed: {str(e)}"
+                            print(msg)
+                            try:
+                                with open("gpu_debug.log", "a") as f:
+                                    f.write(f"\n[GPU ERROR] {msg}\n")
+                            except: pass
+                            
+                            # Use a friendly message for the UI
+                            self.progress_updated.emit("Switching to standard CPU mode...")
                             segments_raw = _run_faster_whisper("cpu", "int8")
                 else:
                     # CPU only

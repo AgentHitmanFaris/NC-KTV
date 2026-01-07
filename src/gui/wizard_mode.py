@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QMessageBox,
     QComboBox, QCheckBox, QGroupBox, QProgressDialog
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QDragEnterEvent, QDropEvent
 from pathlib import Path
 from typing import Optional
@@ -20,457 +20,223 @@ from utils.config import Config
 
 
 class WizardMode(QWidget):
-    """Wizard-style interface for karaoke video creation"""
+    """Wizard-style interface for karaoke video creation
+    
+    Streamlined Flow:
+    1. New Project Dialog (File, Mode, Transcription)
+    2. Auto-Processing (UVR -> Transcription)
+    3. Auto-Switch to Editor
+    """
     
     # Signals
     project_created = pyqtSignal(Project)
     
     def __init__(self, config: Config):
-        """Initialize wizard mode
-        
-        Args:
-            config: Application configuration
-        """
         super().__init__()
-        
         self.config = config
         self.project: Optional[Project] = None
         self.processing_worker: Optional[ProcessingWorker] = None
+        self.transcription_worker = None # Dynamic import
         
         self._init_ui()
+        
+        # Launch dialog immediately after UI is ready
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._launch_new_project_dialog)
     
     def _init_ui(self):
         """Initialize UI"""
         layout = QVBoxLayout(self)
         
-        # Stacked widget for wizard pages
-        self.pages = QStackedWidget()
-        layout.addWidget(self.pages)
+        # Dashboard showing progress
+        self.status_label = QLabel("Waiting for project...")
+        self.status_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ccc;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status_label)
         
-        # Create wizard pages
-        self.page1_file_selection = self._create_page1()
-        self.page2_vocal_removal = self._create_page2()
+        # Progress area
+        self.progress_group = QGroupBox("Processing Status")
+        self.progress_group.hide()
+        progress_layout = QVBoxLayout()
         
-        self.pages.addWidget(self.page1_file_selection)
-        self.pages.addWidget(self.page2_vocal_removal)
+        # 1. Base Processing (UVR)
+        self.lbl_uvr = QLabel("Step 1: Vocal Separation")
+        self.prog_uvr = QProgressDialog("Separating Vocals...", "Cancel", 0, 100, self)
+        # We don't use the dialog window, just the bar widgets conceptually, 
+        # but actually let's use simple QProgressBar for embedded look
+        from PyQt6.QtWidgets import QProgressBar
         
-        # Navigation buttons
-        nav_layout = QHBoxLayout()
+        self.bar_uvr = QProgressBar()
+        progress_layout.addWidget(self.lbl_uvr)
+        progress_layout.addWidget(self.bar_uvr)
         
-        self.btn_back = QPushButton("← Back")
-        self.btn_back.clicked.connect(self._go_back)
-        self.btn_back.setEnabled(False)
+        # 2. Transcription
+        self.lbl_trans = QLabel("Step 2: AI Transcription (Waiting...)")
+        self.bar_trans = QProgressBar()
+        self.bar_trans.setValue(0)
+        self.lbl_trans.setEnabled(False)
+        self.bar_trans.setEnabled(False)
+        progress_layout.addWidget(self.lbl_trans)
+        progress_layout.addWidget(self.bar_trans)
         
-        self.btn_next = QPushButton("Next →")
-        self.btn_next.clicked.connect(self._go_next)
-        self.btn_next.setEnabled(False)
-        
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_cancel.clicked.connect(self._cancel)
-        
-        nav_layout.addWidget(self.btn_back)
-        nav_layout.addStretch()
-        nav_layout.addWidget(self.btn_cancel)
-        nav_layout.addWidget(self.btn_next)
-        
-        layout.addLayout(nav_layout)
-    
-    def _create_page1(self) -> QWidget:
-        """Create Step 1: File Selection"""
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        
-        # Title
-        title = QLabel("Step 1: Select Your Music or Video")
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        layout.addWidget(title)
-        
-        # Description
-        desc = QLabel(
-            "Choose an audio file (MP3, WAV, FLAC) or video file (MP4, AVI, MKV).\n"
-            "The audio will be extracted and vocals will be removed."
-        )
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-        
-        layout.addSpacing(20)
-        
-        # File selection area
-        file_group = QGroupBox("Source File")
-        file_layout = QVBoxLayout()
-        
-        # File path display
-        self.lbl_file_path = QLabel("No file selected")
-        self.lbl_file_path.setStyleSheet(
-            "background-color: #f0f0f0; padding: 10px; border-radius: 4px;"
-        )
-        self.lbl_file_path.setWordWrap(True)
-        file_layout.addWidget(self.lbl_file_path)
-        
-        # Browse button
-        btn_browse = QPushButton("📁 Browse Files...")
-        btn_browse.clicked.connect(self._browse_file)
-        btn_browse.setMinimumHeight(40)
-        file_layout.addWidget(btn_browse)
-        
-        # Drag and drop hint
-        hint = QLabel("💡 Or drag and drop a file here")
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet("color: #666; font-style: italic;")
-        file_layout.addWidget(hint)
-        
-        file_group.setLayout(file_layout)
-        layout.addWidget(file_group)
-        
-        # Enable drag and drop
-        page.setAcceptDrops(True)
-        page.dragEnterEvent = self._drag_enter_event
-        page.dropEvent = self._drop_event
+        self.progress_group.setLayout(progress_layout)
+        layout.addWidget(self.progress_group)
         
         layout.addStretch()
         
-        return page
-    
-    def _create_page2(self) -> QWidget:
-        """Create Step 2: Vocal Removal Settings"""
-        page = QWidget()
-        layout = QVBoxLayout(page)
+        # Cancel button
+        self.btn_cancel = QPushButton("Cancel Processing")
+        self.btn_cancel.clicked.connect(self._cancel_processing)
+        self.btn_cancel.hide()
+        layout.addWidget(self.btn_cancel)
         
-        # Title
-        title = QLabel("Step 2: Vocal Removal Settings")
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        layout.addWidget(title)
+    def _launch_new_project_dialog(self):
+        """Open the new project settings dialog"""
+        from gui.dialogs.new_project_dialog import NewProjectDialog
         
-        desc = QLabel("Configure how vocals should be removed from the audio.")
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
+        dialog = NewProjectDialog(self.config, self)
+        if dialog.exec():
+            data = dialog.get_data()
+            self._start_workflow(data)
+        else:
+            # User cancelled dialog. Switch to Editor Mode with blank project.
+            from core.project import Project
+            self.project_created.emit(Project())
+            
+    def _start_workflow(self, data: dict):
+        """Start the automated workflow"""
+        file_path = data['file_path']
+        uvr_model = data['uvr_model']
+        do_transcribe = data['transcribe']
+        whisper_model = data['whisper_model']
         
-        layout.addSpacing(20)
-        
-        # Model selection
-        model_group = QGroupBox("UVR Model")
-        model_layout = QVBoxLayout()
-        
-        model_layout.addWidget(QLabel("Select vocal removal model:"))
-        
-        self.combo_model = QComboBox()
-        
-        # Define recommended models with descriptions
-        self.model_map = {
-            "UVR_MDXNET_KARA_2.onnx (Best for Karaoke)": "UVR_MDXNET_KARA_2.onnx",
-            "5_HP-Karaoke-UVR.pth (High Performance Karaoke)": "5_HP-Karaoke-UVR.pth",
-            "6_HP-Karaoke-UVR.pth (Aggressive Karaoke)": "6_HP-Karaoke-UVR.pth",
-            "UVR-MDX-NET-Inst_HQ_3.onnx (High Quality Instrumental)": "UVR-MDX-NET-Inst_HQ_3.onnx"
-        }
-        
-        # Add available models
+        # 1. Initialize Project
         try:
-            available_models = self.config.get('uvr.available_models', []) or \
-                             ProcessingWorker(self.config, None).vocal_remover.list_available_models()
-        except:
-            available_models = []
-
-        # Add recommended ones first if they exist
-        for display_name, filename in self.model_map.items():
-            self.combo_model.addItem(display_name, filename)
-            if filename in available_models:
-                available_models.remove(filename)
-        
-        # Add remaining models
-        for model in available_models:
-            self.combo_model.addItem(model, model)
+            self.project = Project(source_file=file_path)
+            # Apply settings
+            self.project.settings.uvr_model = uvr_model
+            # Store transcription choice for later
+            self.project.settings.auto_transcribe = do_transcribe
+            self.project.settings.whisper_model = whisper_model
             
-        model_layout.addWidget(self.combo_model)
-        
-        # Performance warning label
-        self.lbl_warning = QLabel("")
-        self.lbl_warning.setWordWrap(True)
-        self.lbl_warning.setStyleSheet("color: #ff9800; font-style: italic;")
-        self.lbl_warning.hide()
-        model_layout.addWidget(self.lbl_warning)
-        
-        # Connect signals for warnings
-        self.combo_model.currentIndexChanged.connect(self._check_performance_warning)
-        
-        model_group.setLayout(model_layout)
-        layout.addWidget(model_group)
-        
-        # GPU settings
-        gpu_group = QGroupBox("Hardware Acceleration")
-        gpu_layout = QVBoxLayout()
-        
-        self.chk_use_gpu = QCheckBox("Use GPU (NVIDIA CUDA)")
-        self.chk_use_gpu.setChecked(self.config.get('uvr.use_gpu', True))
-        self.chk_use_gpu.stateChanged.connect(self._check_performance_warning)
-        gpu_layout.addWidget(self.chk_use_gpu)
-        
-        self.lbl_gpu_info = QLabel()
-        self._update_gpu_info()
-        gpu_layout.addWidget(self.lbl_gpu_info)
-        
-        gpu_group.setLayout(gpu_layout)
-        layout.addWidget(gpu_group)
-        
-        # Initial check
-        self._check_performance_warning()
-        
-        layout.addSpacing(20)
-        
-        # Process button
-        self.btn_process = QPushButton("🎵 Start Processing")
-
-        self.btn_process.clicked.connect(self._start_processing)
-        self.btn_process.setMinimumHeight(50)
-        self.btn_process.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                font-size: 14pt;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        layout.addWidget(self.btn_process)
-        
-        layout.addStretch()
-        
-        return page
-    
-    def _browse_file(self):
-        """Open file browser"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Audio or Video File",
-            "",
-            "Media Files (*.mp3 *.wav *.flac *.m4a *.mp4 *.avi *.mkv *.mov);;All Files (*.*)"
-        )
-        
-        if file_path:
-            self._load_file(Path(file_path))
-    
-    def _load_file(self, file_path: Path):
-        """Load selected file
-        
-        Args:
-            file_path: Path to file
-        """
-        # Validate file
-        processor = AudioProcessor()
-        is_valid, message = processor.validate_audio_file(file_path)
-        
-        if not is_valid:
-            QMessageBox.warning(self, "Invalid File", message)
-            return
-        
-        # Create project
-        self.project = Project(source_file=file_path)
-        
-        # Update UI
-        self.lbl_file_path.setText(str(file_path))
-        self.btn_next.setEnabled(True)
-        
-        QMessageBox.information(
-            self,
-            "File Loaded",
-            f"Successfully loaded:\n{file_path.name}\n\n{message}"
-        )
-    
-    def _drag_enter_event(self, event: QDragEnterEvent):
-        """Handle drag enter"""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-    
-    def _drop_event(self, event: QDropEvent):
-        """Handle file drop"""
-        urls = event.mimeData().urls()
-        if urls:
-            file_path = Path(urls[0].toLocalFile())
-            self._load_file(file_path)
-    
-    def _check_performance_warning(self):
-        """Check configurations and warn user about potential performance issues"""
-        model_text = self.combo_model.currentText()
-        use_gpu = self.chk_use_gpu.isChecked() and self.chk_use_gpu.isEnabled()
-        
-        # Heavy models list
-        heavy_models = ["UVR_MDXNET_KARA_2", "HP-Karaoke", "HQ"]
-        is_heavy = any(m in model_text for m in heavy_models)
-        
-        if is_heavy and not use_gpu:
-            self.lbl_warning.setText(
-                "⚠️ Warning: High-quality models are very slow on CPU (3-10 minutes/song). "
-                "Enable GPU if possible or be patient."
-            )
-            self.lbl_warning.show()
-        else:
-            self.lbl_warning.hide()
-
-    def _update_gpu_info(self):
-        """Update GPU information label"""
-        from utils.gpu_detector import GPUDetector
-        
-        gpu_info = GPUDetector.get_gpu_info()
-        
-        if gpu_info:
-            text = f"✅ {gpu_info['name']} ({gpu_info['total_memory_gb']:.1f} GB)"
-            self.lbl_gpu_info.setStyleSheet("color: green;")
-        else:
-            text = "⚠️ No GPU detected - will use CPU (slower)"
-            self.lbl_gpu_info.setStyleSheet("color: orange;")
-            self.chk_use_gpu.setEnabled(False)
-        
-        self.lbl_gpu_info.setText(text)
-    
-    def _start_processing(self):
-        """Start vocal removal processing"""
-        if not self.project:
-            return
-        
-        # Update project settings
-        model_filename = self.combo_model.currentData()
-        if not model_filename:
-             model_filename = self.combo_model.currentText().split()[0]
+            # 2. Update UI
+            self.status_label.setText(f"Processing: {file_path.name}")
+            self.progress_group.show()
+            self.btn_cancel.show()
+            self.bar_uvr.setValue(0)
+            self.bar_trans.setValue(0)
+            
+            # 3. Start UVR
+            self._run_uvr()
+            
+        except Exception as e:
+             QMessageBox.critical(self, "Error", f"Failed to initialize project: {e}")
              
-        self.project.settings.uvr_model = model_filename
-        self.project.settings.use_gpu = self.chk_use_gpu.isChecked()
+    def _run_uvr(self):
+        """step 1: Vocal Removal"""
+        self.lbl_uvr.setText("Step 1: Validating and Separating Vocals...")
+        self.lbl_uvr.setStyleSheet("font-weight: bold; color: #2196F3;")
         
-        # Create progress dialog
-        progress_dialog = QProgressDialog(
-            "Initializing...",
-            "Cancel",
-            0,
-            0, # Set to 0, 0 for infinite/indeterminate "loading line" style
-            self
-        )
-        progress_dialog.setWindowTitle("Vocal Removal")
-        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        progress_dialog.setAutoClose(False)
-        progress_dialog.setAutoReset(False)
-        
-        # Create and start worker
         self.processing_worker = ProcessingWorker(self.config, self.project)
-        
-        # Connect signals
-        # For indeterminate bar, we only update the label, not the value (setValue is ignored or resets it)
-        self.processing_worker.progress_updated.connect(
-            lambda p, m: progress_dialog.setLabelText(m)
-        )
-        
-        self.processing_worker.processing_complete.connect(
-            lambda result: self._on_processing_complete(progress_dialog, result)
-        )
-        
-        self.processing_worker.error_occurred.connect(
-            lambda err: self._on_processing_error(progress_dialog, err)
-        )
-        
-        progress_dialog.canceled.connect(self.processing_worker.cancel)
-        
-        # Disable process button
-        self.btn_process.setEnabled(False)
-        
-        # Start processing
+        self.processing_worker.progress_updated.connect(lambda val, msg: self._update_uvr_progress(val, msg))
+        self.processing_worker.processing_complete.connect(self._on_uvr_complete)
+        self.processing_worker.error_occurred.connect(self._on_error)
         self.processing_worker.start()
-    
-    def _on_processing_complete(self, dialog: QProgressDialog, result: dict):
-        """Handle processing completion
         
-        Args:
-            dialog: Progress dialog
-            result: Processing result
-        """
-        dialog.close()
+    def _update_uvr_progress(self, val, msg):
+        self.bar_uvr.setValue(int(val))
+        self.lbl_uvr.setText(f"Step 1: {msg}")
         
-        # Ensure paths are Path objects before accessing .name
-        inst_name = Path(result['instrumental_file']).name
-        voc_name = Path(result['vocals_file']).name if result.get('vocals_file') else 'Not saved'
+    def _on_uvr_complete(self, result):
+        self.bar_uvr.setValue(100)
+        self.lbl_uvr.setText("Step 1: Vocal Separation Complete ✅")
+        self.lbl_uvr.setStyleSheet("color: green;")
         
-        QMessageBox.information(
-            self,
-            "Processing Complete",
-            "Vocal removal completed successfully!\n\n"
-            f"Instrumental: {inst_name}\n"
-            f"Vocals: {voc_name}"
-        )
-        
-        self.btn_process.setEnabled(True)
-        self.btn_next.setEnabled(True)
-        
-        # Emit signal
-        self.project_created.emit(self.project)
-    
-    def _on_processing_error(self, dialog: QProgressDialog, error: str):
-        """Handle processing error
-        
-        Args:
-            dialog: Progress dialog
-            error: Error message
-        """
-        dialog.close()
-        
-        QMessageBox.critical(
-            self,
-            "Processing Error",
-            f"An error occurred during processing:\n\n{error}"
-        )
-        
-        self.btn_process.setEnabled(True)
-    
-    def _go_next(self):
-        """Go to next page"""
-        current = self.pages.currentIndex()
-        if current < self.pages.count() - 1:
-            self.pages.setCurrentIndex(current + 1)
-            self._update_navigation()
-    
-    def _go_back(self):
-        """Go to previous page"""
-        current = self.pages.currentIndex()
-        if current > 0:
-            self.pages.setCurrentIndex(current - 1)
-            self._update_navigation()
-    
-    def _update_navigation(self):
-        """Update navigation button states"""
-        current = self.pages.currentIndex()
-        
-        self.btn_back.setEnabled(current > 0)
-        
-        # Next button enabled based on page content
-        if current == 0:
-            self.btn_next.setEnabled(self.project is not None)
-        elif current == 1:
-            self.btn_next.setText("Next →")
-    
-    def _cancel(self):
-        """Cancel wizard"""
-        if self.processing_worker and self.processing_worker.isRunning():
-            reply = QMessageBox.question(
-                self,
-                "Cancel Processing",
-                "Processing is in progress. Are you sure you want to cancel?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
+        # Proceed to next step
+        if self.project.settings.auto_transcribe:
+            self._run_transcription()
+        else:
+            self._finish()
             
-            if reply == QMessageBox.StandardButton.Yes:
-                self.processing_worker.cancel()
-                self.processing_worker.wait()
+    def _run_transcription(self):
+        """Step 2: AI Transcription"""
+        self.lbl_trans.setEnabled(True)
+        self.bar_trans.setEnabled(True)
+        self.lbl_trans.setText("Step 2: Initializing Whisper AI...")
+        self.lbl_trans.setStyleSheet("font-weight: bold; color: #2196F3;")
         
-        # Reset to first page
-        self.pages.setCurrentIndex(0)
-        self.project = None
-        self.lbl_file_path.setText("No file selected")
-        self.btn_next.setEnabled(False)
-        self._update_navigation()
+        from workers.transcription_worker import TranscriptionWorker
+        
+        # We need vocals file
+        vocals_path = self.project.vocals_file
+        if not vocals_path or not vocals_path.exists():
+            # Fallback to source if no vocals (unlikely unless instrumental only mode)
+             vocals_path = self.project.audio_file
+             
+        model = self.project.settings.whisper_model
+        
+        self.transcription_worker = TranscriptionWorker(vocals_path, model_name=model)
+        self.transcription_worker.progress_updated.connect(lambda msg: self.lbl_trans.setText(f"Step 2: {msg}"))
+        # Simulating progress bar for transcription (it's indeterminate mostly, but we can Pulse)
+        self.bar_trans.setRange(0, 0) # Indeterminate
+        
+        self.transcription_worker.transcription_complete.connect(self._on_transcription_complete)
+        self.transcription_worker.error_occurred.connect(self._on_error)
+        self.transcription_worker.start()
+        
+    def _on_transcription_complete(self, result):
+        self.bar_trans.setRange(0, 100)
+        self.bar_trans.setValue(100)
+        self.lbl_trans.setText("Step 2: Transcription Complete ✅")
+        self.lbl_trans.setStyleSheet("color: green;")
+        
+        # Save lyrics to project
+        segments = result.get('segments', [])
+        # Convert segments to LyricsData structure
+        # We need to import LyricsData
+        from core.lyrics import LyricsData, LyricsLine, LyricsToken
+        
+        lyrics_data = LyricsData()
+        
+        for seg in segments:
+            text = seg['text']
+            start = seg['start']
+            end = seg['end']
+            words = []
+            
+            # If word-level data exists
+            if 'words' in seg and seg['words']:
+                for w in seg['words']:
+                    # Whisper words often have leading space, strip carefully
+                    w_text = w['word']
+                    words.append({
+                        'text': w_text,
+                        'start': w['start'],
+                        'end': w['end']
+                    })
+            
+            # Create line using helper method
+            lyrics_data.add_line(text, start, end, tokens=words)
+            
+        self.project.lyrics = lyrics_data
+        
+        # Done
+        self._finish()
+        
+    def _finish(self):
+        """All steps done, open editor"""
+        # Brief pause to let user see green checks?
+        QTimer.singleShot(800, lambda: self.project_created.emit(self.project))
+        
+    def _on_error(self, error_msg):
+        QMessageBox.critical(self, "Processing Error", str(error_msg))
+        self.status_label.setText("Error occurred. Please try again.")
+        self.btn_cancel.hide()
+        
+    def _cancel_processing(self):
+        if self.processing_worker and self.processing_worker.isRunning():
+            self.processing_worker.cancel()
+        if self.transcription_worker and self.transcription_worker.isRunning():
+            self.transcription_worker.cancel()
+            
+        self.status_label.setText("Processing cancelled.")

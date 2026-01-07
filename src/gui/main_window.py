@@ -13,6 +13,8 @@ from PyQt6.QtGui import QAction, QIcon
 from utils.config import Config
 from utils.ffmpeg_utils import check_ffmpeg
 from utils.gpu_detector import GPUDetector
+from utils.theme_manager import ThemeManager
+from core.plugin_manager import PluginManager
 
 
 class MainWindow(QMainWindow):
@@ -26,6 +28,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("NC-KTV - Music Video Karaoke Maker")
         self.setWindowIcon(QIcon("assets/logo.png"))
         self.resize(1200, 800)
+        
+        # Initialize plugin and theme managers
+        self.theme_manager = ThemeManager(config)
+        self.plugin_manager = PluginManager(config)
+        
+        # Load theme and plugins
+        self.theme_manager.initialize_default_theme()
+        self.plugin_manager.load_all_plugins()
         
         # Check prerequisites
         self._check_prerequisites()
@@ -104,6 +114,16 @@ class MainWindow(QMainWindow):
         preferences_action = QAction("&Preferences", self)
         preferences_action.triggered.connect(self._show_preferences)
         settings_menu.addAction(preferences_action)
+        
+        settings_menu.addSeparator()
+        
+        themes_action = QAction("🎨 &Themes", self)
+        themes_action.triggered.connect(self._show_theme_manager)
+        settings_menu.addAction(themes_action)
+        
+        plugins_action = QAction("🔌 &Plugins", self)
+        plugins_action.triggered.connect(self._show_plugin_manager)
+        settings_menu.addAction(plugins_action)
         
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -192,18 +212,19 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(f"Opened Editor: {project.name}", 3000)
             else:
                 # No project argument and no active project
-                reply = QMessageBox.question(
-                    self, "No Active Project",
-                    "No project is currently loaded.\nWould you like to open an existing project file or create a new one?",
-                    QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Cancel
-                )
-                 
-                if reply == QMessageBox.StandardButton.Open:
-                    self._open_project()
-                else:
-                    if self.central_widget.count() == 0:
-                        # Fallback if nothing shown
-                        self._switch_mode('wizard')
+                # Auto-initialize a blank project instead of showing a dialog
+                from core.project import Project
+                project = Project()
+                self.current_project = project
+                
+                # Clear current central widget
+                self._clear_central_widget()
+                
+                # Import and create editor mode
+                editor = EditorMode(self.config, project)
+                self.central_widget.addWidget(editor)
+                self.central_widget.setCurrentWidget(editor)
+                self.statusBar().showMessage(f"Opened Editor: New Project", 3000)
                  
         else:
             self.statusBar().showMessage(f"Unknown mode: {mode}", 3000)
@@ -256,6 +277,18 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             # Apply immediate changes if needed (e.g. theme)
             pass
+    
+    def _show_theme_manager(self):
+        """Show theme manager dialog"""
+        from gui.dialogs.theme_manager_dialog import ThemeManagerDialog
+        dialog = ThemeManagerDialog(self.theme_manager, self)
+        dialog.exec()
+    
+    def _show_plugin_manager(self):
+        """Show plugin manager dialog"""
+        from gui.dialogs.plugin_manager_dialog import PluginManagerDialog
+        dialog = PluginManagerDialog(self.plugin_manager, self)
+        dialog.exec()
     
     def _show_about(self):
         """Show about dialog"""

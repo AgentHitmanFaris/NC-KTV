@@ -1386,43 +1386,58 @@ class EditorMode(QWidget):
             from pathlib import Path
             
             for d in detected:
-                # If d is "small.pt" -> "small"
-                if d.endswith('.pt'):
-                    simple = Path(d).stem
+                path_obj = Path(d)
+                simple = path_obj.name
+                
+                # 1. Standard Folder (e.g. "medium")
+                # This takes precedence for the simple name
+                if simple in model_descriptions:
                     detected_map[simple] = d
+                    continue
+                
+                # 2. OpenAI .pt files - Make explicit to avoid collision
+                if d.endswith('.pt'):
+                    base_name = path_obj.stem
+                    # e.g. "large-v3" -> "large-v3 (OpenAI)"
+                    key = f"{base_name} (OpenAI)"
+                    detected_map[key] = d
+                    
+                # 3. Handle specific faster-whisper cache folders
                 elif "faster-whisper" in str(d):
-                     # Folder path like "models/whisper/models--Systran--faster-whisper-large-v3"
-                     # Map to nice name: "large-v3 (Faster)"
-                     # Extract model size from path if possible
-                     path_obj = Path(d)
                      name = path_obj.name
                      # Try to simplify name: "models--Systran--faster-whisper-large-v3" -> "large-v3-faster"
-                     simple = name.replace("models--Systran--faster-whisper-", "").replace("faster-whisper-", "") + " (Local Faster)"
-                     detected_map[simple] = d
+                     clean_name = name.replace("models--Systran--faster-whisper-", "").replace("faster-whisper-", "")
+                     key = f"{clean_name} (Cached)"
+                     detected_map[key] = d
+                     
                 else:
-                    detected_map[d] = d
+                    # Fallback
+                    detected_map[simple] = d
             
-            # Build list - ONLY SHOW LOCAL MODELS
-            model_choices = []
+            # Build polished list
+            choices_standard = []
+            choices_openai = []
+            choices_other = []
             
-            # First, add standard models that are actually installed
-            processed_simples = set()
+            processed_keys = set()
             
-            for model_id in sorted(model_descriptions.keys()):
-                # Only show if we have it locally
-                if model_id in detected_map:
-                    desc = model_descriptions[model_id]
-                    desc += " [Installed]"
-                    processed_simples.add(model_id)
-                    model_choices.append(f"{model_id} - {desc}")
-                
-            # Then add any "custom" detected models that aren't standard
-            for simple, full_path in detected_map.items():
-                if simple not in processed_simples:
-                    # If it's a path, just show simple name
-                    model_choices.append(f"{simple} - Local Custom Model")
+            for key in detected_map.keys():
+                if key in model_descriptions:
+                     desc = model_descriptions[key] + " [Installed]"
+                     choices_standard.append(f"{key} - {desc}")
+                elif "(OpenAI)" in key:
+                     base = key.replace(" (OpenAI)", "")
+                     desc = model_descriptions.get(base, "OpenAI Original Model")
+                     choices_openai.append(f"{key} - {desc}")
+                else:
+                     choices_other.append(f"{key} - Local Custom Model")
             
-            model_choices.sort()
+            choices_standard.sort()
+            choices_openai.sort()
+            choices_other.sort()
+            
+            # Final list: Standard first, then OpenAI, then others
+            model_choices = choices_standard + choices_openai + choices_other
             
             model_choice, ok = QInputDialog.getItem(
                 self, "Select Whisper Model",
