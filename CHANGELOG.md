@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.10.3] - 2026-01-09
+
+### Added
+- **Fine-Tune Syllable Editor**: Dedicated tab for precise word-level lyric timing adjustment
+- **Waveform Reference**: Full audio waveform displayed in the timeline and syllable editor
+- **Interactive Timeline**: Click-to-scrub, auto-scroll, and zoom functionality
+- **Dynamic Canvas**: Syllable editor automatically resizes to fit content length
+- **Zero-Duration Fallback**: Untimed lyrics are assigned a default duration for immediate visibility
+
+### Fixed
+- **Canvas Rendering**: Fixed crash where editor failed to draw due to missing method
+- **Invisible Lyrics**: Fixed issue where untimed lyrics had 0 duration and were hidden
+- **Line 4+ Visibility**: Fixed canvas not expanding vertically to show later lines
+- **Waveform Visibility**: Increased waveform opacity and detail for better reference
+
 ## [0.10.2] - 2026-01-09
 
 ### Added

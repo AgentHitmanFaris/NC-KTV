@@ -22,6 +22,7 @@ from core.lyrics import LyricsData, LyricsLine
 from gui.components.audio_player import AudioPlayer
 from gui.components.karaoke_preview import KaraokePreviewWidget
 from gui.components.timeline_widget import TimelineWidget
+from gui.components.syllable_editor_widget import SyllableEditorWidget
 from utils.config import Config
 from utils.subtitle_parser import export_subtitle, detect_subtitle_format, get_import_filter
 
@@ -53,6 +54,7 @@ class EditorMode(QWidget):
             self.lyrics_data = LyricsData()
         
         self.is_dirty = False # Track unsaved changes
+        self.current_tab = 'input' # Default active tab
         
         # Initialize Undo/Redo manager
         from gui.editor.undo_manager import UndoManager
@@ -157,6 +159,14 @@ class EditorMode(QWidget):
         self.btn_timeline.setToolTip("Show/hide multi-track timeline editor")
         self.mode_tabs.addWidget(self.btn_timeline)
         
+        # Fine-Tune View Toggle
+        self.btn_fine_tune = QPushButton("🎹 Fine-Tune Timing")
+        self.btn_fine_tune.setCheckable(True)
+        self.btn_fine_tune.setChecked(False)
+        self.btn_fine_tune.clicked.connect(self._toggle_fine_tune_view)
+        self.btn_fine_tune.setToolTip("Edit individual word/syllable timings")
+        self.mode_tabs.addWidget(self.btn_fine_tune)
+        
         self.mode_tabs.addStretch()
         
         left_layout.addLayout(self.mode_tabs)
@@ -197,7 +207,15 @@ class EditorMode(QWidget):
         self.timeline_widget.effect_requested.connect(self._on_effect_requested)
         self.timeline_widget.hide()  # Hidden by default, can be toggled
         
+        # 4. Syllable Editor View
+        self.syllable_editor = SyllableEditorWidget()
+        self.syllable_editor.data_changed.connect(self._on_syllable_data_changed)
+        self.syllable_editor.hide()
+        
         self.editor_stack.addWidget(self.text_editor)
+        self.editor_stack.addWidget(self.sync_table)
+        self.editor_stack.addWidget(self.timeline_widget)
+        self.editor_stack.addWidget(self.syllable_editor)
         
         # Add vertical splitter for sync table and timeline
         self.sync_timeline_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -374,6 +392,10 @@ class EditorMode(QWidget):
         
         self.player = AudioPlayer()
         self.player.position_changed.connect(self._on_player_position)
+        self.player.waveform_ready.connect(self._sync_timeline_waveform)
+        # Connect Syllable Editor Sync
+        self.player.position_changed.connect(self.syllable_editor.set_position)
+        self.syllable_editor.seek_requested.connect(self.player.seek)
         player_layout.addWidget(self.player)
         self.player_group.setLayout(player_layout)
         
@@ -561,6 +583,8 @@ class EditorMode(QWidget):
         
     def _switch_tab(self, mode: str):
         """Switch between Input and Sync modes"""
+        self.current_tab = mode # Track current tab
+        
         # Update buttons
         for m, btn in self.mode_btns.items():
             btn.setChecked(m == mode)
@@ -1010,6 +1034,13 @@ class EditorMode(QWidget):
                  # End of song or no lyrics
                  pass
 
+
+    def _sync_timeline_waveform(self):
+        """Sync audio player waveform to timeline widget"""
+        data, duration = self.player.get_waveform_data()
+        if data is not None:
+             self.timeline_widget.set_waveform_data(data, duration)
+
     def _change_audio_source(self):
         """Switch between audio tracks while preserving position"""
         mode = self.combo_source.currentText()
@@ -1038,6 +1069,9 @@ class EditorMode(QWidget):
         
         # Load new audio
         self.player.load_audio(path)
+        
+        # Sync waveform to timeline
+        self._sync_timeline_waveform()
         
         # If switching to Original Source, and it's a video, ensure bg_video_player uses it too?
         # Actually bg_video_player ALWAYS plays source_file (visuals), while audio player plays stems.
@@ -2124,11 +2158,44 @@ class EditorMode(QWidget):
 
     # === Phase 6: Timeline Methods ===
     
+    def _toggle_fine_tune_view(self):
+        """Toggle the Fine-Tune Timing view"""
+        if self.btn_fine_tune.isChecked():
+            # Hide other views
+            self.text_editor.hide()
+            self.sync_table.hide()
+            self.timeline_widget.hide()
+            self.btn_timeline.setChecked(False)  # Uncheck timeline button
+            
+            # Show Fine-Tune view
+            self.syllable_editor.show()
+            
+            # Ensure lyrics are current (auto-parse if still in input mode or empty)
+            if not self.lyrics_data.lines or (self.current_tab == 'input' and self.text_editor.toPlainText().strip()):
+                 self._parse_lyrics_from_text()
+            
+            # Sync data
+            data, duration = self.player.get_waveform_data()
+            self.syllable_editor.set_data(self.lyrics_data, data, duration)
+            
+            logger.info("Fine-Tune view enabled")
+        else:
+            self.syllable_editor.hide()
+            self._switch_tab(self.current_tab) # Restore previous
+            
+    def _on_syllable_data_changed(self):
+        """Handle data changes from syllable editor"""
+        self.is_dirty = True
+        # Optionally refresh basic timeline if needed
+        # self._refresh_table() # If we want to update the table view
+        logger.info("Syllable data updated")
+
     def _toggle_timeline_view(self):
         """Toggle timeline widget visibility"""
         if self.btn_timeline.isChecked():
             # Reinitialize timeline to ensure lyrics are populated
             self._initialize_timeline()
+            self._sync_timeline_waveform() # Ensure waveform is synced
             self.timeline_widget.show()
             logger.info('Timeline view enabled')
         else:
@@ -2287,6 +2354,18 @@ class EditorMode(QWidget):
             track_type=TrackType.AUDIO,
             name="Instrumental"
         )
+        # Create clip for full duration
+        _, duration_ms = self.player.get_waveform_data()
+        duration_s = duration_ms / 1000.0 if duration_ms > 0 else 300.0 # Default/Fallback
+        
+        inst_clip = Clip(
+            clip_id="clip_instrumental_main",
+            track_id="audio_instrumental",
+            start_time=0.0,
+            duration=duration_s,
+            source_file=str(self.project.instrumental_file) if self.project.instrumental_file else None
+        )
+        audio_track.add_clip(inst_clip)
         timeline.add_track(audio_track)
         
         # 2. Audio Track (Vocals) if available
@@ -2296,6 +2375,15 @@ class EditorMode(QWidget):
                 track_type=TrackType.AUDIO,
                 name="Vocals"
             )
+            
+            vocab_clip = Clip(
+                clip_id="clip_vocals_main",
+                track_id="audio_vocals",
+                start_time=0.0,
+                duration=duration_s, # Assume same duration
+                source_file=str(self.project.vocals_file)
+            )
+            vocals_track.add_clip(vocab_clip)
             timeline.add_track(vocals_track)
         
         # 3. Video Track if source is video
@@ -2307,6 +2395,15 @@ class EditorMode(QWidget):
                     track_type=TrackType.VIDEO,
                     name="Background Video"
                 )
+                
+                vid_clip = Clip(
+                    clip_id="clip_video_main",
+                    track_id="video_background",
+                    start_time=0.0,
+                    duration=duration_s,
+                    source_file=str(src_path)
+                )
+                video_track.add_clip(vid_clip)
                 timeline.add_track(video_track)
         
         # 4. Lyrics Track - Populate with lyrics lines as clips

@@ -18,6 +18,7 @@ class WaveformWidget(QWidget):
     
     # Signal emitted when user clicks on waveform to seek
     seek_requested = pyqtSignal(int)  # Position in milliseconds
+    data_ready = pyqtSignal() # Emitted when data is loaded
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -93,6 +94,7 @@ class WaveformWidget(QWidget):
         self.waveform_data = waveform_data
         self.duration_ms = duration_ms
         self.update()
+        self.data_ready.emit()
     
     def set_position(self, position_ms: int):
         """Update playback position"""

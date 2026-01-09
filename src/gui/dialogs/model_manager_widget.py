@@ -12,56 +12,83 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from pathlib import Path
 import urllib.request
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
 
-class DownloadWorker(QThread):
-    """Background worker for downloading models"""
-    progress = pyqtSignal(int, int)  # current, total
+class FasterWhisperDownloadWorker(QThread):
+    """Background worker for downloading CTranslate2 models via faster_whisper"""
     finished = pyqtSignal(bool, str)  # success, message
     
-    def __init__(self, url: str, destination: Path):
+    def __init__(self, model_name: str, destination_dir: Path):
         super().__init__()
-        self.url = url
-        self.destination = destination
+        self.model_name = model_name
+        self.destination_dir = destination_dir
     
     def run(self):
         try:
-            def report_progress(block_num, block_size, total_size):
-                downloaded = block_num * block_size
-                self.progress.emit(downloaded, total_size)
+            # Import inside thread to avoid GUI freeze if import is slow
+            from faster_whisper import download_model
             
-            urllib.request.urlretrieve(self.url, str(self.destination), report_progress)
-            self.finished.emit(True, "Download completed successfully!")
+            # download_model returns the path to the downloaded model
+            # We enforce our destination directory naming
+            # It uses huggingface_hub internally
+            logger.info(f"Downloading {self.model_name} to {self.destination_dir}")
+            
+            # We want to download to 'models/whisper/faster-whisper-{size}'
+            # faster_whisper.download_model(size, output_dir=...) downloads into specific folder structure?
+            # Actually download_model(model_size) downloads to cache usually.
+            # We pass output_dir to specify location.
+            
+            download_model(self.model_name, output_dir=str(self.destination_dir))
+            
+            self.finished.emit(True, f"Model {self.model_name} downloaded successfully!")
         except Exception as e:
+            logger.error(f"Download failed: {e}")
             self.finished.emit(False, f"Download failed: {e}")
 
 
 class ModelManagerWidget(QWidget):
     """Widget for managing AI models (Whisper, UVR)"""
     
-    # Whisper model download URLs
+    # Faster-Whisper Models (CTranslate2)
+    # These download directories from HuggingFace
     WHISPER_MODELS = {
-        "tiny.pt": {
-            "url": "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt",
-            "size": "152 MB",
-            "description": "Fastest, lowest accuracy. Good for testing."
+        "tiny": {
+            "size": "39 MB",
+            "description": "Very fast, low accuracy. ~32x speed.",
+            "dir_name": "faster-whisper-tiny"
         },
-        "base.pt": {
-            "url": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
-            "size": "290 MB",
-            "description": "Fast, decent accuracy for simple tasks."
+        "base": {
+            "size": "74 MB",
+            "description": "Fast, decent accuracy. ~16x speed.",
+            "dir_name": "faster-whisper-base"
         },
-        "small.pt": {
-            "url": "https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt",
-            "size": "967 MB",
-            "description": "Balanced speed and accuracy."
+        "small": {
+            "size": "244 MB",
+            "description": "Balanced. ~6x speed.",
+            "dir_name": "faster-whisper-small"
         },
-        "medium.pt": {
-            "url": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
-            "size": "3.1 GB",
-            "description": "Best accuracy for most use cases."
+        "medium": {
+            "size": "769 MB",
+            "description": "Good accuracy. ~2x speed.",
+            "dir_name": "faster-whisper-medium"
+        },
+        "large-v2": {
+            "size": "1.5 GB",
+            "description": "High accuracy. 1x speed.",
+            "dir_name": "faster-whisper-large-v2"
+        },
+        "large-v3": {
+            "size": "1.5 GB",
+            "description": "Best accuracy (multilingual). 1x speed.",
+            "dir_name": "faster-whisper-large-v3"
+        },
+        "distil-large-v3": {
+            "size": "756 MB",
+            "description": "Distilled Large V3. Faster with slightly less accuracy.",
+            "dir_name": "faster-whisper-distil-large-v3"
         }
     }
     
@@ -140,32 +167,87 @@ class ModelManagerWidget(QWidget):
         
         for row, (model_name, info) in enumerate(self.WHISPER_MODELS.items()):
             # Model name
-            self.whisper_table.setItem(row, 0, QTableWidgetItem(model_name))
+            self.whisper_table.setItem(row, 0, QTableWidgetItem(f"{model_name} (Faster)"))
             
             # Size
             self.whisper_table.setItem(row, 1, QTableWidgetItem(info["size"]))
             
-            # Status
-            model_path = models_dir / model_name
-            status = "✅ Installed" if model_path.exists() else "❌ Not installed"
+            # Status check (Directory exists and contains model.bin)
+            expected_dir = models_dir / info["dir_name"]
+            is_installed = expected_dir.exists() and (expected_dir / "model.bin").exists()
+            
+            if not is_installed and expected_dir.exists():
+                # Maybe partial download?
+                pass
+            
+            status = "✅ Installed" if is_installed else "❌ Not installed"
             status_item = QTableWidgetItem(status)
-            status_item.setForeground(Qt.GlobalColor.darkGreen if model_path.exists() else Qt.GlobalColor.red)
+            status_item.setForeground(Qt.GlobalColor.darkGreen if is_installed else Qt.GlobalColor.red)
             self.whisper_table.setItem(row, 2, status_item)
             
             # Description
             self.whisper_table.setItem(row, 3, QTableWidgetItem(info["description"]))
             
             # Action button
-            if not model_path.exists():
+            if not is_installed:
                 btn_download = QPushButton("📥 Download")
+                # We simply pass the model name string here (e.g. "large-v3", "tiny")
                 btn_download.clicked.connect(lambda checked, m=model_name: self._download_whisper_model(m))
                 self.whisper_table.setCellWidget(row, 4, btn_download)
             else:
                 label = QLabel("Installed")
                 label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.whisper_table.setCellWidget(row, 4, label)
-    
-    def _populate_uvr_table(self):
+                
+    def _download_whisper_model(self, model_name: str):
+        """Download a Whisper model using faster_whisper"""
+        info = self.WHISPER_MODELS[model_name]
+        
+        # We want to save to models/whisper/{dir_name}
+        # But faster_whisper.download_model(..., output_dir=X) will put files into X directly?
+        # Yes.
+        
+        destination_dir = Path("models/whisper") / info["dir_name"]
+        
+        reply = QMessageBox.question(
+            self,
+            "Confirm Download",
+            f"Download {model_name} ({info['size']})?\n\n"
+            f"This will download the model files from Hugging Face.\n"
+            f"Please wait while the download completes.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Create progress dialog (Indeterminate)
+        progress_dialog = QProgressDialog(
+            f"Downloading {model_name}...",
+            "Cancel",
+            0,
+            0,
+            self
+        )
+        progress_dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        # progress_dialog.setAutoClose(True) # Don't auto-close immediately on 0
+        progress_dialog.setMinimumDuration(0)
+        
+        # Start download worker
+        self.download_worker = FasterWhisperDownloadWorker(model_name, destination_dir)
+        
+        def download_finished(success, message):
+            progress_dialog.close()
+            if success:
+                QMessageBox.information(self, "Success", message)
+                self._populate_whisper_table()  # Refresh table
+            else:
+                QMessageBox.critical(self, "Error", message)
+        
+        self.download_worker.finished.connect(download_finished)
+        self.download_worker.start()
+        
+        progress_dialog.exec()
         """Populate UVR models table"""
         self.uvr_table.setRowCount(len(self.UVR_MODELS))
         

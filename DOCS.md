@@ -114,6 +114,42 @@ To align the instrumental track $y(n)$ with the original track $x(n)$, we comput
 
 ---
 
+## Detection Algorithms
+
+### 4. Neural Vocal Separation (MDX-Net)
+
+MDX-Net operates as a **Frequency Masking** model. It predicts a soft mask $M$ to separate the spectrogram of the vocals $S_v$ from the mixture $S_{mix}$.
+
+1.  **Input:** Spectrogram $S_{mix} = \text{STFT}(x)$
+2.  **Inference:** $\hat{M}_v = \text{Network}(S_{mix})$
+3.  **Masking:** $\hat{S}_v = S_{mix} \odot \hat{M}_v$ (Element-wise multiplication)
+4.  **Reconstruction:** $\hat{v}(t) = \text{iSTFT}(\hat{S}_v)$
+
+The loss function effectively minimizes the L1 distance between estimated and ground truth spectrograms:
+
+```math
+\mathcal{L} = || S_v - \hat{S}_v ||_1 + || S_{other} - \hat{S}_{other} ||_1
+```
+
+### 5. Lyrics Transcription (Whisper)
+
+Whisper uses an encoder-decoder Transformer architecture trained on Log-Mel Spectrogram features.
+
+**Feature Extraction:**
+Audio samples $x$ are converted to Log-Mel Spectrogram features $X$:
+1.  **STFT**: Window length 25ms, stride 10ms.
+2.  **Mel Filterbank**: Project to 80 Mel frequency bins.
+3.  **Log:** $X = \log(S_{mel} + \epsilon)$
+
+**Attention Mechanism:**
+The core detection logic relies on **Scaled Dot-Product Attention**:
+
+```math
+\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
+```
+
+Where $Q$ (Query) comes from the decoder (lyrics context), and $K, V$ (Key, Value) come from the encoder (audio features), allowing the model to "attend" to specific audio segments while generating each word.
+
 ## Subtitle Parsing Algorithms
 
 NC-KTV unifies various subtitle formats into a common `LyricsData` structure.
@@ -277,6 +313,56 @@ The project file uses a custom binary structure with **AES-256-GCM** encryption.
 | `0x22` | ... | **Payload** | Encrypted JSON (Project Data) |
 | `End` | 32B | **Tag** | GCM Authentication Tag |
 
+
+## Syllable Editor Mechanics
+
+The Fine-Tune Syllable Editor uses a precise coordinate system to map time to screen pixels.
+
+### 11. Time-to-Pixel Mapping
+The editor view is defined by a linear transformation scaled by the `pixels_per_second` ($PPS$) zoom factor.
+
+For any timestamp $t$ (seconds):
+```math
+x_{pixel} = \lfloor t \times PPS \rfloor
+```
+
+Inverse mapping for mouse interaction (e.g., seek, click):
+```math
+t_{seconds} = \frac{x_{pixel}}{PPS}
+```
+
+### 12. Audio Waveform Rendering
+To render the audio waveform efficiently on the canvas, we use a **Peak Envelope** optimization. Instead of drawing every sample (which would be millions of points), we compute Min/Max pairs for each visual pixel column.
+
+Given audio data $A$ and pixel $i$ covering the time range $[t_{start}, t_{end}]$:
+
+```math
+Y_{min} = \min(A[t_{start}:t_{end}]) \times \frac{H}{2} + Y_{center}
+```
+```math
+Y_{max} = \max(A[t_{start}:t_{end}]) \times \frac{H}{2} + Y_{center}
+```
+
+This ensures visually accurate representation of peaks even at low zoom levels.
+
+## Intro Credits Construction
+
+The intro credits feature concatenates a dynamically generated video clip $V_{intro}$ with the main song video $V_{song}$.
+
+### 13. Dynamic Overlay Generation
+The credit overlay is composited using FFmpeg's `drawtext` filter chain. 
+The alpha channel $\alpha(t)$ for the fade-out effect over duration $D$ (e.g., 5s) and fade time $F$ (e.g., 1s) follows:
+
+```math
+\alpha(t) = \begin{cases} 
+1 & \text{if } t < (D - F) \\
+1 - \frac{t - (D - F)}{F} & \text{if } (D - F) \le t < D \\
+0 & \text{if } t \ge D 
+\end{cases}
+```
+
 ---
 
 *Verified Mathematical Models - NC-KTV Core Engineering*
+
+---

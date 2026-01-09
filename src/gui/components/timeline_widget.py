@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QSlider, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPainterPath
 from typing import Optional
 
 from core.timeline_data import TimelineData, Track, Clip, TrackType
@@ -36,6 +36,11 @@ class TimelineWidget(QWidget):
         self.track_height = 60  # Height of each track in pixels
         self.header_width = 120  # Width of track name headers
         self.ruler_height = 30  # Height of time ruler
+        
+        self.ruler_height = 30  # Height of time ruler
+        
+        self.waveform_data = None
+        self.waveform_duration = 0
         
         self.selected_clip_id: Optional[str] = None
         self.is_dragging_clip = False
@@ -141,6 +146,27 @@ class TimelineWidget(QWidget):
             self.scroll_area.horizontalScrollBar().setValue(int(new_scroll))
         
         self.timeline_canvas.update()
+    
+        self.timeline_canvas.update()
+
+    def set_waveform_data(self, data, duration_ms):
+        """Set waveform data for audio visualization"""
+        # print(f"[DEBUG] set_waveform_data called. Data len: {len(data) if data is not None else 'None'}, Duration: {duration_ms}")
+        self.waveform_data = data
+        self.waveform_duration = duration_ms
+        self.timeline_canvas.update()
+
+    # ... (skipping to _draw_clip) ...
+
+    def _draw_waveform(self, painter: QPainter, clip: Clip, x: int, y: int, width: int, height: int):
+        """Draw waveform inside clip rect"""
+        data = self.timeline_widget.waveform_data
+        total_duration_ms = self.timeline_widget.waveform_duration
+        if total_duration_ms == 0 or data is None or len(data) == 0:
+            return
+            
+        painter.setPen(QPen(QColor(255, 255, 255, 200), 1)) # Made brighter white
+
     
     def _zoom_in(self):
         """Increase zoom level"""
@@ -271,9 +297,9 @@ class TimelineCanvas(QWidget):
         
         # Draw clips
         for clip in track.clips:
-            self._draw_clip(painter, clip, y_offset)
+            self._draw_clip(painter, clip, y_offset, track.track_type)
     
-    def _draw_clip(self, painter: QPainter, clip: Clip, track_y: int):
+    def _draw_clip(self, painter: QPainter, clip: Clip, track_y: int, track_type: str = None):
         """Draw a single clip on the track"""
         pps = self.timeline_widget.pixels_per_second
         x = int(clip.start_time * pps)
@@ -284,6 +310,12 @@ class TimelineCanvas(QWidget):
         clip_color = QColor(80, 120, 180) if not is_selected else QColor(120, 160, 220)
         
         painter.fillRect(x, track_y + 5, width, self.timeline_widget.track_height - 10, clip_color)
+        
+        # Phase 6.2: Draw Waveform for Audio Tracks
+        if track_type == TrackType.AUDIO and self.timeline_widget.waveform_data is not None:
+             self._draw_waveform(painter, clip, x, track_y + 5, width, self.timeline_widget.track_height - 10)
+             # Draw lyrics overlay on top of waveform
+             self._draw_lyrics_overlay(painter, clip, x, track_y + 5, width, self.timeline_widget.track_height - 10)
         
         # Clip border
         border_color = QColor(255, 255, 255) if is_selected else QColor(100, 140, 200)
@@ -301,7 +333,121 @@ class TimelineCanvas(QWidget):
             clip_label = clip.clip_id[:20]  # Fallback to ID
         
         painter.drawText(x + 5, track_y + 25, clip_label)
+
+    def _draw_waveform(self, painter: QPainter, clip: Clip, x: int, y: int, width: int, height: int):
+        """Draw waveform inside clip rect"""
+        data = self.timeline_widget.waveform_data
+        total_duration_ms = self.timeline_widget.waveform_duration
+        if total_duration_ms == 0 or len(data) == 0:
+            return
+            
+        painter.setPen(QPen(QColor(30, 30, 50, 120), 1))
+        # Draw center line
+        center_y = y + height / 2
+        # painter.drawLine(x, int(center_y), x + width, int(center_y))
+        
+        painter.setPen(QPen(QColor(200, 220, 255, 200), 1))
+        
+        # Optimization: Don't draw every sample, draw per pixel or step
+        step = max(1, width // 200) # Detail level
+        
+        path = QPainterPath()
+        started = False
+        
+        clip_start_ms = clip.start_time * 1000
+        clip_end_ms = clip.end_time * 1000
+        
+        # Map pixel x to waveform index
+        samples_count = len(data)
+        
+        for pixel_i in range(0, width, 1):
+            # Time at this pixel relative to clip start
+            # pixel_i corresponds to (pixel_i / width) * clip_duration?
+            # No, pixel_i is offset from clip start x.
+            
+            # Global time of this pixel
+            # current_x_global = x + pixel_i
+            # Only draw if inside clip (well, we are iterating width)
+            
+            # Convert pixel offset to time offset in seconds
+            time_offset_s = pixel_i / self.timeline_widget.pixels_per_second
+            current_time_ms = clip_start_ms + (time_offset_s * 1000)
+            
+            if current_time_ms > total_duration_ms:
+                break
+                
+            # Index in waveform data
+            idx = int((current_time_ms / total_duration_ms) * samples_count)
+            
+            if 0 <= idx < samples_count:
+                amp = data[idx]
+                h_amp = amp * (height / 2 - 2)
+                
+                if not started:
+                    path.moveTo(x + pixel_i, center_y - h_amp)
+                    started = True
+                else:
+                    path.lineTo(x + pixel_i, center_y - h_amp)
+                    
+        # Mirror path for bottom half? Or just draw simple line
+        painter.drawPath(path)
+        
+        # Bottom half mirror
+        path_b = QPainterPath()
+        started_b = False
+        for pixel_i in range(0, width, 1):
+            time_offset_s = pixel_i / self.timeline_widget.pixels_per_second
+            current_time_ms = clip_start_ms + (time_offset_s * 1000)
+            idx = int((current_time_ms / total_duration_ms) * samples_count)
+            if 0 <= idx < samples_count:
+                amp = data[idx]
+                h_amp = amp * (height / 2 - 2)
+                if not started_b:
+                    path_b.moveTo(x + pixel_i, center_y + h_amp)
+                    started_b = True
+                else:
+                    path_b.lineTo(x + pixel_i, center_y + h_amp)
+        painter.drawPath(path_b)
     
+    def _draw_lyrics_overlay(self, painter: QPainter, audio_clip: Clip, x: int, y: int, width: int, height: int):
+        """Draw lyrics text overlaying the audio clip"""
+        if not self.timeline_widget.timeline_data:
+            return
+
+        # Find lyrics track
+        lyrics_track = None
+        for track in self.timeline_widget.timeline_data.tracks:
+            if track.track_type == TrackType.LYRICS:
+                lyrics_track = track
+                break
+        
+        if not lyrics_track:
+            return
+
+        painter.setPen(QPen(QColor(255, 255, 100))) # Yellow text
+        painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        
+        pps = self.timeline_widget.pixels_per_second
+        audio_start = audio_clip.start_time
+        audio_end = audio_clip.end_time
+        
+        for clip in lyrics_track.clips:
+            # Check overlap
+            if clip.end_time > audio_start and clip.start_time < audio_end:
+                # Calculate relative position
+                rel_start = max(0, clip.start_time - audio_start)
+                rel_x = int(rel_start * pps)
+                
+                # Check if text is visible within the audio clip rect
+                if rel_x < width:
+                     text = clip.properties.get('text', '')
+                     # Draw text with a slight shadow for readability
+                     painter.setPen(QPen(QColor(0, 0, 0)))
+                     painter.drawText(x + rel_x + 6, y + 21, text) # Shadow
+                     
+                     painter.setPen(QPen(QColor(255, 255, 100)))
+                     painter.drawText(x + rel_x + 5, y + 20, text)
+
     def _draw_playhead(self, painter: QPainter):
         """Draw the playhead indicator"""
         pps = self.timeline_widget.pixels_per_second

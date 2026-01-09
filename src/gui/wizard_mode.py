@@ -61,9 +61,9 @@ class WizardMode(QWidget):
         
         # 1. Base Processing (UVR)
         self.lbl_uvr = QLabel("Step 1: Vocal Separation")
-        self.prog_uvr = QProgressDialog("Separating Vocals...", "Cancel", 0, 100, self)
-        # We don't use the dialog window, just the bar widgets conceptually, 
-        # but actually let's use simple QProgressBar for embedded look
+        # Removed accidental QProgressDialog popup
+        
+        # We use simple QProgressBar for embedded look
         from PyQt6.QtWidgets import QProgressBar
         
         self.bar_uvr = QProgressBar()
@@ -226,7 +226,11 @@ class WizardMode(QWidget):
     def _finish(self):
         """All steps done, open editor"""
         # Brief pause to let user see green checks?
-        QTimer.singleShot(800, lambda: self.project_created.emit(self.project))
+        # Use instance timer to prevent RuntimeError if widget is destroyed
+        self._finish_timer = QTimer(self)
+        self._finish_timer.setSingleShot(True)
+        self._finish_timer.timeout.connect(lambda: self.project_created.emit(self.project))
+        self._finish_timer.start(800)
         
     def _on_error(self, error_msg):
         QMessageBox.critical(self, "Processing Error", str(error_msg))

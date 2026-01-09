@@ -21,7 +21,9 @@ class AudioPlayer(QWidget):
     # Signals
     position_changed = pyqtSignal(int)  # ms
     duration_changed = pyqtSignal(int)  # ms
+    duration_changed = pyqtSignal(int)  # ms
     state_changed = pyqtSignal(bool)    # True = playing
+    waveform_ready = pyqtSignal()       # Waveform data available
     
     def __init__(self):
         super().__init__()
@@ -37,6 +39,10 @@ class AudioPlayer(QWidget):
         """Set video output widget"""
         self.media_player.setVideoOutput(video_output)
         
+    def seek(self, position_ms):
+        """Seek to position in ms"""
+        self.media_player.setPosition(position_ms)
+        
     def _init_ui(self):
         """Initialize UI"""
         layout = QVBoxLayout(self)
@@ -46,6 +52,7 @@ class AudioPlayer(QWidget):
         from gui.components.waveform_widget import WaveformWidget
         self.waveform = WaveformWidget()
         self.waveform.seek_requested.connect(self.media_player.setPosition)
+        self.waveform.data_ready.connect(self.waveform_ready)
         layout.addWidget(self.waveform)
         
         # Seek bar
@@ -226,6 +233,12 @@ class AudioPlayer(QWidget):
         if self.was_playing:
             self.media_player.play()
             
+    def get_waveform_data(self):
+        """Get current waveform data and duration"""
+        if hasattr(self, 'waveform'):
+            return self.waveform.waveform_data, self.waveform.duration_ms
+        return None, 0
+
     def _format_time(self, ms):
         """Format milliseconds to MM:SS"""
         seconds = (ms // 1000) % 60

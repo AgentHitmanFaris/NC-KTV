@@ -88,7 +88,7 @@ NC-KTV automates the entire karaoke video creation workflow:
 
 ## Plugins & Themes
 
-### 🔌 Plugin System
+###  Plugin System
 Extend NC-KTV with custom functionality:
 - **Effect Plugins**: Create custom visual effects and animations
 - **Export Templates**: Add platform-specific export formats (YouTube, TikTok, etc.)
@@ -100,7 +100,7 @@ Extend NC-KTV with custom functionality:
 - Enable/disable plugins on the fly
 - [Plugin Development Guide](PLUGIN_DEVELOPMENT.md)
 
-### 🎨 Theme System
+###  Theme System
 Customize NC-KTV's appearance:
 - **UI Themes**: Change colors, fonts, and widget styles
 - **Karaoke Styles**: Define custom video export styles
@@ -112,7 +112,7 @@ Customize NC-KTV's appearance:
 - Apply themes without restart
 - [Theme Creation Guide](THEME_CREATION.md)
 
-### 📦 Packaging Format
+###  Packaging Format
 - **`.nckplugin`**: Plugin packages with manifest and code
 - **`.ncktheme`**: Theme packages with YAML definitions
 - Easy import/export and sharing
