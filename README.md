@@ -6,7 +6,7 @@
 
 **Professional Music Video Karaoke Maker**
 
-![Version](https://img.shields.io/badge/version-0.10.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.10.3-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.10-blue.svg)
 ![Status](https://img.shields.io/badge/status-beta-orange.svg)
@@ -32,12 +32,12 @@ NC-KTV automates the entire karaoke video creation workflow:
 
 ## Features
 
-### 🎤 AI Vocal Separation
+###  AI Vocal Separation
 - **UVR Integration**: High-quality vocal removal using MDX-Net and VR models
 - **GPU Acceleration**: CUDA support for 5-10x faster processing
 - **Multiple Models**: KARA_2 (quality), 6_HP-Karaoke (balanced), 5_HP-Karaoke (fast)
 
-### 📝 Professional Lyrics Editor
+###  Professional Lyrics Editor
 - **Waveform Visualization**: See audio peaks for precise timing
 - **Dual-Line Preview**: Live karaoke preview with active/upcoming lines
 - **Tap-to-Sync**: Spacebar timing for natural rhythm matching
@@ -47,14 +47,14 @@ NC-KTV automates the entire karaoke video creation workflow:
 - **Romanization**: Automatic Korean/Japanese → Latin script
 - **Local Model Detection**: Automatically finds and uses installed AI models
 
-### ⏱️ Advanced Timeline
+### ⏱ Advanced Timeline
 - **Multi-Track Editing**: Separate tracks for audio, video, effects, lyrics
 - **Clip Manipulation**: Drag, resize, split, delete clips
 - **Effect System**: 8 effect types with custom Bezier curves
 - **Snap-to-Grid**: Precise alignment with configurable grid
 - **Sample-Accurate Timing**: Eliminates drift with AudioClock system
 
-### 🎬 Flexible Video Export
+###  Flexible Video Export
 | Mode | Video | Audio | Use Case |
 |------|-------|-------|----------|
 | **Karaoke Video** | Music Video | Instrumental | Sing-along karaoke |
@@ -62,7 +62,7 @@ NC-KTV automates the entire karaoke video creation workflow:
 | **Karaoke (No Video)** | Solid Color | Instrumental | Classic karaoke style |
 | **Lyrics Video** | Solid Color | Original | Lyric video |
 
-### 🎨 Animation Styles
+###  Animation Styles
 - **Linear Wipe**: Classic fill animation
 - **Syllable Step**: Word-by-word highlighting
 - **Glow Pulse**: Dynamic pulsing effect
