@@ -102,6 +102,8 @@ assets/
 
 # Project files (user-specific)
 *.nctv
+*.mp4
+debug_models.py
 
 # System files
 .DS_Store

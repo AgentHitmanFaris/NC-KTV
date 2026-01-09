@@ -15,12 +15,21 @@ ffmpeg_dir = Path(__file__).parent / "ffmpeg"
 if ffmpeg_dir.exists():
     os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
 
+# Qt Multimedia: Hardware Acceleration Workaround
+# Fixes "qt.multimedia.hwaccel: Unable to copy frame from decoder pool"
+os.environ["QT_MEDIA_BACKEND"] = "windows"
+
 # Add PyTorch lib to PATH (for ONNX Runtime GPU)
 import site
 site_packages = Path(site.getsitepackages()[0])
 torch_lib = site_packages / "torch" / "lib"
 if torch_lib.exists():
     os.environ["PATH"] = str(torch_lib) + os.pathsep + os.environ.get("PATH", "")
+
+# Add local cuDNN to PATH (for CTranslate2/Faster-Whisper)
+cudnn_dir = Path(__file__).parent / "models" / "whisper" / "cudn12" / "bin"
+if cudnn_dir.exists():
+    os.environ["PATH"] = str(cudnn_dir) + os.pathsep + os.environ.get("PATH", "")
 
 # Set local cache directories
 cache_dir = Path(__file__).parent / ".cache"

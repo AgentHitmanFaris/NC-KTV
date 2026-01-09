@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.10.2] - 2026-01-09
+
+### Added
+- **Intro Mode (Pre-roll)**: Option to play credits *before* the song starts (concatenates intro + main video)
+- **Countdown Feature**: Automatic "3, 2, 1, GO" count-in display if there is a >4s instrumental gap
+- **Global Timing Offset in Export**: Now correctly applies the user-configured timing offset to exported ASS subtitles
+
+### Fixed
+- **Export Crash**: Fixed `AttributeError` in `ASSGenerator` when generating styles (color format helper issue)
+- **Intro Mode Logic**: Fixed bug where intro mode was only applied if "Mixed" audio source was selected
+- **Upcoming Lyrics in Export**: Fixed styling to correctly dim upcoming lyric lines in exported video
+
+### Changed
+- **ASS Color Handling**: Refactored color conversion logic in `ASSGenerator` for better stability
+
 ## [0.10.1] - 2026-01-07
 
 ### Added

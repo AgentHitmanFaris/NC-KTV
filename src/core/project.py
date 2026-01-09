@@ -23,6 +23,14 @@ class ProjectSettings:
     karaoke_style: str = "classic"
     output_format: str = "mp4"
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ProjectSettings':
+        """Create settings processing only known fields"""
+        # Filter out unknown keys (like 'auto_transcribe' from older versions)
+        known_keys = cls.__annotations__.keys()
+        filtered_data = {k: v for k, v in data.items() if k in known_keys}
+        return cls(**filtered_data)
+
 
 class Project:
     """NC-KTV Project management"""
@@ -108,7 +116,7 @@ class Project:
         # Load settings
         if 'settings' in data:
             settings_data = data['settings']
-            project.settings = ProjectSettings(**settings_data)
+            project.settings = ProjectSettings.from_dict(settings_data)
         
         # Load lyrics
         if 'lyrics' in data:
@@ -205,7 +213,13 @@ class Project:
                 project.project_file = file_path
                 return project
         except Exception as e:
-            # If binary format fails, try JSON fallback
+            # Only fallback if it wasn't an NCTV file
+            # If it WAS an NCTV file (magic match) but failed to unpack, we should raise the error
+            # so the user sees the real reason (e.g. corruption, password), not a JSON decode error.
+            if 'magic' in locals() and magic == b'NCTV':
+                raise ValueError(f"Failed to load NCTV project: {e}") from e
+                
+            # If binary format detection fails (not NCTV), try JSON fallback
             import logging
             logging.getLogger(__name__).debug(f"Binary format failed, trying JSON: {e}")
         

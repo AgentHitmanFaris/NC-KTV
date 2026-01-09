@@ -1,0 +1,30 @@
+# NC-KTV Test Requirements
+# Install with: pip install -r tests/requirements.txt
+
+# Core testing framework
+pytest>=7.4.0
+pytest-qt>=4.2.0
+pytest-cov>=4.1.0
+pytest-timeout>=2.1.0
+
+# Property-based testing
+hypothesis>=6.82.0
+
+# Performance and monitoring
+psutil>=5.9.0
+memory-profiler>=0.61.0
+
+# Security scanning
+bandit>=1.7.5
+safety>=2.3.0
+
+# Code quality
+pylint>=2.17.0
+flake8>=6.0.0
+
+# Mocking and fixtures
+pytest-mock>=3.11.1
+faker>=19.0.0
+
+# Utilities
+pyyaml>=6.0

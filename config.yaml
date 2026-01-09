@@ -9,13 +9,13 @@ export:
   video_codec: libx264
   video_quality: high
 gui:
-  autosave: false
+  autosave: true
   autosave_interval: 300
   show_tooltips: true
-  start_mode: wizard
-  theme: dark
+  start_mode: editor
+  theme: builtin-dark
 karaoke:
-  default_style: classic
+  default_style: Bouncing Ball
   font_family: Arial
   font_size: 48
   highlight_color: '#FFD700'
@@ -26,8 +26,10 @@ karaoke:
 lyrics:
   confidence_threshold: 0.5
   language: auto
-  whisper_model: large-v3
+  whisper_model: base
   word_level_timing: true
+plugins:
+  enabled: []
 processing:
   audio_format: wav
   num_workers: 4
@@ -38,5 +40,5 @@ uvr:
   batch_size: 4
   default_model: MDX_Net
   gpu_device: 0
-  models_path: models/
+  models_path: models/uvr
   use_gpu: true

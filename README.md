@@ -6,14 +6,14 @@
 
 **Professional Music Video Karaoke Maker**
 
-![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.10.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.10-blue.svg)
 ![Status](https://img.shields.io/badge/status-beta-orange.svg)
 
 Windows desktop application for creating professional karaoke videos with AI-powered vocal separation, automatic transcription, and synchronized lyrics.
 
-[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Technical Docs](DOCS.md) • [Changelog](CHANGELOG.md)
+[Features](#features) • [Installation](#installation) • [Quick Start](#quick-start) • [Plugins & Themes](#plugins--themes) • [Technical Docs](DOCS.md) • [Changelog](CHANGELOG.md)
 
 </div>
 
@@ -69,6 +69,7 @@ NC-KTV automates the entire karaoke video creation workflow:
 - **Fade In**: Smooth opacity transitions
 - **Bouncing Ball**: Retro bouncing indicator
 - **Match Preview**: Export with exact preview styling
+- **Countdown**: Automatic "3, 2, 1, GO" start display
 
 ---
 
@@ -82,6 +83,39 @@ NC-KTV automates the entire karaoke video creation workflow:
 | TTML/DFXP | .ttml, .dfxp, .xml | ✅ | - |
 | ASS/SSA | .ass, .ssa | ✅ | ✅ |
 | Plain Text | .txt | ✅ | - |
+
+---
+
+## Plugins & Themes
+
+### 🔌 Plugin System
+Extend NC-KTV with custom functionality:
+- **Effect Plugins**: Create custom visual effects and animations
+- **Export Templates**: Add platform-specific export formats (YouTube, TikTok, etc.)
+- **UI Extensions**: Add new tools and widgets
+
+**Getting Started**:
+- Browse installed plugins: **Settings → Plugins**
+- Install `.nckplugin` packages
+- Enable/disable plugins on the fly
+- [Plugin Development Guide](PLUGIN_DEVELOPMENT.md)
+
+### 🎨 Theme System
+Customize NC-KTV's appearance:
+- **UI Themes**: Change colors, fonts, and widget styles
+- **Karaoke Styles**: Define custom video export styles
+- **Built-in Themes**: Dark, Light (more community themes available)
+
+**Getting Started**:
+- Browse themes: **Settings → Themes**
+- Import `.ncktheme` packages
+- Apply themes without restart
+- [Theme Creation Guide](THEME_CREATION.md)
+
+### 📦 Packaging Format
+- **`.nckplugin`**: Plugin packages with manifest and code
+- **`.ncktheme`**: Theme packages with YAML definitions
+- Easy import/export and sharing
 
 ---
 
@@ -174,7 +208,7 @@ See [DOCS.md](DOCS.md) for technical documentation with mathematical formulas.
 - [x] Phase 4: Video Generation & Styles
 - [x] Phase 5: Word-Level Precision
 - [x] Phase 6: Advanced Timeline & Effects
-- [ ] Phase 7: Community Themes & Plugins
+- [x] Phase 7: Community Themes & Plugins
 
 ---
 

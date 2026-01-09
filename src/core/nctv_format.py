@@ -227,7 +227,7 @@ class NCTVFormat:
         
         # Restore settings
         from core.project import ProjectSettings
-        project.settings = ProjectSettings(**metadata['settings'])
+        project.settings = ProjectSettings.from_dict(metadata['settings'])
         
         # Restore lyrics
         from sync.sync_data import LyricsData

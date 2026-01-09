@@ -1,0 +1,33 @@
+karaoke:
+  styles:
+  - active_color: '#FFD700'
+    animation: linear_wipe
+    font_family: Arial
+    font_size: 60
+    inactive_color: '#FFFFFF'
+    name: Neon Gold
+    outline_color: '#FFD700'
+    outline_width: 2.0
+metadata:
+  author: NC-KTV Team
+  description: Default dark theme
+  id: builtin-dark
+  name: Dark
+  version: 1.0.0
+ui:
+  colors:
+    accent: '#FF9800'
+    background: '#1a1a1a'
+    error: '#F44336'
+    foreground: '#ffffff'
+    primary: '#2196F3'
+    success: '#4CAF50'
+    warning: '#FF9800'
+  fonts:
+    family: Arial
+    size: 10
+  styles:
+    button_auto: 'background-color: #673AB7; color: white; font-weight: bold;'
+    button_export: 'background-color: #E91E63; color: white; font-weight: bold;'
+    button_primary: 'background-color: {colors.success}; color: white; font-weight:
+      bold;'

@@ -1689,7 +1689,7 @@ class EditorMode(QWidget):
         default_name = f"{self.project.project_name}_karaoke.mp4"
         current_animation = self.preview_widget.animation_type
         
-        dialog = ExportDialog(self, default_name, current_animation)
+        dialog = ExportDialog(self, default_name, current_animation, project=self.project)
         if not dialog.exec():
             return
             
@@ -1715,6 +1715,23 @@ class EditorMode(QWidget):
                 QMessageBox.warning(self, "Invalid Selection", "Please select a valid background option.")
                 return
 
+        # 1.5 Setup Intro Credits
+        from gui.dialogs.export_credits_dialog import ExportCreditsDialog
+        credits_dialog = ExportCreditsDialog(
+            self, 
+            default_title=self.project.project_name, 
+            default_artist="Unknown Artist"
+        )
+        
+        credits_enabled = False
+        credits_info = {}
+        
+        if credits_dialog.exec():
+            credits_info = credits_dialog.get_info()
+            credits_enabled = credits_info['enabled']
+        else:
+            return # Cancelled
+
         # 3. Generate Subtitles
         custom_style = {}
         if style == "Match Preview":
@@ -1724,7 +1741,8 @@ class EditorMode(QWidget):
                 'outline_color': self.preview_widget.outline_color
             }
             
-        ass_gen = ASSGenerator(self.lyrics_data, style=style, animation=animation, custom_style=custom_style)
+        offset = self.project.timing_metadata.get('global_offset', 0.0)
+        ass_gen = ASSGenerator(self.lyrics_data, style=style, animation=animation, custom_style=custom_style, global_offset=offset)
         ass_content = ass_gen.generate()
         
         temp_ass = self.project.get_temp_dir() / "subs.ass"
@@ -1738,6 +1756,25 @@ class EditorMode(QWidget):
         
         ass_path_unix = str(temp_ass).replace("\\", "/").replace(":", "\\:").replace("'", r"\'")
         
+        # Generate Overlay Image if needed
+        overlay_path_unix = ""
+        credits_duration = 5.0
+        if credits_enabled:
+            from utils.image_generator import ImageGenerator
+            credits_img_path = self.project.get_temp_dir() / "credits_overlay.png"
+            ImageGenerator.generate_credits_overlay(
+                credits_info['title'],
+                credits_info['artist'],
+                credits_info['show_version'],
+                str(credits_img_path)
+            )
+            overlay_path_unix = str(credits_img_path).replace("\\", "/").replace(":", "\\:").replace("'", r"\'")
+            credits_duration = credits_info['duration']
+        
+        # Check for Intro Mode (Global)
+        intro_mode_val = credits_info.get('intro_mode', False) if credits_enabled else False
+        is_preroll = credits_enabled and intro_mode_val
+        
         cmd = ["ffmpeg", "-y"]
         
         # Handle different background types
@@ -1749,26 +1786,128 @@ class EditorMode(QWidget):
                 cmd.extend(["-i", str(video_input)])
                 cmd.extend(["-i", str(inst_path)])
                 cmd.extend(["-i", str(voc_path)])
+                
+                # Check overlay
+                next_input = 3
+                if credits_enabled:
+                    cmd.extend(["-i", str(credits_img_path)])
+                
                 # Use async=1 to fix audio timestamp drift
                 # Use duration=longest to prevent early cuts
-                filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
-                cmd.extend(["-filter_complex", filter_complex])
-                cmd.extend(["-map", "[v]", "-map", "[a]"])
+                
+                fc = []
+                
+                fc = []
+                
+                if is_preroll:
+                    # INTRO MODE: Concat [Intro] + [Main]
+                    # 1. Main Video with Burned Subtitles (scaled to 1080p)
+                    fc.append(f"[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,ass='{ass_path_unix}'[v_main_raw]")
+                    
+                    # 2. Main Audio Mix
+                    fc.append(f"[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a_main]")
+                    
+                    # 3. Intro Video (Static Image Loop)
+                    # Loop image, scale, set SAR to 1:1, trim to duration
+                    fc.append(f"[{next_input}:v]loop=loop=-1:size=1:start=0,scale=1920:1080,setsar=1,trim=duration={credits_duration}[v_intro]")
+                    
+                    # 4. Intro Audio (Silence)
+                    fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={credits_duration}[a_intro]")
+                    
+                    # 5. Concatenate
+                    # [v_intro][a_intro][v_main_raw][a_main]
+                    fc.append(f"[v_intro][a_intro][v_main_raw][a_main]concat=n=2:v=1:a=1[v_out][a_out]")
+                    
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", "[v_out]", "-map", "[a_out]"])
+                    
+                else:
+                    # NORMAL / OVERLAY MODE
+                    fc.append(f"[0:v]ass='{ass_path_unix}'[v0]")
+                    
+                    last_v = "[v0]"
+                    if credits_enabled:
+                         # Overlay on top of video
+                        fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                        last_v = "[v1]"
+                        
+                    fc.append(f"[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]")
+                    
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", last_v, "-map", "[a]"])
+                    
                 cmd.extend(["-c:a", "aac", "-b:a", "192k"])
             
             elif has_stems and audio_source_opt == 'instrumental':
                  cmd.extend(["-i", str(video_input)])
                  cmd.extend(["-i", str(inst_path)])
-                 filter_complex = f"[0:v]ass='{ass_path_unix}'[v]"
-                 cmd.extend(["-filter_complex", filter_complex])
-                 cmd.extend(["-map", "[v]", "-map", "1:a"])
+                 
+                 next_input = 2
+                 if credits_enabled:
+                    cmd.extend(["-i", str(credits_img_path)])
+
+                 fc = []
+                 
+                 if is_preroll:
+                    # INTRO MODE: Concat
+                    # 1. Main Video scaled
+                    fc.append(f"[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,ass='{ass_path_unix}'[v_main_raw]")
+                    # 2. Audio (Instrumental only)
+                    fc.append(f"[1:a]aresample=async=1[a_main]")
+                    # 3. Intro Video
+                    fc.append(f"[{next_input}:v]loop=loop=-1:size=1:start=0,scale=1920:1080,setsar=1,trim=duration={credits_duration}[v_intro]")
+                    # 4. Intro Audio (Silence)
+                    fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={credits_duration}[a_intro]")
+                    # 5. Concat
+                    fc.append(f"[v_intro][a_intro][v_main_raw][a_main]concat=n=2:v=1:a=1[v_out][a_out]")
+                    
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", "[v_out]", "-map", "[a_out]"])
+                 else:
+                     fc.append(f"[0:v]ass='{ass_path_unix}'[v0]")
+                     
+                     last_v = "[v0]"
+                     if credits_enabled:
+                        fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                        last_v = "[v1]"
+                     
+                     cmd.extend(["-filter_complex", ";".join(fc)])
+                     cmd.extend(["-map", last_v, "-map", "1:a"])
+                     
                  cmd.extend(["-c:a", "aac", "-b:a", "192k"])
                  
             else:
                 # Original Audio or fallback
                 cmd.extend(["-i", str(video_input)])
-                cmd.extend(["-vf", f"ass='{ass_path_unix}'"])
-                cmd.extend(["-c:a", "copy"]) # Use copy for max fidelity if no mixing
+                
+                next_input = 1
+                if credits_enabled:
+                    cmd.extend(["-i", str(credits_img_path)])
+                    
+                fc = []
+                
+                if is_preroll and credits_enabled:
+                     # INTRO MODE
+                     fc.append(f"[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,ass='{ass_path_unix}'[v_main_raw]")
+                     fc.append(f"[0:a]aresample=async=1[a_main]")
+                     fc.append(f"[{next_input}:v]loop=loop=-1:size=1:start=0,scale=1920:1080,setsar=1,trim=duration={credits_duration}[v_intro]")
+                     fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={credits_duration}[a_intro]")
+                     fc.append(f"[v_intro][a_intro][v_main_raw][a_main]concat=n=2:v=1:a=1[v_out][a_out]")
+                     
+                     cmd.extend(["-filter_complex", ";".join(fc)])
+                     cmd.extend(["-map", "[v_out]", "-map", "[a_out]"])
+                     cmd.extend(["-c:a", "aac", "-b:a", "192k"]) # Re-encode for concat safety
+                elif credits_enabled:
+                    # Overlay Mode
+                    fc.append(f"[0:v]ass='{ass_path_unix}'[v0]")
+                    fc.append(f"[v0][{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", "[v1]", "-map", "0:a"])
+                    cmd.extend(["-c:a", "copy"])
+                else:
+                    # No Credits
+                    cmd.extend(["-vf", f"ass='{ass_path_unix}'"])
+                    cmd.extend(["-c:a", "copy"])
         
         else:
             # Audio-only source, use selected background
@@ -1790,16 +1929,69 @@ class EditorMode(QWidget):
                     cmd.extend(["-stream_loop", "-1", "-i", str(bg_video)])  # Loop video
                     cmd.extend(["-i", str(inst_path)])
                     cmd.extend(["-i", str(voc_path)])
-                    filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
-                    cmd.extend(["-filter_complex", filter_complex])
-                    cmd.extend(["-map", "[v]", "-map", "[a]"])
+                    
+                    next_input = 3
+                    if credits_enabled:
+                         cmd.extend(["-i", str(credits_img_path)])
+                    
+                    fc = []
+                    fc.append(f"[0:v]ass='{ass_path_unix}'[v0]")
+                    
+                    last_v = "[v0]"
+                    if credits_enabled:
+                        fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                        last_v = "[v1]"
+                    
+                    fc.append(f"[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]")
+                    
+                    if is_preroll and credits_enabled:
+                        # [v0] is main video from ass, [a] is mixed audio
+                        # We need to tag them to be clearer
+                        # Actually [v0] is what we want to be the 'main' part
+                        
+                        # Intro part
+                        fc.append(f"[{next_input}:v]loop=loop=-1:size=1:start=0,scale=1920:1080,setsar=1,trim=duration={credits_duration}[v_intro]")
+                        fc.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={credits_duration}[a_intro]")
+                        
+                        # Main part reuse [v0] and [a]
+                        # Assume [v0] is already formatted correctly? It's from bg_video + ass.
+                        # We might need to scale [v0] just in case
+                        fc.append(f"[v0]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[v_main]")
+                        
+                        fc.append(f"[v_intro][a_intro][v_main][a]concat=n=2:v=1:a=1[v_out][a_out]")
+                        
+                        cmd.extend(["-filter_complex", ";".join(fc)])
+                        cmd.extend(["-map", "[v_out]", "-map", "[a_out]"])
+                    else:
+                        # Normal Overlay
+                        last_v = "[v0]"
+                        if credits_enabled:
+                            fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                            last_v = "[v1]"
+                            
+                        cmd.extend(["-filter_complex", ";".join(fc)])
+                        cmd.extend(["-map", last_v, "-map", "[a]"])
+                        
                     cmd.extend(["-shortest"])  # Cut when audio ends
                     cmd.extend(["-c:a", "aac", "-b:a", "192k"])
                 else:
                     cmd.extend(["-stream_loop", "-1", "-i", str(bg_video)])
                     cmd.extend(["-i", str(video_input)])
-                    cmd.extend(["-filter_complex", f"[0:v]ass='{ass_path_unix}'[v]"])
-                    cmd.extend(["-map", "[v]", "-map", "1:a"])
+                    
+                    next_input = 2
+                    if credits_enabled:
+                         cmd.extend(["-i", str(credits_img_path)])
+                    
+                    fc = []
+                    fc.append(f"[0:v]ass='{ass_path_unix}'[v0]")
+                    
+                    last_v = "[v0]"
+                    if credits_enabled:
+                        fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                        last_v = "[v1]"
+                        
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", last_v, "-map", "1:a"])
                     cmd.extend(["-shortest"])
                     cmd.extend(["-c:a", "copy"])
             
@@ -1810,17 +2002,43 @@ class EditorMode(QWidget):
                     cmd.extend(["-loop", "1", "-i", str(bg_image)])
                     cmd.extend(["-i", str(inst_path)])
                     cmd.extend(["-i", str(voc_path)])
-                    filter_complex = f"[0:v]scale=1920:1080,ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
-                    cmd.extend(["-filter_complex", filter_complex])
-                    cmd.extend(["-map", "[v]", "-map", "[a]"])
+                    
+                    next_input = 3
+                    if credits_enabled:
+                         cmd.extend(["-i", str(credits_img_path)])
+                    
+                    fc = []
+                    fc.append(f"[0:v]scale=1920:1080,ass='{ass_path_unix}'[v0]")
+                    
+                    last_v = "[v0]"
+                    if credits_enabled:
+                        fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                        last_v = "[v1]"
+                        
+                    fc.append(f"[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]")
+                    
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", last_v, "-map", "[a]"])
                     cmd.extend(["-t", str(duration)])
                     cmd.extend(["-c:a", "aac", "-b:a", "192k"])
                 else:
                     cmd.extend(["-loop", "1", "-i", str(bg_image)])
                     cmd.extend(["-i", str(video_input)])
-                    filter_complex = f"[0:v]scale=1920:1080,ass='{ass_path_unix}'[v]"
-                    cmd.extend(["-filter_complex", filter_complex])
-                    cmd.extend(["-map", "[v]", "-map", "1:a"])
+                    
+                    next_input = 2
+                    if credits_enabled:
+                         cmd.extend(["-i", str(credits_img_path)])
+                    
+                    fc = []
+                    fc.append(f"[0:v]scale=1920:1080,ass='{ass_path_unix}'[v0]")
+                    
+                    last_v = "[v0]"
+                    if credits_enabled:
+                        fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                        last_v = "[v1]"
+                        
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", last_v, "-map", "1:a"])
                     cmd.extend(["-t", str(duration)])
                     cmd.extend(["-c:a", "copy"])
             
@@ -1833,17 +2051,43 @@ class EditorMode(QWidget):
                     cmd.extend(["-f", "lavfi", "-i", f"color=c={color_hex}:s=1920x1080:r=30"])
                     cmd.extend(["-i", str(inst_path)])
                     cmd.extend(["-i", str(voc_path)])
-                    filter_complex = f"[0:v]ass='{ass_path_unix}'[v];[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]"
-                    cmd.extend(["-filter_complex", filter_complex])
-                    cmd.extend(["-map", "[v]", "-map", "[a]"])
+                    
+                    next_input = 3
+                    if credits_enabled:
+                         cmd.extend(["-i", str(credits_img_path)])
+                    
+                    fc = []
+                    fc.append(f"[0:v]ass='{ass_path_unix}'[v0]")
+                    
+                    last_v = "[v0]"
+                    if credits_enabled:
+                        fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                        last_v = "[v1]"
+                        
+                    fc.append(f"[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,aresample=async=1[a]")
+                    
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", last_v, "-map", "[a]"])
                     cmd.extend(["-t", str(duration)])
                     cmd.extend(["-c:a", "aac", "-b:a", "192k"])
                 else:
                     cmd.extend(["-f", "lavfi", "-i", f"color=c={color_hex}:s=1920x1080:r=30"])
                     cmd.extend(["-i", str(video_input)])
-                    filter_complex = f"[0:v]ass='{ass_path_unix}'[v]"
-                    cmd.extend(["-filter_complex", filter_complex])
-                    cmd.extend(["-map", "[v]", "-map", "1:a"])
+                    
+                    next_input = 2
+                    if credits_enabled:
+                         cmd.extend(["-i", str(credits_img_path)])
+                    
+                    fc = []
+                    fc.append(f"[0:v]ass='{ass_path_unix}'[v0]")
+                    
+                    last_v = "[v0]"
+                    if credits_enabled:
+                        fc.append(f"{last_v}[{next_input}:v]overlay=0:0:enable='between(t,0,{credits_duration})'[v1]")
+                        last_v = "[v1]"
+                    
+                    cmd.extend(["-filter_complex", ";".join(fc)])
+                    cmd.extend(["-map", last_v, "-map", "1:a"])
                     cmd.extend(["-t", str(duration)])
                     cmd.extend(["-c:a", "copy"])
         

@@ -1,0 +1,13 @@
+{
+  "id": "com.ncktv.hello-effect",
+  "name": "Hello World Effect",
+  "version": "1.0.0",
+  "author": "NC-KTV Team",
+  "description": "Example effect plugin that displays 'Hello World' text",
+  "type": "effect",
+  "permissions": ["render"],
+  "entry_point": "main.py",
+  "dependencies": {
+    "nc-ktv": ">=0.10.0"
+  }
+}

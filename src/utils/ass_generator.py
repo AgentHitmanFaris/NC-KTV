@@ -4,11 +4,12 @@ ASS (Advanced Substation Alpha) Generator for Karaoke
 from core.lyrics import LyricsData
 
 class ASSGenerator:
-    def __init__(self, lyrics_data: LyricsData, style: str = "Neon Gold", animation: str = "Standard (Wipe)", custom_style=None):
+    def __init__(self, lyrics_data: LyricsData, style: str = "Neon Gold", animation: str = "Standard (Wipe)", custom_style=None, global_offset: float = 0.0):
         self.lyrics = lyrics_data
         self.style = style
         self.animation = animation
         self.custom_style = custom_style or {}
+        self.global_offset = global_offset
         
     def generate(self) -> str:
         """Generate ASS file content"""
@@ -29,30 +30,33 @@ PlayResX: 1920
 PlayResY: 1080
 """
 
+    def _to_ass_color(self, color_obj, alpha=0):
+        """Helper for ASS color: &HAABBGGRR"""
+        if isinstance(color_obj, str):
+            # Assume hex string but ASS needs &H
+            return "&H00FFFFFF" 
+        # If it's a QColor or similar tuple
+        try:
+            # Assuming RGBA or close
+            # We need to flip to BGR
+            return f"&H{alpha:02X}{color_obj.blue():02X}{color_obj.green():02X}{color_obj.red():02X}"
+        except:
+            return "&H00FFFFFF"
+
     def _generate_styles(self):
         """Define Styles based on selection"""
         base_header = """[V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding"""
         
         # Helper for ASS color: &HAABBGGRR
-        def to_ass_color(color_obj, alpha=0):
-            if isinstance(color_obj, str):
-                # Assume hex string but ASS needs &H
-                return "&H00FFFFFF" 
-            # If it's a QColor or similar tuple
-            try:
-                # Assuming RGBA or close
-                # We need to flip to BGR
-                return f"&H{alpha:02X}{color_obj.blue():02X}{color_obj.green():02X}{color_obj.red():02X}"
-            except:
-                return "&H00FFFFFF"
+        # (Moved to class method _to_ass_color)
 
         if self.style == "Match Preview" and self.custom_style:
             # Generate style from preview settings
             # We use 'Preview' as the style name
-            primary = to_ass_color(self.custom_style.get('active_color'), 0)
-            secondary = to_ass_color(self.custom_style.get('inactive_color'), 0) # Secondary is often the "wait" color in ASS karaoke
-            outline = to_ass_color(self.custom_style.get('outline_color'), 0)
+            primary = self._to_ass_color(self.custom_style.get('active_color'), 0)
+            secondary = self._to_ass_color(self.custom_style.get('inactive_color'), 0) # Secondary is often the "wait" color in ASS karaoke
+            outline = self._to_ass_color(self.custom_style.get('outline_color'), 0)
             
             # Simple styles
             return base_header + f"""
@@ -87,9 +91,68 @@ Style: Default,Arial,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,
     def _generate_events(self):
         content = ["[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
         
-        for line in self.lyrics.lines:
-            start_fmt = self._format_time(line.start_time)
-            end_fmt = self._format_time(line.end_time)
+        lines = self.lyrics.lines
+        if not lines:
+            return "\n".join(content)
+
+        # --- Countdown Logic ---
+        # If the first line starts after 4 seconds (plus global offset), add a countdown
+        first_start = max(0, lines[0].start_time + self.global_offset)
+        
+        if first_start > 4.0:
+            # 4 beats/seconds of countdown
+            # "3" -> "2" -> "1" -> "GO"
+            # Each lasts ~0.8s
+            
+            # Timings relative to first lyric start
+            # 3: T-4
+            # 2: T-3
+            # 1: T-2
+            # GO: T-1
+            
+            cd_steps = [
+                (first_start - 4.0, "3"),
+                (first_start - 3.0, "2"),
+                (first_start - 2.0, "1"),
+                (first_start - 1.0, "GO")
+            ]
+            
+            # Determine style for countdown
+            # Use 'Default' or 'Preview' depending on mode, but force centered position
+            cd_style = "Default"
+            if self.style == "Match Preview":
+                cd_style = "Preview"
+            elif self.style == "Neon Gold":
+                cd_style = "NeonSharp"
+            elif self.style == "Classic Blue":
+                cd_style = "Classic"
+            elif self.style == "Clean White":
+                cd_style = "Clean"
+
+            for t_start, text in cd_steps:
+                if t_start < 0: continue # Skip if negative time
+                
+                t_end = t_start + 0.8 # Short duration
+                
+                s_fmt = self._format_time(t_start)
+                e_fmt = self._format_time(t_end)
+                
+                # Force center screen for countdown
+                # {\pos(960,540)} is center of 1920x1080
+                # Use \fade(255,0,255, t1, t2, t3, t4) or just simple \fad(100,100)
+                formatted_line = f"Dialogue: 0,{s_fmt},{e_fmt},{cd_style},,0,0,0,,{{\\pos(960,540)}}{{\\fad(100,100)}}{text}"
+                content.append(formatted_line)
+
+        for i, line in enumerate(lines):
+            # Apply global offset
+            start_t = max(0, line.start_time + self.global_offset)
+            end_t = max(0, line.end_time + self.global_offset)
+            
+            start_fmt = self._format_time(start_t)
+            end_fmt = self._format_time(end_t)
+            
+            # Lookahead for next line
+            next_line = lines[i+1] if i + 1 < len(lines) else None
             
             # --- Map Preview Animations to ASS Format ---
             # Preview animations: "Linear Wipe", "Syllable Step", "Glow Pulse", "Fade In", "Bouncing Ball"
@@ -159,6 +222,22 @@ Style: Default,Arial,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,
                 style_name = "Clean"
                  
             # --- Generate Event Lines ---
+            
+            # Position Overrides for "Match Preview"
+            # User reported Center (540) is "too high". Moving to bottom.
+            # Active Line: y=900
+            # Next Line: y=1020
+            pos_tag = ""
+            next_pos_tag = ""
+            
+            if self.style == "Match Preview":
+                pos_tag = "{\\pos(960,900)}"
+                # Only show next line if enabled/available
+                if next_line:
+                    # Inactive color (grayish), static
+                    # Use secondary style or override
+                    pass
+            
             if self.style == "Neon Gold":
                 # Neon style uses double layer (blur + sharp)
                 glow_line = f"Dialogue: 0,{start_fmt},{end_fmt},NeonBlur,,0,0,0,,{{\\blur15}}{final_text}"
@@ -167,8 +246,32 @@ Style: Default,Arial,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,1,0,0,0,100,
                 content.append(sharp_line)
             else:
                 # Single layer for other styles
-                line_str = f"Dialogue: 0,{start_fmt},{end_fmt},{style_name},,0,0,0,,{final_text}"
+                # Apply pos_tag if Match Preview
+                text_with_pos = f"{pos_tag}{final_text}"
+                line_str = f"Dialogue: 0,{start_fmt},{end_fmt},{style_name},,0,0,0,,{text_with_pos}"
                 content.append(line_str)
+                
+            # --- Generate Next Line Preview (Match Preview Only for now) ---
+            if self.style == "Match Preview" and next_line:
+                # Next line text (plain, no k tags)
+                next_text = next_line.text
+                next_pos = "{\\pos(960,1020)}"
+                
+                # Use inactive color override
+                color_tag = ""
+                if self.custom_style and 'inactive_color' in self.custom_style:
+                    # Ass \c&H...& sets primary fill color
+                    inactive_hex = self._to_ass_color(self.custom_style.get('inactive_color'), 0)
+                    # Strip the &H prefix for \c tag if needed? No, ASS \c expects &H...& or &H...
+                    # Actually standard tag is \c&HBBGGRR&
+                    color_tag = f"{{\\c{inactive_hex}&}}"
+                
+                # Check if next_line needs time constraints
+                # It should appear during the CURRENT line's duration
+                
+                # We add \alpha&H80& for transparency, and explicit color tag
+                preview_line = f"Dialogue: 0,{start_fmt},{end_fmt},{style_name},,0,0,0,,{next_pos}{color_tag}{{\\alpha&H80&}}{next_text}"
+                content.append(preview_line)
             
         return "\n".join(content)
 

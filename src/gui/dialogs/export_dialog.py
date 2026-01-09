@@ -261,10 +261,11 @@ class ExportDialog(QDialog):
                     print(f"[DEBUG] Exists: {self.project.source_file.exists()}")
             
             if not self.project or not self.project.source_file or not self.project.source_file.exists():
+                path_str = str(self.project.source_file) if self.project else "Unknown"
                 QMessageBox.warning(
                     self,
                     "No Music Video",
-                    f"Music video source not available.\nPath: {self.project.source_file}"
+                    f"Music video source not available.\nPath: {path_str}"
                 )
                 return
         
