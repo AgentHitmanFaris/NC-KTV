@@ -7,9 +7,9 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, 
     QTextEdit, QTableWidget, QTableWidgetItem, 
     QPushButton, QLabel, QGroupBox, QHeaderView,
-    QMessageBox, QProgressDialog, QFileDialog, QComboBox,
+    QMessageBox, QProgressDialog, QProgressBar, QFileDialog, QComboBox,
     QGraphicsView, QGraphicsScene, QAbstractItemView, QDoubleSpinBox,
-    QLineEdit
+    QLineEdit, QApplication
 )
 from PyQt6.QtMultimediaWidgets import QVideoWidget, QGraphicsVideoItem
 from PyQt6.QtCore import Qt, QTimer, QSizeF, QUrl
@@ -450,6 +450,20 @@ class EditorMode(QWidget):
         # Mute background video (we only want visuals)
         self.video_audio_output.setVolume(0.0) 
         
+        # Performance optimizations for smoother playback
+        try:
+            # Set playback rate (1.0 = normal speed, lower precision for better performance)
+            self.bg_video_player.setPlaybackRate(1.0)
+            
+            # Enable low-latency mode if available (Qt 6.5+)
+            from PyQt6.QtMultimedia import QMediaPlayer
+            if hasattr(QMediaPlayer, 'LowLatency'):
+                self.bg_video_player.setVideoOutput(self.video_item)
+            
+            logger.info("[PERFORMANCE] Video player optimized for smooth playback")
+        except Exception as e:
+            logger.warning(f"Could not apply video performance settings: {e}")
+        
         # Connect main player to background player for sync
         # Note: self.player.media_player is the source of truth
         self.player.state_changed.connect(self._sync_video_state)
@@ -572,18 +586,31 @@ class EditorMode(QWidget):
         if hasattr(self, 'preview_widget'):
             self.preview_widget.set_playing(is_playing)
             
-        if is_playing:
+        # Check if player is actually stopped (not just paused)
+        player_state = self.player.media_player.playbackState()
+        
+        if player_state == QMediaPlayer.PlaybackState.StoppedState:
+            # Stop video completely and reset position
+            self.bg_video_player.stop()
+        elif is_playing:
+            # Sync position before playing to avoid initial drift
+            self.bg_video_player.setPosition(self.player.media_player.position())
             self.bg_video_player.play()
         else:
+            # Pause and sync position
             self.bg_video_player.pause()
-            # Resync position on pause to ensure frames match
             self.bg_video_player.setPosition(self.player.media_player.position())
-
 
         
     def _switch_tab(self, mode: str):
         """Switch between Input and Sync modes"""
         self.current_tab = mode # Track current tab
+        
+        # MUTUAL EXCLUSION: Uncheck special views when switching to regular tabs
+        self.btn_timeline.setChecked(False)
+        self.btn_fine_tune.setChecked(False)
+        self.timeline_widget.hide()
+        self.syllable_editor.hide()
         
         # Update buttons
         for m, btn in self.mode_btns.items():
@@ -935,13 +962,32 @@ class EditorMode(QWidget):
 
     def _on_player_position(self, ms):
         """Update UI based on playback position"""
-        # Sync background video if needed
+        # Sync background video if needed (with aggressive frame-skip optimization)
         if hasattr(self, 'bg_video_player'):
-            vid_pos = self.bg_video_player.position()
-            # Tolerance: 80ms (approx 2-3 frames at 30fps)
-            # If drift is too large, snap video to audio
-            if abs(vid_pos - ms) > 80 and self.player.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-                self.bg_video_player.setPosition(ms)
+            # Only check sync every few frames to reduce overhead
+            if not hasattr(self, '_video_sync_counter'):
+                self._video_sync_counter = 0
+            
+            self._video_sync_counter += 1
+            
+            # Check sync every 10th position update (reduced from 5th for better performance)
+            if self._video_sync_counter % 10 == 0:
+                vid_pos = self.bg_video_player.position()
+                # Tolerance: 200ms during playback (more forgiving to reduce jitter)
+                # Only sync if actually playing
+                player_state = self.player.media_player.playbackState()
+                
+                if player_state == QMediaPlayer.PlaybackState.PlayingState:
+                    drift = abs(vid_pos - ms)
+                    # Increased tolerance to 200ms to reduce correction frequency
+                    if drift > 200:
+                        # Significant drift - hard sync
+                        self.bg_video_player.setPosition(ms)
+                        logger.debug(f"Video drift corrected: {drift}ms")
+                elif player_state == QMediaPlayer.PlaybackState.PausedState:
+                    # When paused, keep video in sync (tighter tolerance)
+                    if abs(vid_pos - ms) > 50:
+                        self.bg_video_player.setPosition(ms)
         
         current_seconds = ms / 1000.0
         
@@ -1301,6 +1347,17 @@ class EditorMode(QWidget):
         self._refresh_table()
         self.is_dirty = True
         self._update_status_bar()
+        
+        # Refresh views
+        if hasattr(self, 'syllable_editor') and self.syllable_editor.isVisible():
+            data, duration = self.player.get_waveform_data()
+            self.syllable_editor.set_data(self.lyrics_data, data, duration)
+            
+        if hasattr(self, 'preview_widget'):
+            # Force re-evaluation of current line
+            if hasattr(self, 'player'):
+                self._on_player_position(self.player.media_player.position())
+        
         logger.info(f"Undo performed. Stack: {self.undo_manager.get_undo_count()}")
         
     def _perform_redo(self):
@@ -1312,6 +1369,17 @@ class EditorMode(QWidget):
         self._refresh_table()
         self.is_dirty = True
         self._update_status_bar()
+        
+        # Refresh views
+        if hasattr(self, 'syllable_editor') and self.syllable_editor.isVisible():
+            data, duration = self.player.get_waveform_data()
+            self.syllable_editor.set_data(self.lyrics_data, data, duration)
+            
+        if hasattr(self, 'preview_widget'):
+            # Force re-evaluation of current line
+            if hasattr(self, 'player'):
+                self._on_player_position(self.player.media_player.position())
+                
         logger.info(f"Redo performed. Stack: {self.undo_manager.get_redo_count()}")
 
     def _update_status_bar(self):
@@ -1499,17 +1567,44 @@ class EditorMode(QWidget):
             
         selected_lang_code = None
         selected_lang_name = lang # Keep full name for display
-        
+       
         if lang != "Auto Detect":
             # Extract code from "Malay (ms)" -> "ms"
             selected_lang_code = lang.split('(')[-1].strip(')')
             selected_lang_name = lang.split('(')[0].strip()
 
-        # Progress Dialog
+        # Modern Progress Dialog with smooth animation
         self.progress = QProgressDialog(f"Initializing AI ({selected_lang_name})...", "Cancel", 0, 0, self)
         self.progress.setWindowTitle("AI Transcription")
         self.progress.setWindowModality(Qt.WindowModality.WindowModal)
+        
+        # Make progress bar indeterminate (smooth continuous animation)
+        progress_bar = self.progress.findChild(QProgressBar)
+        if progress_bar:
+            progress_bar.setMinimum(0)
+            progress_bar.setMaximum(0)  # Indeterminate mode
+            # Add smooth animation styling
+            progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 2px solid rgba(102, 126, 234, 0.5);
+                    border-radius: 8px;
+                    background: rgba(30, 30, 45, 0.8);
+                    text-align: center;
+                    color: white;
+                    font-weight: bold;
+                    min-height: 24px;
+                }
+                QProgressBar::chunk {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #667eea, stop:1 #764ba2);
+                    border-radius: 6px;
+                }
+            """)
+        
         self.progress.show()
+        
+        # Force UI update for smooth appearance
+        QApplication.processEvents()
         
         # Worker - pass model_name
         self.transcriber = TranscriptionWorker(audio_source, model_name=model_name, language=selected_lang_code)
@@ -1528,6 +1623,9 @@ class EditorMode(QWidget):
                      self.progress.setLabelText(f"Transcribing ({selected_lang_name})...")
                  else:
                      self.progress.setLabelText(msg)
+                 
+                 # Force UI update for smooth text changes
+                 QApplication.processEvents()
              except RuntimeError:
                  # Dialog might be deleted if closed violently
                  pass
@@ -2161,11 +2259,15 @@ class EditorMode(QWidget):
     def _toggle_fine_tune_view(self):
         """Toggle the Fine-Tune Timing view"""
         if self.btn_fine_tune.isChecked():
+            # MUTUAL EXCLUSION: Uncheck and hide other views
+            self.btn_timeline.setChecked(False)
+            for mode, btn in self.mode_btns.items():
+                btn.setChecked(False)
+            
             # Hide other views
             self.text_editor.hide()
             self.sync_table.hide()
             self.timeline_widget.hide()
-            self.btn_timeline.setChecked(False)  # Uncheck timeline button
             
             # Show Fine-Tune view
             self.syllable_editor.show()
@@ -2178,7 +2280,7 @@ class EditorMode(QWidget):
             data, duration = self.player.get_waveform_data()
             self.syllable_editor.set_data(self.lyrics_data, data, duration)
             
-            logger.info("Fine-Tune view enabled")
+            logger.info("Fine-Tune view enabled (exclusive)")
         else:
             self.syllable_editor.hide()
             self._switch_tab(self.current_tab) # Restore previous
@@ -2186,18 +2288,29 @@ class EditorMode(QWidget):
     def _on_syllable_data_changed(self):
         """Handle data changes from syllable editor"""
         self.is_dirty = True
-        # Optionally refresh basic timeline if needed
-        # self._refresh_table() # If we want to update the table view
+        # Force preview update to reflect changes immediately
+        if hasattr(self, 'preview_widget'):
+            self.preview_widget.update()
         logger.info("Syllable data updated")
 
     def _toggle_timeline_view(self):
         """Toggle timeline widget visibility"""
         if self.btn_timeline.isChecked():
+            # MUTUAL EXCLUSION: Uncheck and hide other views
+            self.btn_fine_tune.setChecked(False)
+            for mode, btn in self.mode_btns.items():
+                btn.setChecked(False)
+            
+            # Hide other views
+            self.text_editor.hide()
+            self.sync_table.hide()
+            self.syllable_editor.hide()
+            
             # Reinitialize timeline to ensure lyrics are populated
             self._initialize_timeline()
             self._sync_timeline_waveform() # Ensure waveform is synced
             self.timeline_widget.show()
-            logger.info('Timeline view enabled')
+            logger.info('Timeline view enabled (exclusive)')
         else:
             self.timeline_widget.hide()
             logger.info('Timeline view disabled')

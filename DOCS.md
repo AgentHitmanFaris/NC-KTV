@@ -345,6 +345,27 @@ Y_{max} = \max(A[t_{start}:t_{end}]) \times \frac{H}{2} + Y_{center}
 
 This ensures visually accurate representation of peaks even at low zoom levels.
 
+### 13. Viewport Culling Optimization (Performance)
+
+To handle long videos (1000+ syllables) without rendering lag, the canvas employs a strict **2D Viewport Culling** algorithm.
+
+1.  **Vertical Culling:**
+    Only render rows $R_i$ where:
+    ```math
+    Y_{viewport} \le R_{y} + R_{height} \quad \land \quad R_{y} \le Y_{viewport} + H_{viewport}
+    ```
+
+2.  **Horizontal Culling:**
+    For each visible row, only render syllable tokens $S_j$ where:
+    ```math
+    X_{viewport} - M \le S_{end\_x} \quad \land \quad S_{start\_x} \le X_{viewport} + W_{viewport} + M
+    ```
+    *(Where $M$ is a safety margin of ~100px)*
+
+This reduces draw calls from $O(N)$ (all syllables) to $O(K)$ (visible syllables), typically reducing 2000+ draw calls to <50 per frame.
+
+---
+
 ## Intro Credits Construction
 
 The intro credits feature concatenates a dynamically generated video clip $V_{intro}$ with the main song video $V_{song}$.

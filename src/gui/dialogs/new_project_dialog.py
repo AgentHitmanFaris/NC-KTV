@@ -58,6 +58,7 @@ class NewProjectDialog(QDialog):
         file_group.setLayout(file_layout)
         layout.addWidget(file_group)
         
+        
         # 3. Karaoke Mode (UVR Model)
         mode_group = QGroupBox("2. Karaoke Mode (Vocal Removal)")
         mode_layout = QVBoxLayout()
@@ -74,27 +75,20 @@ class NewProjectDialog(QDialog):
         }
         
         # Populate combinations
-        # Check what models are actually available to avoid errors, but default to showing all options if unsure
-        try:
-             # We try to smart-select based on what's installed
-             # Note: ProcessingWorker instantiation might be heavy if it loads models, but list_available_models should be light
-             # If this causes lag, we can just use the config or skip it.
-             # We'll instantiate minimal worker or just access methods if static/classmethod possible
-             # For now, just catch error if it fails
-             dummy_worker = ProcessingWorker(self.config, None) # Project is None, might error if __init__ uses it
-             # Wait, ProcessingWorker __init__ expects project. Passing None might crash lines:
-             # self.audio_processor = AudioProcessor(temp_dir=project.get_temp_dir())
-             # So we can't instantiate ProcessingManager without a project easily.
-             # Better to use Config.get_available_models directly if possible.
-             pass 
-        except:
-             pass
-             
-        # Just populate all options for now. UVR worker will handle downloading or erroring later.
         for display, filename in self.mode_map.items():
             self.combo_mode.addItem(display, filename)
                  
         mode_layout.addWidget(self.combo_mode)
+        
+        # Add Advanced Model Selection button
+        btn_advanced_models = QPushButton("🎛️ Advanced Model Selection...")
+        btn_advanced_models.clicked.connect(self._open_model_manager)
+        btn_advanced_models.setToolTip("Browse and download additional vocal removal models")
+        mode_layout.addWidget(btn_advanced_models)
+        
+        # Store currently selected model filename for Model Manager
+        self.selected_model_filename = None
+        
         mode_group.setLayout(mode_layout)
         layout.addWidget(mode_group)
         
@@ -110,15 +104,31 @@ class NewProjectDialog(QDialog):
         trans_row.addWidget(QLabel("Whisper Model:"))
         
         self.combo_whisper = QComboBox()
-        self.combo_whisper.addItems(["tiny", "base", "small", "medium", "large-v3"])
         
-        # Select 'small' or configured default
+        # Populate Whisper models (Faster & OpenAI)
+        from pathlib import Path
+        whisper_dir = Path("models/whisper")
+        
+        # 1. Standard Faster-Whisper Models
+        standard_models = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
+        for model in standard_models:
+            dir_name = f"faster-whisper-{model}"
+            is_installed = (whisper_dir / dir_name).exists()
+            label = f"{model} (Faster-Whisper){' ✓' if is_installed else ''}"
+            self.combo_whisper.addItem(label, model)
+
+        # 2. OpenAI Models (.pt files)
+        if whisper_dir.exists():
+            for pt_file in whisper_dir.glob("*.pt"):
+                self.combo_whisper.addItem(f"{pt_file.stem} (OpenAI Original) ✓", pt_file.name)
+        
+        # Select configured default
         default_model = self.config.get('lyrics.whisper_model', 'small')
-        index = self.combo_whisper.findText(default_model)
+        index = self.combo_whisper.findData(default_model)
         if index >= 0:
             self.combo_whisper.setCurrentIndex(index)
         else:
-            self.combo_whisper.setCurrentText('small')
+            self.combo_whisper.setCurrentIndex(2) # Default to small (Faster)
             
         trans_row.addWidget(self.combo_whisper)
         trans_layout.addLayout(trans_row)
@@ -166,17 +176,51 @@ class NewProjectDialog(QDialog):
                 self.btn_create.setEnabled(True)
             else:
                 QMessageBox.warning(self, "Invalid File", msg)
+    
+    def _open_model_manager(self):
+        """Open the advanced model manager dialog"""
+        from gui.dialogs.model_manager_dialog import VocalRemovalModelDialog
+        
+        # Get current model selection
+        current_model = self.selected_model_filename or self.combo_mode.currentData()
+        
+        dialog = VocalRemovalModelDialog(self.config, current_model, self)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_model = dialog.get_selected_model()
+            self.selected_model_filename = selected_model
+            
+            # Check if this model is in the preset combo
+            found = False
+            for i in range(self.combo_mode.count()):
+                if self.combo_mode.itemData(i) == selected_model:
+                    self.combo_mode.setCurrentIndex(i)
+                    found = True
+                    break
+            
+            # If not in presets, add it as a custom option
+            if not found:
+                # Get model display name from dialog
+                from gui.dialogs.model_manager_dialog import VocalRemovalModelDialog
+                model_info = VocalRemovalModelDialog.AVAILABLE_MODELS.get(selected_model, {})
+                display_name = model_info.get('display_name', selected_model)
                 
+                self.combo_mode.addItem(f"📦 {display_name} (Custom)", selected_model)
+                self.combo_mode.setCurrentIndex(self.combo_mode.count() - 1)
+                 
     def _create_project(self):
         """Gather settings and accept"""
         if not self.selected_file:
             return
             
+        # Use custom selected model if available, otherwise use combo box selection
+        uvr_model = self.selected_model_filename or self.combo_mode.currentData()
+            
         self.result_data = {
             'file_path': self.selected_file,
-            'uvr_model': self.combo_mode.currentData(),
+            'uvr_model': uvr_model,
             'transcribe': self.trans_group.isChecked(),
-            'whisper_model': self.combo_whisper.currentText()
+            'whisper_model': self.combo_whisper.currentData()
         }
         
         self.accept()

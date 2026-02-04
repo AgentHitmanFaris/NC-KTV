@@ -115,30 +115,36 @@ class PreferencesDialog(QDialog):
         # Auto-detect available Whisper models
         from pathlib import Path
         whisper_dir = Path("models/whisper")
-        available_models = []
         
-        if whisper_dir.exists():
-            # Find all .pt files
-            for model_file in whisper_dir.glob("*.pt"):
-                model_name = model_file.stem  # e.g., "small", "medium"
-                available_models.append(model_name)
-        
-        # Add standard models (in order of quality)
-        standard_models = ["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"]
+        # 1. Standard Faster-Whisper Models
+        standard_models = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
         
         for model in standard_models:
-            if model in available_models:
-                self.combo_whisper.addItem(f"{model} ✓ (Downloaded)", model)
-            else:
-                self.combo_whisper.addItem(f"{model} (Will download)", model)
+            # Check for faster-whisper directory
+            dir_name = f"faster-whisper-{model}"
+            is_installed = (whisper_dir / dir_name).exists()
+            
+            label = f"{model} (Faster-Whisper)"
+            if is_installed:
+                label += " ✓"
+            
+            self.combo_whisper.addItem(label, model) # Data is "small", "medium" etc.
+
+        # 2. OpenAI Models (.pt files)
+        if whisper_dir.exists():
+            for pt_file in whisper_dir.glob("*.pt"):
+                self.combo_whisper.addItem(f"{pt_file.stem} (OpenAI Original) ✓", pt_file.name) # Data is filename.pt
         
         # Set current model
         current_model = self.config.get('lyrics.whisper_model', 'small')
         index = self.combo_whisper.findData(current_model)
         if index >= 0:
             self.combo_whisper.setCurrentIndex(index)
-        
-        form.addRow("Model Size:", self.combo_whisper)
+        else:
+             # Fallback: try finding by text if data match failed (legacy config)
+            index = self.combo_whisper.findText(current_model, Qt.MatchFlag.MatchContains)
+            if index >= 0:
+                self.combo_whisper.setCurrentIndex(index)
         
         # Add info label
         info_label = QLabel(

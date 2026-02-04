@@ -6,7 +6,7 @@
 
 **Professional Music Video Karaoke Maker**
 
-![Version](https://img.shields.io/badge/version-0.10.3-blue.svg)
+![Version](https://img.shields.io/badge/version-0.11.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/python-3.10-blue.svg)
 ![Status](https://img.shields.io/badge/status-beta-orange.svg)
@@ -42,7 +42,7 @@ NC-KTV automates the entire karaoke video creation workflow:
 - **Dual-Line Preview**: Live karaoke preview with active/upcoming lines
 - **Tap-to-Sync**: Spacebar timing for natural rhythm matching
 - **Word-Level Editing**: Fine-tune individual word timings
-- **AI Transcription**: Faster-Whisper integration (4x faster than standard models)
+- **AI Transcription**: Faster-Whisper integration & OpenAI `.pt` support (4x faster / Max Compatibility)
 - **Multi-Format Import**: SRT, LRC, VTT, TTML, ASS/SSA subtitles
 - **Romanization**: Automatic Korean/Japanese → Latin script
 - **Local Model Detection**: Automatically finds and uses installed AI models

@@ -3,6 +3,14 @@
 
 $ErrorActionPreference = "Stop"
 
+# Detect Python
+if (Test-Path "$PSScriptRoot\python_embed\python.exe") {
+    $PYTHON = "$PSScriptRoot\python_embed\python.exe"
+    Write-Host "Using embedded Python: $PYTHON" -ForegroundColor Green
+} else {
+    $PYTHON = "python"
+}
+
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  NC-KTV Comprehensive Test Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
@@ -10,10 +18,10 @@ Write-Host ""
 
 # Check if pytest is installed
 try {
-    python -m pytest --version | Out-Null
+    & $PYTHON -m pytest --version | Out-Null
 } catch {
     Write-Host "ERROR: pytest not found. Installing test dependencies..." -ForegroundColor Red
-    pip install -r tests/requirements.txt
+    & $PYTHON -m pip install -r tests/requirements.txt
 }
 
 Write-Host "Test Categories:" -ForegroundColor Yellow
@@ -40,33 +48,33 @@ function Run-Tests {
     Write-Host "Running: $Description" -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
     
-    $allArgs = @("-v", "--tb=short") + $ExtraArgs + @($TestPath)
+    $allArgs = @("-m", "pytest", "-v", "--tb=short") + $ExtraArgs + @($TestPath)
     
-    python -m pytest @allArgs
+    & $PYTHON $allArgs
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✓ $Description PASSED" -ForegroundColor Green
+        return 0
     } else {
         Write-Host "✗ $Description FAILED" -ForegroundColor Red
+        return 1
     }
-    
-    return $LASTEXITCODE
 }
 
 switch ($choice) {
-    "1" {
+    '1' {
         Run-Tests "tests/unit/" "Unit Tests"
     }
-    "2" {
+    '2' {
         Run-Tests "tests/integration/" "Integration Tests"
     }
-    "3" {
+    '3' {
         Run-Tests "tests/security/" "Security Tests"
     }
-    "4" {
+    '4' {
         Run-Tests "tests/stress/" "Stress Tests" @("-m", "not slow")
     }
-    "5" {
+    '5' {
         Write-Host ""
         Write-Host "Running ALL tests..." -ForegroundColor Yellow
         Write-Host ""
@@ -88,7 +96,7 @@ switch ($choice) {
         Write-Host "Passed: $passed / $($results.Count)" -ForegroundColor Green
         Write-Host "Failed: $failed / $($results.Count)" -ForegroundColor $(if ($failed -gt 0) { "Red" } else { "Green" })
     }
-    "6" {
+    '6' {
         Write-Host ""
         Write-Host "Running Quick Tests..." -ForegroundColor Yellow
         
@@ -100,25 +108,25 @@ switch ($choice) {
         Write-Host ""
         Write-Host "Quick Tests: $passed / $($results.Count) passed" -ForegroundColor $(if ($passed -eq $results.Count) { "Green" } else { "Yellow" })
     }
-    "7" {
+    '7' {
         Write-Host ""
         Write-Host "Running Security Scan (Bandit)..." -ForegroundColor Yellow
         Write-Host "----------------------------------------" -ForegroundColor Gray
         
         try {
-            bandit -r src/ -f text
+            & $PYTHON -m bandit -r src/ -f text
             Write-Host ""
             Write-Host "✓ Security scan complete" -ForegroundColor Green
         } catch {
-            Write-Host "ERROR: Bandit not installed. Run: pip install bandit" -ForegroundColor Red
+            Write-Host "ERROR: Bandit execution failed." -ForegroundColor Red
         }
     }
-    "8" {
+    '8' {
         Write-Host ""
         Write-Host "Generating Coverage Report..." -ForegroundColor Cyan
         Write-Host "----------------------------------------" -ForegroundColor Gray
         
-        python -m pytest --cov=src --cov-report=html --cov-report=term tests/
+        & $PYTHON -m pytest --cov=src --cov-report=html --cov-report=term tests/
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host ""

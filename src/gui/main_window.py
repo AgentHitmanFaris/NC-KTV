@@ -25,7 +25,7 @@ class MainWindow(QMainWindow):
         
         self.config = config
         self.current_project = None  # Track active project
-        self.setWindowTitle("NC-KTV - Music Video Karaoke Maker")
+        self.setWindowTitle("NC-KTV v0.11.0 - Music Video Karaoke Maker")
         self.setWindowIcon(QIcon("assets/logo.png"))
         self.resize(1200, 800)
         
@@ -48,6 +48,9 @@ class MainWindow(QMainWindow):
         self._create_menu_bar()
         self._create_status_bar()
         self._load_mode()
+        
+        # Open in maximized mode by default for full workspace
+        self.showMaximized()
     
     def _check_prerequisites(self):
         """Check if required tools are installed"""
@@ -294,7 +297,7 @@ class MainWindow(QMainWindow):
         """Show about dialog"""
         about_text = """
         <h2>NC-KTV - Music Video Karaoke Maker</h2>
-        <p>Version 0.1.0</p>
+        <p>Version 0.11.0</p>
         <p>Professional karaoke video creation with automatic vocal removal and lyrics synchronization.</p>
         <p><b>Features:</b></p>
         <ul>

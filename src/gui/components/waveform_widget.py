@@ -55,8 +55,12 @@ class WaveformWidget(QWidget):
                     # Load audio with librosa (auto-resamples to 22050 Hz by default)
                     y, sr = librosa.load(str(self.path), sr=None, mono=True)
                     
-                    # Downsample waveform for visualization (approx 2000 samples)
-                    target_samples = 2000
+                    # Downsample waveform for visualization
+                    # We want enough resolution for zooming. 100 samples/sec for 3 min song = 18000 samples.
+                    duration_sec = len(y) / sr
+                    target_samples = int(duration_sec * 100) # 100 samples per second
+                    target_samples = max(2000, min(target_samples, 50000)) # Clamp between 2k and 50k
+                    
                     hop_length = max(1, len(y) // target_samples)
                     
                     # Extract envelope using RMS

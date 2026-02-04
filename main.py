@@ -84,6 +84,14 @@ def main():
     # Load configuration
     config = Config()
     
+    # Apply modern stunning stylesheet
+    try:
+        from gui.styles.modern_theme import get_modern_stylesheet
+        app.setStyleSheet(get_modern_stylesheet())
+        logging.info("Applied modern UI theme successfully")
+    except Exception as e:
+        logging.warning(f"Could not apply modern theme: {e}")
+    
     # Create and show main window
     window = MainWindow(config)
     window.show()

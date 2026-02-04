@@ -188,40 +188,45 @@ class ModelManagerWidget(QWidget):
             # Description
             self.whisper_table.setItem(row, 3, QTableWidgetItem(info["description"]))
             
+            
             # Action button
             if not is_installed:
                 btn_download = QPushButton("📥 Download")
-                # We simply pass the model name string here (e.g. "large-v3", "tiny")
                 btn_download.clicked.connect(lambda checked, m=model_name: self._download_whisper_model(m))
                 self.whisper_table.setCellWidget(row, 4, btn_download)
             else:
-                label = QLabel("Installed")
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.whisper_table.setCellWidget(row, 4, label)
+                btn_delete = QPushButton("🗑️ Uninstall")
+                btn_delete.setStyleSheet("color: #ff5252;")
+                btn_delete.clicked.connect(lambda checked, m=model_name: self._delete_whisper_model(m))
+                self.whisper_table.setCellWidget(row, 4, btn_delete)
                 
+    def _populate_uvr_table(self):
+        """Populate UVR models table"""
+        self.uvr_table.setRowCount(len(self.UVR_MODELS))
+        
+        for row, (model_name, info) in enumerate(self.UVR_MODELS.items()):
+            self.uvr_table.setItem(row, 0, QTableWidgetItem(model_name))
+            self.uvr_table.setItem(row, 1, QTableWidgetItem(info["size"]))
+            self.uvr_table.setItem(row, 2, QTableWidgetItem(info["speed"]))
+            self.uvr_table.setItem(row, 3, QTableWidgetItem(info["description"]))
+            
     def _download_whisper_model(self, model_name: str):
         """Download a Whisper model using faster_whisper"""
         info = self.WHISPER_MODELS[model_name]
-        
-        # We want to save to models/whisper/{dir_name}
-        # But faster_whisper.download_model(..., output_dir=X) will put files into X directly?
-        # Yes.
-        
         destination_dir = Path("models/whisper") / info["dir_name"]
         
         reply = QMessageBox.question(
             self,
             "Confirm Download",
             f"Download {model_name} ({info['size']})?\n\n"
-            f"This will download the model files from Hugging Face.\n"
-            f"Please wait while the download completes.",
+            f"This will download the model files via the faster-whisper library.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
         if reply != QMessageBox.StandardButton.Yes:
             return
         
-        # Create progress dialog (Indeterminate)
+        # Create progress dialog
         progress_dialog = QProgressDialog(
             f"Downloading {model_name}...",
             "Cancel",
@@ -230,7 +235,6 @@ class ModelManagerWidget(QWidget):
             self
         )
         progress_dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
-        # progress_dialog.setAutoClose(True) # Don't auto-close immediately on 0
         progress_dialog.setMinimumDuration(0)
         
         # Start download worker
@@ -248,58 +252,34 @@ class ModelManagerWidget(QWidget):
         self.download_worker.start()
         
         progress_dialog.exec()
-        """Populate UVR models table"""
-        self.uvr_table.setRowCount(len(self.UVR_MODELS))
+
+    def _delete_whisper_model(self, model_name: str):
+        """Delete an installed Whisper model"""
+        import shutil
         
-        for row, (model_name, info) in enumerate(self.UVR_MODELS.items()):
-            self.uvr_table.setItem(row, 0, QTableWidgetItem(model_name))
-            self.uvr_table.setItem(row, 1, QTableWidgetItem(info["size"]))
-            self.uvr_table.setItem(row, 2, QTableWidgetItem(info["speed"]))
-            self.uvr_table.setItem(row, 3, QTableWidgetItem(info["description"]))
-    
-    def _download_whisper_model(self, model_name: str):
-        """Download a Whisper model"""
         info = self.WHISPER_MODELS[model_name]
-        url = info["url"]
-        destination = Path("models/whisper") / model_name
+        destination_dir = Path("models/whisper") / info["dir_name"]
         
+        if not destination_dir.exists():
+            QMessageBox.warning(self, "Error", f"Model directory not found:\n{destination_dir}")
+            self._populate_whisper_table() # Refresh UI
+            return
+
         reply = QMessageBox.question(
             self,
-            "Confirm Download",
-            f"Download {model_name} ({info['size']})?\n\nThis may take several minutes.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            "Confirm Uninstall",
+            f"Are you sure you want to delete the model '{model_name}'?\n\n"
+            f"This will remove the folder:\n{destination_dir}\n\n"
+            "This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
         
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        
-        # Create progress dialog
-        progress_dialog = QProgressDialog(
-            f"Downloading {model_name}...",
-            "Cancel",
-            0,
-            100,
-            self
-        )
-        progress_dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
-        progress_dialog.setAutoClose(True)
-        
-        # Start download worker
-        self.download_worker = DownloadWorker(url, destination)
-        
-        def update_progress(current, total):
-            if total > 0:
-                progress_dialog.setValue(int(current / total * 100))
-        
-        def download_finished(success, message):
-            if success:
-                QMessageBox.information(self, "Success", message)
-                self._populate_whisper_table()  # Refresh table
-            else:
-                QMessageBox.critical(self, "Error", message)
-        
-        self.download_worker.progress.connect(update_progress)
-        self.download_worker.finished.connect(download_finished)
-        self.download_worker.start()
-        
-        progress_dialog.exec()
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                shutil.rmtree(destination_dir)
+                QMessageBox.information(self, "Success", f"Model '{model_name}' uninstalled successfully.")
+                self._populate_whisper_table()
+            except Exception as e:
+                logger.error(f"Failed to delete model {model_name}: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to delete model:\n{e}")

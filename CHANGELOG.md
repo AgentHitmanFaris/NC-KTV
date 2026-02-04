@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.11.0] - 2026-02-04
+
+### Added
+- **Optimization**: Significant Syllable Editor performance boost (85-96% draw call reduction) using viewport culling.
+- **OpenAI Model Support**: Native support for standard OpenAI `.pt` models in `models/whisper`.
+- **Uninstall Button**: Added ability to uninstall `faster-whisper` models to free up disk space.
+
+### Fixed
+- **Syllable Editor Lag**: Fixed severe UI freeze on long videos (2+ mins) by only rendering visible syllables/rows.
+- **Interaction Crash**: Fixed "prencede" crash when clicking the syllable canvas by adding robust error handling.
+- **Video Sync**: Fixed playback drift, stop state handling, and optimized sync checks with frame-skipping.
+
+### Changed
+- **Model Paths**: Standardized local model folder names for `faster-whisper` (e.g., `faster-whisper-medium`).
+- **Model Selection UI**: now clearly distinguishes between "Faster-Whisper" and "OpenAI Original" models.
+
 ## [0.10.3] - 2026-01-09
 
 ### Added
