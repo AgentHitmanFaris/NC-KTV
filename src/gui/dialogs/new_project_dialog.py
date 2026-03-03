@@ -7,7 +7,7 @@ Consolidates file selection, mode choice, and transcription settings.
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QLineEdit, QFileDialog, QComboBox, 
-    QCheckBox, QGroupBox, QMessageBox, QFrame
+    QCheckBox, QGroupBox, QMessageBox, QFrame, QWidget
 )
 from PyQt6.QtCore import Qt
 from pathlib import Path
@@ -100,8 +100,23 @@ class NewProjectDialog(QDialog):
         
         trans_layout = QVBoxLayout()
         
+        # Method Selection
+        method_row = QHBoxLayout()
+        method_row.addWidget(QLabel("Method:"))
+        self.combo_method = QComboBox()
+        self.combo_method.addItem("🤖 Whisper AI (Offline)", "whisper")
+        self.combo_method.addItem("🌐 Search Online (lrclib.net)", "online")
+        self.combo_method.currentIndexChanged.connect(self._on_method_changed)
+        method_row.addWidget(self.combo_method)
+        trans_layout.addLayout(method_row)
+        
+        # Whisper Settings Container
+        self.whisper_container = QWidget()
+        whisper_layout = QVBoxLayout(self.whisper_container)
+        whisper_layout.setContentsMargins(0, 0, 0, 0)
+        
         trans_row = QHBoxLayout()
-        trans_row.addWidget(QLabel("Whisper Model:"))
+        trans_row.addWidget(QLabel("Model:"))
         
         self.combo_whisper = QComboBox()
         
@@ -131,11 +146,13 @@ class NewProjectDialog(QDialog):
             self.combo_whisper.setCurrentIndex(2) # Default to small (Faster)
             
         trans_row.addWidget(self.combo_whisper)
-        trans_layout.addLayout(trans_row)
+        whisper_layout.addLayout(trans_row)
         
         lbl_hint = QLabel("Note: 'fast-whisper' will be used for acceleration.")
         lbl_hint.setStyleSheet("color: gray; font-size: 11px;")
-        trans_layout.addWidget(lbl_hint)
+        whisper_layout.addWidget(lbl_hint)
+        
+        trans_layout.addWidget(self.whisper_container)
         
         trans_group.setLayout(trans_layout)
         layout.addWidget(trans_group)
@@ -207,6 +224,11 @@ class NewProjectDialog(QDialog):
                 
                 self.combo_mode.addItem(f"📦 {display_name} (Custom)", selected_model)
                 self.combo_mode.setCurrentIndex(self.combo_mode.count() - 1)
+                
+    def _on_method_changed(self, index):
+        """Handle transcription method change"""
+        method = self.combo_method.currentData()
+        self.whisper_container.setVisible(method == "whisper")
                  
     def _create_project(self):
         """Gather settings and accept"""
@@ -220,6 +242,7 @@ class NewProjectDialog(QDialog):
             'file_path': self.selected_file,
             'uvr_model': uvr_model,
             'transcribe': self.trans_group.isChecked(),
+            'transcription_method': self.combo_method.currentData(),
             'whisper_model': self.combo_whisper.currentData()
         }
         

@@ -37,6 +37,7 @@ class WizardMode(QWidget):
         self.project: Optional[Project] = None
         self.processing_worker: Optional[ProcessingWorker] = None
         self.transcription_worker = None # Dynamic import
+        self.search_worker = None # Dynamic import
         
         self._init_ui()
         
@@ -117,6 +118,7 @@ class WizardMode(QWidget):
             self.project.settings.uvr_model = uvr_model
             # Store transcription choice for later
             self.project.settings.auto_transcribe = do_transcribe
+            self.project.settings.transcription_method = data.get('transcription_method', 'whisper')
             self.project.settings.whisper_model = whisper_model
             
             # 2. Update UI
@@ -154,7 +156,11 @@ class WizardMode(QWidget):
         
         # Proceed to next step
         if self.project.settings.auto_transcribe:
-            self._run_transcription()
+            method = getattr(self.project.settings, 'transcription_method', 'whisper')
+            if method == 'online':
+                self._run_online_search()
+            else:
+                self._run_transcription()
         else:
             self._finish()
             
@@ -242,5 +248,56 @@ class WizardMode(QWidget):
             self.processing_worker.cancel()
         if self.transcription_worker and self.transcription_worker.isRunning():
             self.transcription_worker.cancel()
+        if self.search_worker and self.search_worker.isRunning():
+            self.search_worker.terminate()
+            self.search_worker.wait()
             
         self.status_label.setText("Processing cancelled.")
+
+    def _run_online_search(self):
+        """Step 2: Online Lyrics Search"""
+        self.lbl_trans.setEnabled(True)
+        self.bar_trans.setEnabled(True)
+        self.lbl_trans.setText("Step 2: Searching lyrics online...")
+        self.lbl_trans.setStyleSheet("font-weight: bold; color: #2196F3;")
+        self.bar_trans.setRange(0, 0) # Indeterminate
+        
+        from workers.online_search_worker import OnlineSearchWorker
+        
+        # Use source audio file for search (title extraction) and duration
+        audio_file = self.project.source_file
+        
+        self.search_worker = OnlineSearchWorker(audio_file)
+        self.search_worker.finished.connect(self._on_search_complete)
+        self.search_worker.error_occurred.connect(self._on_search_error)
+        self.search_worker.start()
+        
+    def _on_search_complete(self, lyrics_data):
+        self.bar_trans.setRange(0, 100)
+        self.bar_trans.setValue(100)
+        self.lbl_trans.setText("Step 2: Lyrics Found & Downloaded ✅")
+        self.lbl_trans.setStyleSheet("color: green;")
+        
+        self.project.lyrics = lyrics_data
+        
+        self._finish()
+
+    def _on_search_error(self, error_msg):
+        self.bar_trans.setRange(0, 100)
+        self.bar_trans.setValue(0)
+        self.lbl_trans.setText(f"Step 2: Search Failed")
+        self.lbl_trans.setStyleSheet("color: red;")
+        
+        # Ask user how to proceed
+        reply = QMessageBox.question(
+            self, 
+            "Lyrics Not Found",
+            f"{error_msg}\n\nDo you want to continue with empty lyrics?\n(No will cancel processing)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self._finish()
+        else:
+            self.status_label.setText("Processing stopped.")
+            self.btn_cancel.hide()
