@@ -11,6 +11,7 @@ namespace ncktv {
 
 class SyllableEditor : public QWidget {
     Q_OBJECT
+
 public:
     explicit SyllableEditor(QWidget* parent = nullptr);
 

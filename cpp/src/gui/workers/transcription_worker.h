@@ -4,6 +4,7 @@
 namespace ncktv {
 class TranscriptionWorker : public QObject {
     Q_OBJECT
+
 public:
     explicit TranscriptionWorker(QObject* parent = nullptr);
     void startTranscription(const QString& audioPath, const QString& model = "base",

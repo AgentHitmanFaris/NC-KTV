@@ -3,6 +3,7 @@
 namespace ncktv {
 class ProcessingWorker : public QObject {
     Q_OBJECT
+
 public:
     explicit ProcessingWorker(QObject* parent = nullptr);
     void startProcessing(const QString& inputPath, const QString& outputDir);

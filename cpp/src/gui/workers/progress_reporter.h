@@ -3,6 +3,7 @@
 namespace ncktv {
 class ProgressReporter : public QObject {
     Q_OBJECT
+
 public:
     explicit ProgressReporter(QObject* parent = nullptr);
     void reportProgress(int percent, const QString& message);

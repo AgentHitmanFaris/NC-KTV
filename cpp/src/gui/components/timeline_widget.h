@@ -11,6 +11,7 @@ namespace ncktv {
 
 class TimelineWidget : public QWidget {
     Q_OBJECT
+
 public:
     explicit TimelineWidget(QWidget* parent = nullptr);
 

@@ -29,10 +29,10 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia MultimediaWidge
 # find_package(ICU COMPONENTS uc i18n data) # This line was removed as per the Code Edit's implied change for ICU
 
 # OpenSSL (for AES-256-GCM encryption)
-# find_package(OpenSSL REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 # ─── Targets ─────────────────────────────────────────────────────────────────
 
 add_subdirectory(src/core)
 add_subdirectory(src/gui)
-# add_subdirectory(tests)
+add_subdirectory(tests)

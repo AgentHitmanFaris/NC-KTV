@@ -3,6 +3,7 @@
 namespace ncktv {
 class ExportWorker : public QObject {
     Q_OBJECT
+
 public:
     explicit ExportWorker(QObject* parent = nullptr);
     void startExport(const QString& projectPath, const QString& outputPath,

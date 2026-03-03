@@ -3,6 +3,7 @@
 namespace ncktv {
 class OnlineSearchWorker : public QObject {
     Q_OBJECT
+
 public:
     explicit OnlineSearchWorker(QObject* parent = nullptr);
     void searchLyrics(const QString& title, const QString& artist);

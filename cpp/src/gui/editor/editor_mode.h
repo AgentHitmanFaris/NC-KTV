@@ -19,6 +19,7 @@ namespace ncktv {
 
 class EditorMode : public QWidget {
     Q_OBJECT
+
 public:
     explicit EditorMode(Project* project, QWidget* parent = nullptr);
 

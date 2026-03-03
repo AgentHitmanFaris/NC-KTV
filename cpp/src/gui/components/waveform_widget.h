@@ -10,6 +10,7 @@ namespace ncktv {
 
 class WaveformWidget : public QWidget {
     Q_OBJECT
+
 public:
     explicit WaveformWidget(QWidget* parent = nullptr);
 

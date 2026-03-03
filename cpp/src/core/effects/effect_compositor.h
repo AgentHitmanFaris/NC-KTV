@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QPair>
 #include <QVector>
+#include <QHash>
 #include <optional>
 
 #include "timeline/timeline_data.h"

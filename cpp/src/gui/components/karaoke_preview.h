@@ -10,6 +10,7 @@ namespace ncktv {
 
 class KaraokePreview : public QWidget {
     Q_OBJECT
+
 public:
     explicit KaraokePreview(QWidget* parent = nullptr);
 

@@ -16,7 +16,7 @@ set(CORE_SOURCES
     audio/ffmpeg_utils.cpp
 
     # Effects
-    # effects/effect_compositor.cpp
+    effects/effect_compositor.cpp
 
     # Subtitle parsers
     parsers/subtitle_parser.cpp
@@ -29,7 +29,7 @@ set(CORE_SOURCES
 
     # Project I/O
     project/project.cpp
-    # project/nctv_format.cpp
+    project/nctv_format.cpp
 
     # Configuration
     # config/config_manager.cpp
@@ -79,14 +79,15 @@ target_link_libraries(ncktv_core
         Qt6::Core
         Qt6::Gui
         Qt6::Network
-    # PRIVATE
+    PRIVATE
+        zstd
+        OpenSSL::Crypto
     #     nlohmann_json::nlohmann_json
     #     yaml-cpp
     #     Eigen3::Eigen
     #     $<TARGET_NAME_IF_EXISTS:zstd::libzstd_shared>
     #     $<TARGET_NAME_IF_EXISTS:zstd::libzstd_static>
     #     OpenSSL::SSL
-    #     OpenSSL::Crypto
     #     ICU::uc
     #     ICU::i18n
 )
