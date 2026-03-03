@@ -13,12 +13,14 @@ set(TEST_SOURCES
 
 add_executable(ncktv_tests ${TEST_SOURCES})
 
+find_package(GTest REQUIRED)
+
 target_link_libraries(ncktv_tests
     PRIVATE
         ncktv_core
         Qt6::Core
-    #     GTest::gtest
-    #     GTest::gtest_main
+        GTest::gtest
+        GTest::gtest_main
 )
 
 include(GoogleTest)

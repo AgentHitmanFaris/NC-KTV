@@ -116,7 +116,7 @@ double EffectCompositor::calculateZoomScale(const Effect& effect, double time) c
     if (effect.effectType == EffectType::ZoomIn)
         return startScale + eased * (endScale - startScale);
     else  // ZoomOut
-        return endScale + (1.0 - eased) * (startScale - endScale);
+        return startScale + (1.0 - eased) * (endScale - startScale);
 }
 
 double EffectCompositor::calculateBlurRadius(const Effect& effect, double time) const {

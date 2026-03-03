@@ -10,6 +10,7 @@ namespace ncktv {
 
 class AudioPlayer : public QWidget {
     Q_OBJECT
+
 public:
     explicit AudioPlayer(QWidget* parent = nullptr);
 

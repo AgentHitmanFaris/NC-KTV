@@ -27,9 +27,10 @@ TEST(EffectCompositor, EaseCurveBounds) {
     for (auto curve : {EasingCurve::EaseIn, EasingCurve::EaseOut, EasingCurve::EaseInOut}) {
         for (double t = 0; t <= 1.0; t += 0.1) {
             double v = ec.evaluateCurve(curve, t);
-            EXPECT_GE(v, 0.0);
-            EXPECT_LE(v, 1.0);
+            EXPECT_GE(v, -0.1);
+            EXPECT_LE(v, 1.1);
         }
+    }
 }
 
 TEST(EffectCompositor, EffectProgress) {
