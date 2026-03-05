@@ -58,6 +58,9 @@ public:
     void addLine(const LyricLine& line);
     void clear();
     void importFromText(const QString& text);
+    void importFromWhisperJson(const QString& jsonString);
+    void importFromLrc(const QString& lrcText);
+    void importFromSrt(const QString& srtText);
 
     // ── Queries ──────────────────────────────────────────────────────────
     [[nodiscard]] double     getTotalDuration() const;

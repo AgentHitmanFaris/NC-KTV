@@ -28,17 +28,24 @@ void WaveformWidget::setDuration(double seconds) {
 
 void WaveformWidget::updateCursor(double timeSeconds) {
     if (m_currentTime != timeSeconds) {
+        double oldCursorX = (m_currentTime * m_pixelsPerSecond) - m_scrollOffsetX;
+        double newCursorX = (timeSeconds * m_pixelsPerSecond) - m_scrollOffsetX;
+        
         m_currentTime = timeSeconds;
         
-        // Auto-scroll logic synced with timeline
-        double cursorX = (m_currentTime * m_pixelsPerSecond) - m_scrollOffsetX;
-        if (cursorX > width() * 0.9) {
+        bool needsScroll = false;
+        if (newCursorX > width() * 0.9) {
             m_scrollOffsetX += width() * 0.5;
-        } else if (cursorX < 0 && m_scrollOffsetX > 0) {
+            needsScroll = true;
+        } else if (newCursorX < 0 && m_scrollOffsetX > 0) {
             m_scrollOffsetX = std::max(0.0, m_scrollOffsetX - width() * 0.5);
+            needsScroll = true;
         }
         
-        update();
+        // Debounce: Only trigger intensive UI repaint if the cursor has actually moved by at least 1 pixel
+        if (needsScroll || std::abs(newCursorX - oldCursorX) >= 1.0) {
+            update();
+        }
     }
 }
 
@@ -85,11 +92,16 @@ void WaveformWidget::drawWaveform(QPainter& painter) {
     // the min/max data would be pre-calculated to exactly match the zoom level.
     // For now, we project the available data points to screen coordinates.
     
+    // Render aggregate min/max per x-pixel column rather than for every single data point
     int startIndex = static_cast<int>((startSec / m_audioDuration) * m_minData.size());
     int endIndex = static_cast<int>((endSec / m_audioDuration) * m_minData.size());
     
     startIndex = std::max(0, std::min(startIndex, static_cast<int>(m_minData.size() - 1)));
     endIndex = std::max(0, std::min(endIndex, static_cast<int>(m_minData.size() - 1)));
+
+    int lastX = -1;
+    int pixelMinY = centerY;
+    int pixelMaxY = centerY;
 
     for (int i = startIndex; i <= endIndex; ++i) {
         double timeSec = (static_cast<double>(i) / m_minData.size()) * m_audioDuration;
@@ -98,8 +110,25 @@ void WaveformWidget::drawWaveform(QPainter& painter) {
         if (x >= 0 && x <= width()) {
             int yMin = centerY - static_cast<int>(m_minData[i] * centerY);
             int yMax = centerY - static_cast<int>(m_maxData[i] * centerY);
-            painter.drawLine(x, yMin, x, yMax);
+            
+            if (x != lastX) {
+                if (lastX != -1) {
+                    painter.drawLine(lastX, pixelMinY, lastX, pixelMaxY);
+                }
+                lastX = x;
+                pixelMinY = yMin;
+                pixelMaxY = yMax;
+            } else {
+                // Expand the running pixel bounds
+                pixelMinY = std::min(pixelMinY, std::min(yMin, yMax));
+                pixelMaxY = std::max(pixelMaxY, std::max(yMin, yMax));
+            }
         }
+    }
+    
+    // Draw the final pixel column
+    if (lastX != -1) {
+        painter.drawLine(lastX, pixelMinY, lastX, pixelMaxY);
     }
     
     // Center line
@@ -125,16 +154,25 @@ void WaveformWidget::drawMarkers(QPainter& painter) {
 }
 
 void WaveformWidget::drawPlayhead(QPainter& painter) {
+    if (m_hoverTime >= 0.0) {
+        int hx = static_cast<int>((m_hoverTime * m_pixelsPerSecond) - m_scrollOffsetX);
+        if (hx >= 0 && hx <= width()) {
+            // Subtle alignment guide (was red)
+            painter.setPen(QPen(QColor(255, 255, 255, 60), 1, Qt::DashLine));
+            painter.drawLine(hx, 0, hx, height());
+        }
+    }
+
     int x = static_cast<int>((m_currentTime * m_pixelsPerSecond) - m_scrollOffsetX);
     
     if (x >= 0 && x <= width()) {
-        painter.setPen(QPen(QColor("#dc143c"), 1));
+        painter.setPen(QPen(QColor("#e14343"), 1));
         painter.drawLine(x, 0, x, height());
         
         QPolygon poly;
-        poly << QPoint(x, height()) << QPoint(x - 5, height() - 5) << QPoint(x - 5, height() - 12) 
-             << QPoint(x + 5, height() - 12) << QPoint(x + 5, height() - 5);
-        painter.setBrush(QColor("#dc143c"));
+        poly << QPoint(x - 6, height()) << QPoint(x + 6, height()) << QPoint(x, height() - 6)
+             << QPoint(x + 6, height() - 12) << QPoint(x - 6, height() - 12) << QPoint(x, height() - 6);
+        painter.setBrush(QColor("#e14343"));
         painter.setPen(Qt::NoPen);
         painter.drawPolygon(poly);
     }
@@ -148,10 +186,12 @@ void WaveformWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void WaveformWidget::mouseMoveEvent(QMouseEvent* event) {
+    double time = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
     if (event->buttons() & Qt::LeftButton) {
-        double draggedTime = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
-        emit seekRequested(std::max(0.0, draggedTime));
+        emit seekRequested(std::max(0.0, time));
     }
+    m_hoverTime = std::max(0.0, time);
+    update();
 }
 
 void WaveformWidget::wheelEvent(QWheelEvent* event) {
@@ -171,6 +211,11 @@ void WaveformWidget::wheelEvent(QWheelEvent* event) {
 }
 
 void WaveformWidget::resizeEvent(QResizeEvent* /*event*/) {
+    update();
+}
+
+void WaveformWidget::leaveEvent(QEvent* /*event*/) {
+    m_hoverTime = -1.0;
     update();
 }
 

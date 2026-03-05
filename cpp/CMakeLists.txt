@@ -8,28 +8,16 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # ─── Qt6 Installation Path ───────────────────────────────────────────────────
-# Qt 6.2.9 (from MuseScore distribution)
-list(APPEND CMAKE_PREFIX_PATH "D:/ProgramData/musescore qt")
+# Qt 6.10.2 (official Qt installation)
+list(APPEND CMAKE_PREFIX_PATH "D:/ProgramData/Qt/6.10.2/msvc2022_64")
 
 # ─── Find Dependencies ───────────────────────────────────────────────────────
 
-# Qt6
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia MultimediaWidgets Network Core5Compat)
+# Qt6 (required)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia MultimediaWidgets Network)
 
-# External Libraries (via vcpkg) - DISABLED for VS2026 compatibility test
-# find_package(nlohmann_json CONFIG REQUIRED)
-# find_package(yaml-cpp CONFIG REQUIRED)
-# find_package(Eigen3 CONFIG REQUIRED)
-# find_package(zstd CONFIG REQUIRED)
-# find_package(GTest CONFIG REQUIRED)
-# find_package(OpenSSL REQUIRED)
-# find_package(ICU COMPONENTS i18n uc REQUIRED)
-
-# ICU (optional, for romanization)
-# find_package(ICU COMPONENTS uc i18n data) # This line was removed as per the Code Edit's implied change for ICU
-
-# OpenSSL (for AES-256-GCM encryption)
-find_package(OpenSSL REQUIRED)
+# OpenSSL (optional - enables encrypted project files)
+find_package(OpenSSL QUIET)
 
 # ─── Targets ─────────────────────────────────────────────────────────────────
 

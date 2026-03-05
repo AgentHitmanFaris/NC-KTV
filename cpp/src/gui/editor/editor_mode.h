@@ -5,15 +5,23 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QToolBar>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QLabel>
+#include <QListWidget>
+#include <QMediaPlayer>
+#include <QAudioOutput>
+#include <QProgressBar>
 
 #include "project/project.h"
 #include "undo_manager.h"
 #include "timing_offset_handler.h"
 #include "../components/timeline_widget.h"
 #include "../components/karaoke_preview.h"
-#include "../components/syllable_editor.h"
 #include "../components/waveform_widget.h"
 #include "../components/audio_player.h"
+#include <QListWidget>
 
 namespace ncktv {
 
@@ -32,8 +40,16 @@ private slots:
     void onTimecodeChanged(double timeSeconds);
     void onLineSelected(int lineIndex);
     void onWordSelected(int lineIndex, int wordIndex);
-    void onLyricsChanged();
+    void onWordsChanged();
     void syncViewState();
+    
+    void onTrackSelectionChanged(int index);
+    void onAddSubtitleClicked();
+    void updateSubtitleList();
+    
+    // Auto/Import slots
+    void onAutoWhisperClicked();
+    void onImportSubtitleClicked();
 
 private:
     void setupUi();
@@ -42,10 +58,11 @@ private:
     void applyTheme();
 
     Project* m_project = nullptr;
-
+    double m_currentTime = 0.0;
+    
     // Components
     KaraokePreview*      m_previewWidget = nullptr;
-    SyllableEditor*      m_syllableEditor = nullptr;
+    QListWidget*         m_subtitleList = nullptr;   // replaces SyllableEditor
     TimelineWidget*      m_timelineWidget = nullptr;
     WaveformWidget*      m_waveformWidget = nullptr;
     AudioPlayer*         m_audioPlayer = nullptr;
@@ -59,6 +76,18 @@ private:
     QSplitter* m_mainSplitter = nullptr;
     QSplitter* m_lowerSplitter = nullptr;
     QSplitter* m_topSplitter = nullptr;
+    
+    QComboBox*   m_trackSelector = nullptr;
+    QLineEdit*   m_subtitleInput = nullptr;
+    QPushButton* m_addSubtitleBtn = nullptr;
+    QPushButton* m_whisperBtn = nullptr;
+    QComboBox*   m_langCombo = nullptr;
+    QPushButton* m_importBtn = nullptr;
+    QLabel*      m_statusLabel = nullptr;
+
+    // Dedicated video-only player (always plays original file, muted)
+    QMediaPlayer* m_videoPlayer = nullptr;
+    QAudioOutput* m_videoAudioOutput = nullptr;
 };
 
 } // namespace ncktv

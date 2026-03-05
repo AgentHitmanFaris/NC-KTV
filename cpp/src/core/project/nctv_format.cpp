@@ -1,6 +1,7 @@
 /*
  * NC-KTV Core — NCTV Binary Format Implementation
- * AES-256-GCM encrypted project files with zstd compression
+ * AES-256-GCM encrypted + zstd-compressed project files.
+ * Falls back to plain JSON when OpenSSL/zstd are unavailable.
  */
 
 #include "nctv_format.h"
@@ -9,13 +10,50 @@
 #include <QFile>
 #include <QDataStream>
 #include <QRandomGenerator>
-#include <openssl/evp.h>
-#include <openssl/kdf.h>
-#include <zstd.h>
+#include <QJsonDocument>
 #include <cstring>
 #include <stdexcept>
 
+#if NCKTV_HAS_OPENSSL
+#  include <openssl/evp.h>
+#  include <openssl/kdf.h>
+#endif
+
+#if NCKTV_HAS_ZSTD
+#  include <zstd.h>
+#endif
+
 namespace ncktv {
+
+// ─── Fallback: plain JSON pack/unpack ────────────────────────────────────────
+// Used when OpenSSL or zstd are not available at compile time.
+
+#if !(NCKTV_HAS_OPENSSL && NCKTV_HAS_ZSTD)
+
+void NCTVFormat::pack(const Project& project, const QString& outputPath) {
+    QFile file(outputPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+        throw std::runtime_error("Cannot open output file: " + outputPath.toStdString());
+
+    std::string jsonStr = project.toJson().dump(2);
+    file.write(QByteArray::fromStdString(jsonStr));
+}
+
+Project NCTVFormat::unpack(const QString& inputPath) {
+    QFile file(inputPath);
+    if (!file.open(QIODevice::ReadOnly))
+        throw std::runtime_error("Cannot open file: " + inputPath.toStdString());
+
+    QByteArray data = file.readAll();
+    try {
+        auto j = nlohmann::json::parse(data.toStdString());
+        return Project::fromJson(j);
+    } catch (const nlohmann::json::exception& e) {
+        throw std::runtime_error(std::string("NCTV parse error: ") + e.what());
+    }
+}
+
+#else  // Full implementation with OpenSSL + zstd
 
 static const QByteArray FIXED_SALT = "NC-KTV-2025-SECURE-CONTAINER";
 
@@ -211,5 +249,7 @@ Project NCTVFormat::unpack(const QString& inputPath) {
     auto j = nlohmann::json::parse(decompressed.toStdString());
     return Project::fromJson(j);
 }
+
+#endif  // NCKTV_HAS_OPENSSL && NCKTV_HAS_ZSTD
 
 } // namespace ncktv

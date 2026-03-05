@@ -31,9 +31,6 @@ set(CORE_SOURCES
     project/project.cpp
     project/nctv_format.cpp
 
-    # Configuration
-    # config/config_manager.cpp
-
     # Plugin system
     plugins/plugin_manager.cpp
 
@@ -72,27 +69,55 @@ set(CORE_HEADERS
 
 add_library(ncktv_core STATIC ${CORE_SOURCES} ${CORE_HEADERS})
 
+# ── Include paths ─────────────────────────────────────────────────────────────
+# Expose src/core itself so #include "audio/audio_clock.h" and
+# #include "nlohmann/json.hpp" both resolve correctly.
 target_include_directories(ncktv_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
+# ── Qt dependencies ───────────────────────────────────────────────────────────
 target_link_libraries(ncktv_core
     PUBLIC
         Qt6::Core
         Qt6::Gui
         Qt6::Network
-    PRIVATE
-        zstd
-        OpenSSL::Crypto
-    #     nlohmann_json::nlohmann_json
-    #     yaml-cpp
-    #     Eigen3::Eigen
-    #     $<TARGET_NAME_IF_EXISTS:zstd::libzstd_shared>
-    #     $<TARGET_NAME_IF_EXISTS:zstd::libzstd_static>
-    #     OpenSSL::SSL
-    #     ICU::uc
-    #     ICU::i18n
 )
 
-# ICU (optional)
+# ── Optional: OpenSSL (for AES-256-GCM in NCTV file format) ──────────────────
+find_package(OpenSSL QUIET)
+if(OpenSSL_FOUND OR OPENSSL_FOUND)
+    message(STATUS "NC-KTV: OpenSSL found — encrypted project files enabled")
+    target_link_libraries(ncktv_core PRIVATE OpenSSL::Crypto)
+    target_compile_definitions(ncktv_core PUBLIC NCKTV_HAS_OPENSSL=1)
+else()
+    message(STATUS "NC-KTV: OpenSSL NOT found — project files will use plain JSON")
+    target_compile_definitions(ncktv_core PUBLIC NCKTV_HAS_OPENSSL=0)
+endif()
+
+# ── Optional: zstd (compression in NCTV file format) ─────────────────────────
+find_package(zstd QUIET)
+if(TARGET zstd::libzstd_shared OR TARGET zstd::libzstd_static OR TARGET PkgConfig::zstd)
+    message(STATUS "NC-KTV: zstd found — project file compression enabled")
+    if(TARGET zstd::libzstd_static)
+        target_link_libraries(ncktv_core PRIVATE zstd::libzstd_static)
+    else()
+        target_link_libraries(ncktv_core PRIVATE zstd::libzstd_shared)
+    endif()
+    target_compile_definitions(ncktv_core PUBLIC NCKTV_HAS_ZSTD=1)
+else()
+    # Try plain package name (some distros)
+    find_library(ZSTD_LIB NAMES zstd libzstd QUIET)
+    if(ZSTD_LIB)
+        message(STATUS "NC-KTV: zstd found (plain lib) — compression enabled")
+        target_link_libraries(ncktv_core PRIVATE ${ZSTD_LIB})
+        target_compile_definitions(ncktv_core PUBLIC NCKTV_HAS_ZSTD=1)
+    else()
+        message(STATUS "NC-KTV: zstd NOT found — project files will skip compression")
+        target_compile_definitions(ncktv_core PUBLIC NCKTV_HAS_ZSTD=0)
+    endif()
+endif()
+
+# ── Optional: ICU (for romanization) ─────────────────────────────────────────
+find_package(ICU COMPONENTS uc i18n QUIET)
 if(ICU_FOUND)
     target_link_libraries(ncktv_core PUBLIC ICU::uc ICU::i18n ICU::data)
     target_compile_definitions(ncktv_core PUBLIC NCKTV_HAS_ICU=1)

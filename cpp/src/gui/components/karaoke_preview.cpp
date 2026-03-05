@@ -27,6 +27,21 @@ void KaraokePreview::setBackgroundImage(const QImage& img) {
     update();
 }
 
+void KaraokePreview::setMediaPlayer(QMediaPlayer* player) {
+    if (!player) return;
+    // Create sink owned by this widget
+    m_videoSink = new QVideoSink(this);
+    connect(m_videoSink, &QVideoSink::videoFrameChanged,
+            this, &KaraokePreview::onVideoFrameChanged);
+    player->setVideoSink(m_videoSink);
+}
+
+void KaraokePreview::onVideoFrameChanged(const QVideoFrame& frame) {
+    if (!frame.isValid()) return;
+    m_backgroundImg = frame.toImage();
+    update();
+}
+
 void KaraokePreview::paintEvent(QPaintEvent* /*event*/) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);

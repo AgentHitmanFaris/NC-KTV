@@ -7,7 +7,6 @@
 #include <QString>
 #include <QStringList>
 #include <QPair>
-#include <nlohmann/json.hpp>
 
 namespace ncktv {
 

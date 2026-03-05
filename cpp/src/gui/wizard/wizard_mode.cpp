@@ -49,12 +49,27 @@ void WizardMode::createWelcomePage() {
     m_filePathEdit->setStyleSheet("padding: 10px; border-radius: 5px; border: 1px solid #cbd5e1;");
     
     QPushButton* browseBtn = new QPushButton("Browse...", this);
-    browseBtn->setStyleSheet("padding: 10px 20px; background-color: #f1f5f9; border-radius: 5px;");
+    browseBtn->setStyleSheet("padding: 10px 20px; background-color: #f1f5f9; border-radius: 5px; color: black;");
     connect(browseBtn, &QPushButton::clicked, this, &WizardMode::onBrowseFile);
 
     fileLayout->addWidget(m_filePathEdit);
     fileLayout->addWidget(browseBtn);
     layout->addLayout(fileLayout);
+
+    auto* transcribeLayout = new QHBoxLayout();
+    transcribeLayout->setAlignment(Qt::AlignCenter);
+
+    m_transcribeCheck = new QCheckBox("Auto-transcribe (Whisper): ", this);
+    m_transcribeCheck->setChecked(true);
+    m_transcribeCheck->setStyleSheet("color: #475569; font-size: 14px; margin-top: 10px;");
+    transcribeLayout->addWidget(m_transcribeCheck);
+    
+    m_langCombo = new QComboBox(this);
+    m_langCombo->addItems({"Auto", "English (en)", "Malay (ms)", "Indonesian (id)", "Japanese (ja)", "Korean (ko)", "Chinese (zh)"});
+    m_langCombo->setStyleSheet("margin-top: 10px; padding: 4px;");
+    transcribeLayout->addWidget(m_langCombo);
+    
+    layout->addLayout(transcribeLayout);
 
     m_startBtn = new QPushButton("🚀 Start Magic", this);
     m_startBtn->setEnabled(false);
@@ -141,6 +156,41 @@ void WizardMode::onSeparationFinished(const QString& instrumentalPath, const QSt
 
     qDebug() << "Separation Finished! Inst:" << instrumentalPath << "Vocals:" << vocalsPath << "Duration:" << duration;
     
+    if (m_transcribeCheck->isChecked() && !vocalsPath.isEmpty()) {
+        m_progressBar->setValue(0);
+        m_statusLabel->setText("Transcribing vocals (this may take a minute)...");
+        
+        auto* tWorker = new TranscriptionWorker(this);
+        connect(tWorker, &TranscriptionWorker::transcriptionComplete, this, &WizardMode::onTranscriptionFinished);
+        connect(tWorker, &TranscriptionWorker::error, this, &WizardMode::onTranscriptionError);
+        connect(tWorker, &TranscriptionWorker::progress, this, [this](int val, const QString& msg){
+            m_progressBar->setValue(val);
+            m_statusLabel->setText(msg);
+        });
+        
+        QString langStr = m_langCombo->currentText();
+        QString langCode = "auto";
+        if (langStr.contains("(")) {
+            langCode = langStr.split("(").last().replace(")", "").trimmed();
+        }
+        
+        tWorker->startTranscription(vocalsPath, "base", langCode);
+    } else {
+        emit projectReady(m_project);
+    }
+}
+
+void WizardMode::onTranscriptionFinished(const QString& resultJson) {
+    m_progressBar->setValue(100);
+    m_statusLabel->setText("Transcription Complete! Loading project...");
+    
+    m_project->lyrics.importFromWhisperJson(resultJson);
+    
+    emit projectReady(m_project);
+}
+
+void WizardMode::onTranscriptionError(const QString& error) {
+    QMessageBox::warning(this, "Transcription Failed", "Could not transcribe vocals:\n" + error + "\n\nProceeding without lyrics.");
     emit projectReady(m_project);
 }
 

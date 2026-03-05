@@ -56,6 +56,16 @@ void MainWindow::createMenuBar() {
 
     fileMenu->addSeparator();
 
+    QAction* saveAction = fileMenu->addAction("&Save Project");
+    saveAction->setShortcut(QKeySequence::Save);
+    connect(saveAction, &QAction::triggered, this, &MainWindow::saveProject);
+
+    QAction* saveAsAction = fileMenu->addAction("Save Project &As...");
+    saveAsAction->setShortcut(QKeySequence::SaveAs);
+    connect(saveAsAction, &QAction::triggered, this, &MainWindow::saveProjectAs);
+
+    fileMenu->addSeparator();
+
     QAction* exitAction = fileMenu->addAction("E&xit");
     exitAction->setShortcut(QKeySequence::Quit);
     connect(exitAction, &QAction::triggered, this, &QMainWindow::close);
@@ -150,6 +160,7 @@ void MainWindow::switchMode(const QString& mode, Project* project) {
         m_centralWidget = wizard;
     } else {
         auto* editor = new EditorMode(project ? project : m_currentProject, this);
+        connect(editor, &EditorMode::requestSave, this, &MainWindow::saveProject);
         m_centralWidget = editor;
     }
 
@@ -179,6 +190,45 @@ void MainWindow::openProject() {
         statusBar()->showMessage("Project loaded: " + filePath, 5000);
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Error", "Failed to open project:\n" + QString(e.what()));
+    }
+}
+
+bool MainWindow::saveProject() {
+    if (!m_currentProject) return true;
+    
+    if (!m_currentProject->projectFilePath.has_value() || m_currentProject->projectFilePath.value().isEmpty()) {
+        return saveProjectAs();
+    }
+    
+    try {
+        m_currentProject->save(m_currentProject->projectFilePath.value());
+        m_currentProject->isDirty = false;
+        statusBar()->showMessage("Project saved.", 5000);
+        return true;
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Save Error", "Failed to save project:\n" + QString(e.what()));
+        return false;
+    }
+}
+
+bool MainWindow::saveProjectAs() {
+    if (!m_currentProject) return true;
+
+    QString filePath = QFileDialog::getSaveFileName(
+        this, "Save Project As", QString(),
+        "NC-KTV Projects (*.nctv);;All Files (*)");
+
+    if (filePath.isEmpty()) return false;
+
+    try {
+        m_currentProject->projectFilePath = filePath;
+        m_currentProject->save(filePath);
+        m_currentProject->isDirty = false;
+        statusBar()->showMessage("Project saved as: " + filePath, 5000);
+        return true;
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Save Error", "Failed to save project:\n" + QString(e.what()));
+        return false;
     }
 }
 
@@ -227,7 +277,7 @@ bool MainWindow::checkUnsavedChanges() {
 
     if (result == QMessageBox::Cancel) return false;
     if (result == QMessageBox::Save) {
-        // TODO: Save current project
+        return saveProject();
     }
     return true;
 }

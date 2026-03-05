@@ -9,6 +9,7 @@
 #include <QTextStream>
 #include <algorithm>
 #include <cmath>
+#include <QRegularExpression>
 
 namespace ncktv {
 
@@ -108,6 +109,134 @@ void LyricsData::importFromText(const QString& text)
             line.endTime   = 0.0;
             lines.append(line);
         }
+    }
+}
+
+void LyricsData::importFromWhisperJson(const QString& jsonString)
+{
+    lines.clear();
+    try {
+        auto j = nlohmann::json::parse(jsonString.toStdString());
+        if (!j.contains("segments") || !j["segments"].is_array()) return;
+        
+        for (const auto& seg : j["segments"]) {
+            LyricLine line;
+            line.text      = fromStd(seg.value("text", ""));
+            line.startTime = seg.value("start", 0.0);
+            line.endTime   = seg.value("end", 0.0);
+            
+            if (seg.contains("words") && seg["words"].is_array()) {
+                for (const auto& w : seg["words"]) {
+                    double start = w.value("start", 0.0);
+                    double end   = w.value("end", 0.0);
+                    double conf  = w.value("probability", 1.0);
+                    QString txt  = fromStd(w.value("word", ""));
+                    line.addWord(txt, start, end, conf);
+                }
+            } else {
+                // If whisper didn't provide word-level timestamps, just add the whole text as one giant word block to prevent crash
+                line.addWord(line.text, line.startTime, line.endTime, 1.0);
+            }
+            
+            lines.append(line);
+        }
+    } catch (...) {}
+}
+
+void LyricsData::importFromLrc(const QString& lrcText)
+{
+    lines.clear();
+    QRegularExpression tagRegex(R"(\[(?<tag>[a-zA-Z]+):(?<val>.*?)\])");
+    QRegularExpression timeRegex(R"(\[(?<m>\d{2,}):(?<s>\d{2}[\.\:]\d{2,3})\])");
+    
+    const auto rawLines = lrcText.split('\n');
+    for (const auto& raw : rawLines) {
+        QString line = raw.trimmed();
+        if (line.isEmpty()) continue;
+        
+        // Metadata
+        auto tagMatch = tagRegex.match(line);
+        if (tagMatch.hasMatch()) {
+            QString tag = tagMatch.captured("tag").toLower();
+            QString val = tagMatch.captured("val").trimmed();
+            if (tag == "ti") title = val;
+            else if (tag == "ar") artist = val;
+            else if (tag == "la") language = val;
+            continue;
+        }
+        
+        // Time tags
+        auto matchIt = timeRegex.globalMatch(line);
+        QVector<double> times;
+        int lastMatchEnd = 0;
+        
+        while (matchIt.hasNext()) {
+            QRegularExpressionMatch m = matchIt.next();
+            int mins = m.captured("m").toInt();
+            double secs = m.captured("s").replace(':', '.').toDouble();
+            times.append(mins * 60.0 + secs);
+            lastMatchEnd = m.capturedEnd();
+        }
+        
+        if (!times.isEmpty()) {
+            QString text = line.mid(lastMatchEnd).trimmed();
+            for (double t : times) {
+                LyricLine ll;
+                ll.text = text;
+                ll.startTime = t;
+                ll.endTime = t + std::max(1.0, text.length() * 0.2); // guess end time
+                ll.addWord(text, ll.startTime, ll.endTime, 1.0);
+                lines.append(ll);
+            }
+        }
+    }
+    
+    // Sort lines by start time
+    std::sort(lines.begin(), lines.end(), [](const LyricLine& a, const LyricLine& b) {
+        return a.startTime < b.startTime;
+    });
+    
+    // Fix end times
+    for (int i = 0; i < lines.size() - 1; ++i) {
+        if (lines[i].endTime > lines[i+1].startTime) {
+            lines[i].endTime = lines[i+1].startTime;
+            if (!lines[i].words.isEmpty()) {
+                lines[i].words[0].endTime = lines[i].endTime;
+            }
+        }
+    }
+}
+
+void LyricsData::importFromSrt(const QString& srtText)
+{
+    lines.clear();
+    const auto blocks = srtText.split(QRegularExpression(R"(\n\s*\n)"), Qt::SkipEmptyParts);
+    
+    QRegularExpression timeRegex(R"((?<h1>\d{2}):(?<m1>\d{2}):(?<s1>\d{2}),(?<ms1>\d{3})\s*-->\s*(?<h2>\d{2}):(?<m2>\d{2}):(?<s2>\d{2}),(?<ms2>\d{3}))");
+    
+    for (const auto& block : blocks) {
+        auto blockLines = block.trimmed().split('\n');
+        if (blockLines.size() < 3) continue; // index, time, text
+        
+        QString timeLine = blockLines[1].trimmed();
+        auto m = timeRegex.match(timeLine);
+        if (!m.hasMatch()) continue;
+        
+        double start = m.captured("h1").toInt() * 3600.0 + m.captured("m1").toInt() * 60.0 + m.captured("s1").toInt() + m.captured("ms1").toInt() / 1000.0;
+        double end = m.captured("h2").toInt() * 3600.0 + m.captured("m2").toInt() * 60.0 + m.captured("s2").toInt() + m.captured("ms2").toInt() / 1000.0;
+        
+        QStringList textParts;
+        for (int i = 2; i < blockLines.size(); ++i) {
+            textParts << blockLines[i].trimmed();
+        }
+        QString text = textParts.join(" ");
+        
+        LyricLine ll;
+        ll.text = text;
+        ll.startTime = start;
+        ll.endTime = end;
+        ll.addWord(text, start, end, 1.0);
+        lines.append(ll);
     }
 }
 

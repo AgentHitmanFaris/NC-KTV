@@ -140,16 +140,25 @@ void SyllableEditor::drawWords(QPainter& painter) {
 }
 
 void SyllableEditor::drawPlayhead(QPainter& painter) {
+    // Draw Hover Line
+    if (m_hoverTime >= 0.0) {
+        int hx = static_cast<int>((m_hoverTime * m_pixelsPerSecond) - m_scrollOffsetX);
+        if (hx >= 0 && hx <= width()) {
+            painter.setPen(QPen(QColor(225, 67, 67, 127), 1, Qt::DashLine));
+            painter.drawLine(hx, 0, hx, height());
+        }
+    }
+
     int x = static_cast<int>((m_currentTime * m_pixelsPerSecond) - m_scrollOffsetX);
     
     if (x >= 0 && x <= width()) {
-        painter.setPen(QPen(QColor("#dc143c"), 1)); // Crimson red
+        painter.setPen(QPen(QColor("#e14343"), 1)); // Adobe-like red
         painter.drawLine(x, 0, x, height());
         
         QPolygon poly;
-        poly << QPoint(x, 0) << QPoint(x - 5, 5) << QPoint(x - 5, 12) 
-             << QPoint(x + 5, 12) << QPoint(x + 5, 5);
-        painter.setBrush(QColor("#dc143c"));
+        poly << QPoint(x - 6, 0) << QPoint(x + 6, 0) << QPoint(x, 6)
+             << QPoint(x + 6, 12) << QPoint(x - 6, 12) << QPoint(x, 6);
+        painter.setBrush(QColor("#e14343"));
         painter.setPen(Qt::NoPen);
         painter.drawPolygon(poly);
     }
@@ -169,11 +178,13 @@ void SyllableEditor::mousePressEvent(QMouseEvent* event) {
 }
 
 void SyllableEditor::mouseMoveEvent(QMouseEvent* event) {
+    double time = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
     if (event->buttons() & Qt::LeftButton) {
         // Dragging seeks or moves word edges depending on hit test
-        double draggedTime = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
-        emit seekRequested(std::max(0.0, draggedTime));
+        emit seekRequested(std::max(0.0, time));
     }
+    m_hoverTime = std::max(0.0, time);
+    update();
 }
 
 void SyllableEditor::wheelEvent(QWheelEvent* event) {
@@ -198,6 +209,11 @@ void SyllableEditor::wheelEvent(QWheelEvent* event) {
 }
 
 void SyllableEditor::resizeEvent(QResizeEvent* /*event*/) {
+    update();
+}
+
+void SyllableEditor::leaveEvent(QEvent* /*event*/) {
+    m_hoverTime = -1.0;
     update();
 }
 

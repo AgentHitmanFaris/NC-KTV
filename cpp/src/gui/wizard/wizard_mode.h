@@ -6,9 +6,12 @@
 #include <QProgressBar>
 #include <QStackedWidget>
 #include <QVBoxLayout>
+#include <QCheckBox>
+#include <QComboBox>
 
 #include "project/project.h"
 #include "workers/vocal_separator_worker.h"
+#include "workers/transcription_worker.h"
 
 namespace ncktv {
 
@@ -26,6 +29,8 @@ private slots:
     void onStartClicked();
     void onSeparationFinished(const QString& instrumentalPath, const QString& vocalsPath);
     void onSeparationError(const QString& error);
+    void onTranscriptionFinished(const QString& resultJson);
+    void onTranscriptionError(const QString& error);
 
 private:
     void setupUi();
@@ -37,6 +42,8 @@ private:
     // Page 1: Welcome / Selection
     QLineEdit* m_filePathEdit;
     QPushButton* m_startBtn;
+    QCheckBox* m_transcribeCheck;
+    QComboBox* m_langCombo;
 
     // Page 2: Processing
     QLabel* m_statusLabel;

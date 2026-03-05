@@ -17,19 +17,32 @@ void TimelineWidget::loadTimeline(TimelineData* data) {
     update();
 }
 
+void TimelineWidget::loadLyrics(LyricsData* data) {
+    m_lyricsData = data;
+    update();
+}
+
 void TimelineWidget::updateCursor(double timeSeconds) {
     if (m_currentTime != timeSeconds) {
+        double oldCursorX = (m_currentTime * m_pixelsPerSecond) - m_scrollOffsetX;
+        double newCursorX = (timeSeconds * m_pixelsPerSecond) - m_scrollOffsetX;
+        
         m_currentTime = timeSeconds;
         
         // Auto-scroll if cursor goes off screen
-        double cursorX = (m_currentTime * m_pixelsPerSecond) - m_scrollOffsetX;
-        if (cursorX > width() * 0.9) {
+        bool needsScroll = false;
+        if (newCursorX > width() * 0.9) {
             m_scrollOffsetX += width() * 0.5;
-        } else if (cursorX < 0 && m_scrollOffsetX > 0) {
+            needsScroll = true;
+        } else if (newCursorX < 0 && m_scrollOffsetX > 0) {
             m_scrollOffsetX = std::max(0.0, m_scrollOffsetX - width() * 0.5);
+            needsScroll = true;
         }
         
-        update();
+        // Debounce: Only trigger intensive UI repaint if the cursor has actually moved by at least 1 pixel
+        if (needsScroll || std::abs(newCursorX - oldCursorX) >= 1.0) {
+            update();
+        }
     }
 }
 
@@ -101,6 +114,62 @@ void TimelineWidget::drawTracks(QPainter& painter) {
     int yOffset = m_rulerHeight;
     int trackIndex = 0;
 
+    // ── Subtitle Track (always first, above audio) ──────────────────────────
+    if (m_lyricsData && !m_lyricsData->lines.isEmpty()) {
+        QRect subTrackRect(0, yOffset, width(), m_trackHeight);
+        painter.fillRect(subTrackRect, QColor("#1a2535"));
+        painter.setPen(QColor("#3f3f46"));
+        painter.drawLine(0, yOffset + m_trackHeight, width(), yOffset + m_trackHeight);
+
+        // Label
+        painter.setPen(QColor("#aaaaaa"));
+        painter.setFont(QFont("Segoe UI", 8));
+        painter.drawText(4, yOffset + 14, "SUB");
+
+        for (const auto& line : m_lyricsData->lines) {
+            double startX = (line.startTime * m_pixelsPerSecond) - m_scrollOffsetX;
+            double endX   = (line.endTime   * m_pixelsPerSecond) - m_scrollOffsetX;
+            double blockW = endX - startX;
+            if (endX < 0 || startX > width()) continue;
+
+            bool isActive = (m_currentTime >= line.startTime && m_currentTime <= line.endTime);
+            QColor blockColor = isActive ? QColor("#e6a817") : QColor("#7a5c00");
+
+            QRectF blockRect(startX, yOffset + 4, std::max(blockW, 2.0), m_trackHeight - 8);
+            painter.fillRect(blockRect, blockColor);
+            painter.setPen(QPen(blockColor.lighter(130), 1));
+            painter.drawRect(blockRect);
+            
+            // Draw individual words if available
+            if (!line.words.isEmpty()) {
+                for (const auto& w : line.words) {
+                    double wStartX = (w.startTime * m_pixelsPerSecond) - m_scrollOffsetX;
+                    double wEndX   = (w.endTime * m_pixelsPerSecond) - m_scrollOffsetX;
+                    double wBlockW = std::max(2.0, wEndX - wStartX);
+                    
+                    if (wStartX >= startX && wEndX <= startX + blockW) {
+                        QRectF wRect(wStartX, yOffset + m_trackHeight / 2, wBlockW, m_trackHeight / 2 - 4);
+                        painter.fillRect(wRect, QColor("#997a00"));
+                        painter.setPen(QPen(QColor("#ccaa00"), 1));
+                        painter.drawRect(wRect);
+                        
+                        painter.setPen(Qt::white);
+                        painter.setFont(QFont("Segoe UI", 7));
+                        painter.drawText(wRect.adjusted(2, 0, -2, 0), Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine, w.word);
+                    }
+                }
+            } else if (blockW > 30) {
+                painter.setPen(Qt::white);
+                painter.setFont(QFont("Segoe UI", 8));
+                painter.drawText(blockRect.adjusted(4, 0, -4, 0), Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine, line.text);
+            }
+        }
+
+        yOffset += m_trackHeight;
+    }
+
+    // ── Audio / Video Tracks ─────────────────────────────────────────────────
+    if (!m_data) return;
     for (const auto& track : m_data->tracks) {
         QRect trackRect(0, yOffset, width(), m_trackHeight);
         
@@ -143,36 +212,193 @@ void TimelineWidget::drawTracks(QPainter& painter) {
 }
 
 void TimelineWidget::drawPlayhead(QPainter& painter) {
+    if (m_hoverTime >= 0.0) {
+        int hx = static_cast<int>((m_hoverTime * m_pixelsPerSecond) - m_scrollOffsetX);
+        if (hx >= 0 && hx <= width()) {
+            // Subtle alignment guide (was red)
+            painter.setPen(QPen(QColor(255, 255, 255, 60), 1, Qt::DashLine));
+            painter.drawLine(hx, 0, hx, height());
+        }
+    }
+
     int x = static_cast<int>((m_currentTime * m_pixelsPerSecond) - m_scrollOffsetX);
     
     if (x >= 0 && x <= width()) {
-        painter.setPen(QPen(QColor("#dc143c"), 1)); // Crimson red
+        painter.setPen(QPen(QColor("#e14343"), 1)); // Adobe red
         painter.drawLine(x, 0, x, height());
         
         // Playhead triangle handle
         QPolygon poly;
-        poly << QPoint(x, 0) << QPoint(x - 5, 5) << QPoint(x - 5, 12) 
-             << QPoint(x + 5, 12) << QPoint(x + 5, 5);
-        painter.setBrush(QColor("#dc143c"));
+        poly << QPoint(x - 6, 0) << QPoint(x + 6, 0) << QPoint(x, 6)
+             << QPoint(x + 6, 12) << QPoint(x - 6, 12) << QPoint(x, 6);
+        painter.setBrush(QColor("#e14343"));
         painter.setPen(Qt::NoPen);
         painter.drawPolygon(poly);
     }
 }
 
-void TimelineWidget::mousePressEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton) {
-        // Clicking ruler or track seeks
-        double clickedTime = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
-        emit seekRequested(std::max(0.0, clickedTime));
+// ─── Helper: find subtitle block index at screen x within subtitle track y ────
+static int hitTestSubtitle(LyricsData* lyricsData, double clickedTime) {
+    if (!lyricsData) return -1;
+    for (int i = 0; i < lyricsData->lines.size(); ++i) {
+        const auto& ln = lyricsData->lines[i];
+        if (clickedTime >= ln.startTime && clickedTime <= ln.endTime)
+            return i;
     }
+    return -1;
+}
+
+static int hitTestWord(const LyricLine& line, double clickedTime) {
+    for (int i = 0; i < line.words.size(); ++i) {
+        const auto& w = line.words[i];
+        // add a tiny bit of padding for easier clicking
+        if (clickedTime >= w.startTime - 0.05 && clickedTime <= w.endTime + 0.05)
+            return i;
+    }
+    return -1;
+}
+
+bool TimelineWidget::inSubtitleTrack(int y) const {
+    return m_lyricsData && !m_lyricsData->lines.isEmpty()
+        && y >= m_rulerHeight && y < m_rulerHeight + m_trackHeight;
+}
+
+void TimelineWidget::mousePressEvent(QMouseEvent* event) {
+    const int y = event->pos().y();
+    const double clickedTime = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
+
+    // ── Subtitle track interaction ─────────────────────────────────────────
+    if (inSubtitleTrack(y) && m_lyricsData) {
+        int idx = hitTestSubtitle(m_lyricsData, clickedTime);
+        if (idx >= 0 && event->button() == Qt::LeftButton) {
+            const auto& ln = m_lyricsData->lines[idx];
+            
+            // Check if user clicked in the lower half (words section)
+            bool inWordsY = y > m_rulerHeight + m_trackHeight / 2 && !ln.words.isEmpty();
+            
+            if (inWordsY) {
+                int wIdx = hitTestWord(ln, clickedTime);
+                if (wIdx >= 0) {
+                    const auto& w = ln.words[wIdx];
+                    double wStartX = (w.startTime * m_pixelsPerSecond) - m_scrollOffsetX;
+                    double wEndX   = (w.endTime * m_pixelsPerSecond) - m_scrollOffsetX;
+                    m_draggingWordLineIdx = idx;
+                    m_draggingWordIdx = wIdx;
+                    m_resizingWordLeft = false;
+                    m_resizingWordRight = false;
+                    
+                    if (event->pos().x() - wStartX < 6) {
+                        m_resizingWordLeft = true;
+                    } else if (wEndX - event->pos().x() < 6) {
+                        m_resizingWordRight = true;
+                    }
+                    if (m_resizingWordLeft || m_resizingWordRight) return;
+                }
+            }
+            
+            double startX = (ln.startTime * m_pixelsPerSecond) - m_scrollOffsetX;
+            double endX   = (ln.endTime   * m_pixelsPerSecond) - m_scrollOffsetX;
+            m_draggingSubIdx = idx;
+            m_dragOrigDur    = ln.endTime - ln.startTime;
+            m_resizingLeft   = false;
+            m_resizingRight  = false;
+            // Edge hotzone: 8 px
+            if (event->pos().x() - startX < 8) {
+                m_resizingLeft  = true;
+                m_dragOffsetSec = clickedTime - ln.startTime;
+            } else if (endX - event->pos().x() < 8) {
+                m_resizingRight = true;
+                m_dragOffsetSec = ln.endTime - clickedTime;
+            } else {
+                m_dragOffsetSec = clickedTime - ln.startTime;
+            }
+            return;
+        }
+        return; // clicked subtitle track but no block — do nothing (don't seek)
+    }
+
+    // ── Normal seek ───────────────────────────────────────────────────────
+    if (event->button() == Qt::LeftButton)
+        emit seekRequested(std::max(0.0, clickedTime));
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
-    if (event->buttons() & Qt::LeftButton) {
-        // Dragging playhead
-        double draggedTime = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
-        emit seekRequested(std::max(0.0, draggedTime));
+    const double time = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
+    const int    y    = event->pos().y();
+
+    // ── Active drag/resize ─────────────────────────────────────────────────
+    if (m_draggingWordIdx >= 0 && m_draggingWordLineIdx >= 0 && m_lyricsData) {
+        auto& w = m_lyricsData->lines[m_draggingWordLineIdx].words[m_draggingWordIdx];
+        if (m_resizingWordLeft) {
+            double newStart = std::max(0.0, time);
+            if (newStart < w.endTime - 0.05) w.startTime = newStart;
+        } else if (m_resizingWordRight) {
+            w.endTime = std::max(w.startTime + 0.05, time);
+        }
+        update();
+        return;
     }
+    
+    if (m_draggingSubIdx >= 0 && m_lyricsData &&
+        m_draggingSubIdx < m_lyricsData->lines.size()) {
+        auto& ln = m_lyricsData->lines[m_draggingSubIdx];
+        if (m_resizingLeft) {
+            double newStart = std::max(0.0, time - m_dragOffsetSec);
+            if (newStart < ln.endTime - 0.1) ln.startTime = newStart;
+        } else if (m_resizingRight) {
+            double newEnd = std::max(ln.startTime + 0.1, time + m_dragOffsetSec);
+            ln.endTime = newEnd;
+        } else {
+            double newStart = std::max(0.0, time - m_dragOffsetSec);
+            double delta = newStart - ln.startTime;
+            ln.startTime = newStart;
+            ln.endTime   = newStart + m_dragOrigDur;
+            // Shift all words with the line
+            for(auto& w : ln.words) {
+                w.startTime += delta;
+                w.endTime += delta;
+            }
+        }
+        update();
+        return;
+    }
+
+    // ── Cursor hint on hover ───────────────────────────────────────────────
+    if (inSubtitleTrack(y) && m_lyricsData) {
+        int idx = hitTestSubtitle(m_lyricsData, time);
+        if (idx >= 0) {
+            const auto& ln = m_lyricsData->lines[idx];
+            bool inWordsY = y > m_rulerHeight + m_trackHeight / 2 && !ln.words.isEmpty();
+            
+            if (inWordsY) {
+                int wIdx = hitTestWord(ln, time);
+                if (wIdx >= 0) {
+                    const auto& w = ln.words[wIdx];
+                    double wStartX = (w.startTime * m_pixelsPerSecond) - m_scrollOffsetX;
+                    double wEndX   = (w.endTime * m_pixelsPerSecond) - m_scrollOffsetX;
+                    bool nearWEdge = (event->pos().x() - wStartX < 6) || (wEndX - event->pos().x() < 6);
+                    setCursor(nearWEdge ? Qt::SizeHorCursor : Qt::ArrowCursor);
+                } else {
+                    setCursor(Qt::ArrowCursor);
+                }
+            } else {
+                double startX = (ln.startTime * m_pixelsPerSecond) - m_scrollOffsetX;
+                double endX   = (ln.endTime   * m_pixelsPerSecond) - m_scrollOffsetX;
+                bool nearEdge = (event->pos().x() - startX < 8) || (endX - event->pos().x() < 8);
+                setCursor(nearEdge ? Qt::SizeHorCursor : Qt::SizeAllCursor);
+            }
+        } else {
+            setCursor(Qt::ArrowCursor);
+        }
+    } else {
+        setCursor(Qt::ArrowCursor);
+    }
+
+    // ── Hover + seek drag ─────────────────────────────────────────────────
+    if (event->buttons() & Qt::LeftButton && !inSubtitleTrack(y))
+        emit seekRequested(std::max(0.0, time));
+    m_hoverTime = std::max(0.0, time);
+    update();
 }
 
 void TimelineWidget::wheelEvent(QWheelEvent* event) {
@@ -200,6 +426,62 @@ void TimelineWidget::wheelEvent(QWheelEvent* event) {
 
 void TimelineWidget::resizeEvent(QResizeEvent* /*event*/) {
     update();
+}
+
+void TimelineWidget::leaveEvent(QEvent* /*event*/) {
+    m_hoverTime = -1.0;
+    update();
+}
+
+void TimelineWidget::mouseReleaseEvent(QMouseEvent* /*event*/) {
+    if (m_draggingWordLineIdx >= 0) {
+        // Trigger subtitle update
+        if (m_lyricsData && m_draggingWordLineIdx < m_lyricsData->lines.size()) {
+            const auto& ln = m_lyricsData->lines[m_draggingWordLineIdx];
+            emit subtitleMoved(m_draggingWordLineIdx, ln.startTime, ln.endTime);
+        }
+        m_draggingWordIdx = -1;
+        m_draggingWordLineIdx = -1;
+        m_resizingWordLeft = false;
+        m_resizingWordRight = false;
+        setCursor(Qt::ArrowCursor);
+        return;
+    }
+
+    if (m_draggingSubIdx >= 0 && m_lyricsData &&
+        m_draggingSubIdx < m_lyricsData->lines.size()) {
+        const auto& ln = m_lyricsData->lines[m_draggingSubIdx];
+        emit subtitleMoved(m_draggingSubIdx, ln.startTime, ln.endTime);
+    }
+    m_draggingSubIdx = -1;
+    m_resizingLeft   = false;
+    m_resizingRight  = false;
+    setCursor(Qt::ArrowCursor);
+}
+
+void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
+    if (!m_lyricsData || m_lyricsData->lines.isEmpty()) return;
+
+    const int    y    = event->pos().y();
+    const double time = (event->pos().x() + m_scrollOffsetX) / m_pixelsPerSecond;
+
+    if (!inSubtitleTrack(y)) return;
+
+    int idx = hitTestSubtitle(m_lyricsData, time);
+    if (idx < 0) return;
+
+    QMenu menu(this);
+    QAction* moveAct = menu.addAction(QStringLiteral("⏎  Move here (seek to start)"));
+    menu.addSeparator();
+    QAction* delAct  = menu.addAction(QStringLiteral("✕  Delete Subtitle"));
+
+    QAction* chosen = menu.exec(event->globalPos());
+    if (chosen == delAct) {
+        emit subtitleDeleted(idx);
+    } else if (chosen == moveAct) {
+        const auto& ln = m_lyricsData->lines[idx];
+        emit seekRequested(ln.startTime);
+    }
 }
 
 } // namespace ncktv

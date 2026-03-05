@@ -29,6 +29,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     void drawGrid(QPainter& painter);
@@ -41,6 +42,7 @@ private:
     double m_pixelsPerSecond = 100.0;
     double m_scrollOffsetX = 0.0;
     double m_currentTime = 0.0;
+    double m_hoverTime = -1.0;
 
     // Geometry
     int m_rowHeight = 40;

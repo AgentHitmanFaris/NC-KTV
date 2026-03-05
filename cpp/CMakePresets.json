@@ -4,7 +4,7 @@
         {
             "name": "windows-base",
             "hidden": true,
-            "generator": "Visual Studio 17 2022",
+            "generator": "Ninja",
             "binaryDir": "${sourceDir}/out/build/${presetName}",
             "installDir": "${sourceDir}/out/install/${presetName}",
             "condition": {
@@ -12,13 +12,12 @@
                 "lhs": "${hostSystemName}",
                 "rhs": "Windows"
             },
-            "architecture": {
-                "value": "x64",
-                "strategy": "set"
+            "cacheVariables": {
+                "CMAKE_MAKE_PROGRAM": "D:/ProgramData/Qt/Tools/Ninja/ninja.exe",
+                "CMAKE_PREFIX_PATH": "D:/ProgramData/Qt/6.10.2/msvc2022_64"
             },
-            "toolset": {
-                "value": "host=x64",
-                "strategy": "set"
+            "environment": {
+                "PATH": "D:/ProgramData/Qt/6.10.2/msvc2022_64/bin;D:/ProgramData/Qt/Tools/CMake_64/bin;D:/ProgramData/Qt/Tools/Ninja;$penv{PATH}"
             }
         },
         {

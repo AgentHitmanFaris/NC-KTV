@@ -64,8 +64,8 @@ Located in `src/gui/`, the UI utilizes Qt's `QWidget` event loops for complex ti
 Constructed entirely using nested `QSplitter` layouts, allowing robust resizing:
 - **`AudioPlayer`**: Controls global playback state and triggers rapid `QTimer` invalidations (refreshing at ~60Hz).
 - **`SyllableEditor`**: Manages fine-tuning the active syllable's word-spacing via native font metric calculation.
-- **`TimelineWidget`**: Responsible for the top-level composition view of multitracked clips.
-- **`WaveformWidget`**: Employs Level-of-Detail (LOD) downsampling; waveforms are generated sequentially and cached natively to avoid blocking the main thread during scrolling.
+- **`TimelineWidget`**: Responsible for the top-level composition view of multitracked clips. Tracks deep word-level metrics natively from Whisper outputs, supporting granular drag-and-drop structural updates. Render operations are strictly debounced utilizing a >= 1.0 pixel threshold to radically lower `update()` saturation.
+- **`WaveformWidget`**: Employs Level-of-Detail (LOD) downsampling; waveforms are generated dynamically using pixel-bucketing algorithms tracking the min/max variance inside a static screen column. This compresses potentially millions of PCM samples into single vector bounds per frame line, yielding instantaneous scrolling logic.
 - **`KaraokePreview`**: A robust layout container rendering real-time representations of the `.ass` generator output atop a video background.
 
 To prevent signal-flooding, UI interactions are debounced leveraging `QTimer::singleShot` proxies before committing large block mutations to `UndoManager`.
@@ -77,6 +77,7 @@ To prevent signal-flooding, UI interactions are debounced leveraging `QTimer::si
 The separation of GUI and Processing relies extensively on an asynchronous event model.
 
 - **Audio Extraction**: `VocalRemover` operates within a `std::thread` worker pool (or QThread/QRunnable). Results are dispatched back to the main thread via standard Qt `signals`.
+- **AI Transcription (`Whisper`)**: Driven purely by child `QProcess` streams. It bridges the C++ gap to Python via local environment mapping (explicitly forcing UTF-8 encoding streams). A custom modal overlay actively consumes `stdout` signals to inform a real-time progress bar while disabling overlapping interface modifications.
 - **State Mutation**: The `TimelineData` tree is strictly accessible by the GUI thread unless explicitly mutexed. Long-running structural mutations clone the project state entirely.
 - **Undo / Redo Paradigm**: Deep copies (handled natively via `nlohmann_json` stringification or clone constructors) exist isolated from the `QObject` lifecycles.
 

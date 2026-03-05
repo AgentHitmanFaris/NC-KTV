@@ -42,13 +42,15 @@ NC-KTV automates the entire karaoke video creation workflow:
 - **Supported Models**: Native integration with MDX-Net and Ultimate Vocal Remover (UVR) ecosystems.
 
 ###  Hardware-Accelerated Studio Editor
-- **Native Qt6 UI**: Butter-smooth 60fps+ rendering of complex timeline data via `QPainter` and Hardware Accel.
-- **Interactive Waveforms**: Zoom, scrub, and manipulate gigabytes of audio data instantaneously without UI blocking.
-- **Precision Syllable Editing**: Fine-tune word and syllable timings natively without lag.
+- **Native Qt6 UI**: Butter-smooth 60fps+ rendering of complex timeline data via `QPainter` and Hardware Accel, featuring smart render-debouncing.
+- **Interactive Waveforms**: Zoom, scrub, and manipulate gigabytes of audio data instantaneously using pixel-bucketing compression without UI blocking.
+- **Precision Syllable Editing**: Fine-tune word and syllable timings natively with exact visual drag-and-drop word boundaries directly on the timeline track.
+- **In-Editor AI Support**: Kick off Whisper transcripts dynamically directly from the editor mode, complete with language override parameters and dimming modal overlays.
 - **Live Karaoke Preview**: Configurable zero-latency ASS subtitle rendering overlaid onto the active video track.
 
 ###  Intelligent Transcription & Sync
-- **Format Agnostic**: Blazing-fast C++ parsers for SRT, LRC, VTT, TTML, ASS, and SSA.
+- **Format Agnostic**: Blazing-fast C++ parsers for SRT, LRC, VTT, TTML, ASS, SSA, and raw Whisper JSON imports directly from the Universal Importer.
+- **Targeted AI Control**: Choose specific ISO codes (en, id, ms, ja, ko) inside the UI to hard-force the Whisper engine into specific phonetic bounds.
 - **Tap-to-Sync Engine**: Rebuilt event-driven synchronization for perfect rhythm matching.
 - **Auto-Romanization**: Lightning-fast transliteration of global scripts (Korean/Japanese to Latin).
 

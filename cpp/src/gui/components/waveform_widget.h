@@ -33,6 +33,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     void drawWaveform(QPainter& painter);
@@ -44,10 +45,10 @@ private:
     QVector<float> m_maxData;
     double m_audioDuration = 0.0;
     
-    // View state
     double m_pixelsPerSecond = 100.0;
     double m_scrollOffsetX = 0.0;
     double m_currentTime = 0.0;
+    double m_hoverTime = -1.0;
 
     struct Marker {
         double time;

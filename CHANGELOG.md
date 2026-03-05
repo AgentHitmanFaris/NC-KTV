@@ -13,15 +13,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **C++ Rebirth**: Complete port of the NC-KTV engine to modern C++17 and Qt 6.10.2.
 - **Logo & Splash**: Proper integration of application icon and splash screen.
 - **Portable FFmpeg**: Automatic runtime path injection for bundled FFmpeg/FFprobe in `python_embed/Scripts`.
+- **In-Editor Whisper AI**: Local AI auto-transcription directly in the Editor canvas with multistory language support (en, ms, id, ja, ko, zh).
+- **Universal Subtitle Importer**: Added a dedicated native importer block for `.lrc`, `.srt`, `.txt`, and Whisper `.json` payloads syncing perfectly into visual representation.
+- **Word-Level Subtitle Editing**: `TimelineWidget` now parses internal `LyricWord` structs from Whisper JSON and paints draggable word-edges within the main lyrics block.
+- **Dimming AI Modal**: Replaced standard progress bars with a `ProcessingOverlay` modal that blocks interactions and dims the canvas exclusively while Whisper computes.
+
+### Changed
+- **Build System**: Refined CMake configuration to treat OpenSSL and zstd as optional with plain-JSON fallbacks.
+- **Performance Optimizations**: 
+  - Debounced the real-time playback cursor syncing for both the `TimelineWidget` and `WaveformWidget` (bypassing render operations until mathematically necessary).
+  - Built a per-pixel aggregate bucketing algorithm in `WaveformWidget::drawWaveform` to compress millions of audio data points into single display columns.
+- **GUI Guidance**: Replaced solid red hover-cursors on the waveform and timeline panels with translucent white alignment guides (`rgba(255, 255, 255, 60)`) to cleanly distinguish them from the primary Playhead.
 
 ### Fixed
 - **Transition Crash**: Fixed critical "use-after-free" segmentation fault when switching from Wizard to Editor mode by implementing deferred deletion (`deleteLater()`).
 - **Rendering Crash**: Resolved uninitialized pointer access in `TimelineWidget` paint events.
 - **Separation Model Fallback**: Switched default UVR model to `6_HP-Karaoke-UVR.pth` to resolve GitHub connectivity / DNS issues during first run.
 - **Path Sensitivity**: Hardcoded absolute root path detection for core assets to prevent CWD-related loading failures in terminal environments.
-
-### Changed
-- **Build System**: Refined CMake configuration to treat OpenSSL and zstd as optional with plain-JSON fallbacks.
 
 ---
 

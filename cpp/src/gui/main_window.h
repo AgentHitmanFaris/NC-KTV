@@ -30,6 +30,8 @@ protected:
 private slots:
     void newProject();
     void openProject();
+    bool saveProject();
+    bool saveProjectAs();
     void showPreferences();
     void showThemeManager();
     void showPluginManager();

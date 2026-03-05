@@ -21,6 +21,9 @@ public:
     void setTime(double timeSeconds, double totalSeconds);
     void setPlaying(bool isPlaying);
     void seek(double timeSeconds);
+    
+    // Expose player so other components can attach video sinks
+    QMediaPlayer* player() const { return m_player; }
 
 signals:
     void positionChanged(double timeSeconds);
@@ -43,6 +46,9 @@ private:
 
     QMediaPlayer* m_player = nullptr;
     QAudioOutput* m_audioOutput = nullptr;
+    
+    bool m_pendingPlay = false;
+    double m_pendingSeek = -1.0;
 };
 
 } // namespace ncktv

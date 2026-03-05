@@ -33,13 +33,32 @@ void AudioPlayer::setupPlayerConnections() {
     });
 
     QObject::connect(player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
+        // Only act when media is freshly loaded — NOT on subsequent BufferedMedia
+        // signals that Qt can fire redundantly. Consuming the flags here exactly once
+        // prevents the 3rd-toggle reset bug.
+        if (status == QMediaPlayer::LoadedMedia) {
+            if (this->m_pendingSeek >= 0.0) {
+                const double target = this->m_pendingSeek;
+                this->m_pendingSeek = -1.0;
+                this->m_player->setPosition(static_cast<qint64>(target * 1000.0));
+            }
+            if (this->m_pendingPlay) {
+                this->m_pendingPlay = false;
+                this->m_player->play();
+            }
+        }
         emit this->mediaStatusChanged(status);
     });
 }
 
 void AudioPlayer::loadSource(const QString& filePath) {
     if (QFile::exists(filePath)) {
+        m_pendingSeek = m_player->position() / 1000.0;
+        m_pendingPlay = (m_player->playbackState() == QMediaPlayer::PlayingState);
+
+        // Explicitly set position to 0 right before source change avoids UI jumps
         m_player->setSource(QUrl::fromLocalFile(filePath));
+        
         qDebug() << "AudioPlayer: Loaded source" << filePath;
     } else {
         qDebug() << "AudioPlayer: Source not found" << filePath;
