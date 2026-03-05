@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0-rc1] - 2026-03-05
+
+### Added
+- **C++ Rebirth**: Complete port of the NC-KTV engine to modern C++17 and Qt 6.10.2.
+- **Logo & Splash**: Proper integration of application icon and splash screen.
+- **Portable FFmpeg**: Automatic runtime path injection for bundled FFmpeg/FFprobe in `python_embed/Scripts`.
+
+### Fixed
+- **Transition Crash**: Fixed critical "use-after-free" segmentation fault when switching from Wizard to Editor mode by implementing deferred deletion (`deleteLater()`).
+- **Rendering Crash**: Resolved uninitialized pointer access in `TimelineWidget` paint events.
+- **Separation Model Fallback**: Switched default UVR model to `6_HP-Karaoke-UVR.pth` to resolve GitHub connectivity / DNS issues during first run.
+- **Path Sensitivity**: Hardcoded absolute root path detection for core assets to prevent CWD-related loading failures in terminal environments.
+
+### Changed
+- **Build System**: Refined CMake configuration to treat OpenSSL and zstd as optional with plain-JSON fallbacks.
+
+---
+
 ## [0.11.0] - 2026-02-04
 
 ### Added

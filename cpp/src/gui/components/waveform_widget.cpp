@@ -21,6 +21,11 @@ void WaveformWidget::loadWaveformData(const QVector<float>& minData, const QVect
     update();
 }
 
+void WaveformWidget::setDuration(double seconds) {
+    m_audioDuration = seconds;
+    update();
+}
+
 void WaveformWidget::updateCursor(double timeSeconds) {
     if (m_currentTime != timeSeconds) {
         m_currentTime = timeSeconds;

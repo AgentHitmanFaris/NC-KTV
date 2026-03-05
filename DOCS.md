@@ -7,7 +7,7 @@ Comprehensive technical documentation covering the internal architecture, memory
 
 ---
 
-## 📑 Table of Contents
+##  Table of Contents
 
 1. [Architectural Overview](#1-architectural-overview)
 2. [Build System & Dependencies](#2-build-system--dependencies)
@@ -31,7 +31,7 @@ The migration from Python/PyQt6 to pure C++17/Qt6 was motivated by performance u
 
 ## 2. Build System & Dependencies
 
-NC-KTV utilizes a modern **CMake** implementation integrated tightly with **vcpkg**, streamlining cross-platform development.
+NC-KTV utilizes a modern **CMake** implementation. While it supports **vcpkg** for dependency management, the preferred workflow (especially on Windows) is using the pre-configured **CMake Presets** and Qt's bundled toolchain for a consistent, zero-config experience.
 
 ### Core Dependencies:
 - **Qt 6.x** (`Core`, `Gui`, `Widgets`, `Multimedia`): The foundational windowing and event backbone.

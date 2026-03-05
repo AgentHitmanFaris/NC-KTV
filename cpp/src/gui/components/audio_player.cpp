@@ -1,11 +1,53 @@
 #include "audio_player.h"
+#include <cmath>
+#include <QFile>
+#include <QUrl>
+#include <QDebug>
 
 namespace ncktv {
 
 AudioPlayer::AudioPlayer(QWidget* parent)
     : QWidget(parent)
 {
+    m_player = new QMediaPlayer(this);
+    m_audioOutput = new QAudioOutput(this);
+    m_player->setAudioOutput(m_audioOutput);
+
     setupUi();
+    setupPlayerConnections();
+}
+
+void AudioPlayer::setupPlayerConnections() {
+    // Capture pointers explicitly to avoid any 'this' confusion in lambdas if possible
+    auto* player = m_player;
+
+    QObject::connect(player, &QMediaPlayer::positionChanged, this, [this, player](qint64 pos) {
+        double seconds = pos / 1000.0;
+        double total = player->duration() / 1000.0;
+        this->setTime(seconds, total);
+        emit this->positionChanged(seconds);
+    });
+
+    QObject::connect(player, &QMediaPlayer::durationChanged, this, [this](qint64 dur) {
+        emit this->durationChanged(dur / 1000.0);
+    });
+
+    QObject::connect(player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
+        emit this->mediaStatusChanged(status);
+    });
+}
+
+void AudioPlayer::loadSource(const QString& filePath) {
+    if (QFile::exists(filePath)) {
+        m_player->setSource(QUrl::fromLocalFile(filePath));
+        qDebug() << "AudioPlayer: Loaded source" << filePath;
+    } else {
+        qDebug() << "AudioPlayer: Source not found" << filePath;
+    }
+}
+
+void AudioPlayer::seek(double timeSeconds) {
+    m_player->setPosition(static_cast<qint64>(timeSeconds * 1000.0));
 }
 
 void AudioPlayer::setupUi() {
@@ -19,6 +61,7 @@ void AudioPlayer::setupUi() {
     
     m_volumeSlider->setRange(0, 100);
     m_volumeSlider->setValue(80);
+    m_audioOutput->setVolume(0.8);
     m_volumeSlider->setMaximumWidth(150);
 
     layout->addWidget(m_playBtn);
@@ -29,9 +72,28 @@ void AudioPlayer::setupUi() {
     layout->addWidget(m_volumeSlider);
 
     // Connections
-    connect(m_playBtn, &QPushButton::clicked, this, &AudioPlayer::playPauseToggled);
-    connect(m_stopBtn, &QPushButton::clicked, this, &AudioPlayer::stopRequested);
-    connect(m_volumeSlider, &QSlider::valueChanged, this, &AudioPlayer::volumeChanged);
+    QObject::connect(m_playBtn, &QPushButton::clicked, this, [this]() {
+        if (this->m_player->playbackState() == QMediaPlayer::PlayingState) {
+            this->m_player->pause();
+        } else {
+            this->m_player->play();
+        }
+        emit this->playPauseToggled();
+    });
+
+    QObject::connect(m_player, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState state) {
+        this->setPlaying(state == QMediaPlayer::PlayingState);
+    });
+
+    QObject::connect(m_stopBtn, &QPushButton::clicked, this, [this]() {
+        this->m_player->stop();
+        emit this->stopRequested();
+    });
+
+    QObject::connect(m_volumeSlider, &QSlider::valueChanged, this, [this](int vol) {
+        this->m_audioOutput->setVolume(vol / 100.0);
+        emit this->volumeChanged(vol);
+    });
 }
 
 void AudioPlayer::setTime(double timeSeconds, double totalSeconds) {
@@ -53,4 +115,3 @@ QString AudioPlayer::formatTime(double seconds) {
 }
 
 } // namespace ncktv
-

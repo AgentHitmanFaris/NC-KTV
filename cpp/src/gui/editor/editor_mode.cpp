@@ -79,10 +79,18 @@ void EditorMode::setupToolBar() {
 }
 
 void EditorMode::setupConnections() {
-    // Example: Connecting unified timecode to components
-    // connect(m_audioPlayer, &AudioPlayer::timecodeChanged, this, &EditorMode::onTimecodeChanged);
-    // connect(m_waveformWidget, &WaveformWidget::seekRequested, m_audioPlayer, &AudioPlayer::seek);
-    // connect(m_timelineWidget, &TimelineWidget::seekRequested, m_audioPlayer, &AudioPlayer::seek);
+    // Sync playback position to waveform and timeline
+    connect(m_audioPlayer, &AudioPlayer::positionChanged, this, &EditorMode::onTimecodeChanged);
+    
+    // Sync duration
+    connect(m_audioPlayer, &AudioPlayer::durationChanged, this, [this](double duration) {
+        m_waveformWidget->setDuration(duration);
+        // m_timelineWidget->setDuration(duration);
+    });
+
+    // Handle seeking from UI components
+    connect(m_waveformWidget, &WaveformWidget::seekRequested, m_audioPlayer, &AudioPlayer::seek);
+    connect(m_timelineWidget, &TimelineWidget::seekRequested, m_audioPlayer, &AudioPlayer::seek);
 }
 
 void EditorMode::applyTheme() {
@@ -92,9 +100,16 @@ void EditorMode::applyTheme() {
 
 void EditorMode::syncViewState() {
     if (!m_project) return;
+    
+    // Load instrumental stem if available
+    if (m_project->instrumentalPath.has_value()) {
+        m_audioPlayer->loadSource(m_project->instrumentalPath.value());
+        qDebug() << "EditorMode: Loaded instrumental stem:" << m_project->instrumentalPath.value();
+    }
+
     // Load project data into components
     // m_syllableEditor->loadLyrics(&m_project->lyrics);
-    // m_timelineWidget->loadTimeline(&m_project->timeline);
+    m_timelineWidget->loadTimeline(&m_project->timeline);
 }
 
 void EditorMode::onPlayPauseToggled(bool isPlaying) {
@@ -104,8 +119,8 @@ void EditorMode::onPlayPauseToggled(bool isPlaying) {
 void EditorMode::onTimecodeChanged(double timeSeconds) {
     // Dispatch time to preview, waveform, and timeline
     // m_previewWidget->updateTime(timeSeconds);
-    // m_waveformWidget->updateCursor(timeSeconds);
-    // m_timelineWidget->updateCursor(timeSeconds);
+    m_waveformWidget->updateCursor(timeSeconds);
+    m_timelineWidget->updateCursor(timeSeconds);
 }
 
 void EditorMode::onLineSelected(int lineIndex) {

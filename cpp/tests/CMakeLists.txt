@@ -2,6 +2,18 @@
 
 enable_testing()
 
+# ── Google Test via FetchContent (no vcpkg needed) ────────────────────────────
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.15.2
+    GIT_SHALLOW    TRUE
+)
+# Prevent overriding our project's compiler/linker settings on Windows
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
 set(TEST_SOURCES
     test_lyrics_data.cpp
     test_timeline_data.cpp
@@ -12,8 +24,6 @@ set(TEST_SOURCES
 )
 
 add_executable(ncktv_tests ${TEST_SOURCES})
-
-find_package(GTest REQUIRED)
 
 target_link_libraries(ncktv_tests
     PRIVATE

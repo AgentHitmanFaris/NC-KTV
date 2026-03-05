@@ -15,6 +15,7 @@ public:
     explicit WaveformWidget(QWidget* parent = nullptr);
 
     void loadWaveformData(const QVector<float>& minData, const QVector<float>& maxData, double sampleRate, int samplesPerPixel);
+    void setDuration(double seconds);
     void updateCursor(double timeSeconds);
     void setPixelsPerSecond(double pps);
 

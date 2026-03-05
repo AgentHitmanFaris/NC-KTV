@@ -14,6 +14,8 @@
 
 #include "audio/ffmpeg_utils.h"
 #include "system/gpu_detector.h"
+#include "wizard/wizard_mode.h"
+#include "editor/editor_mode.h"
 
 namespace ncktv {
 
@@ -129,7 +131,10 @@ void MainWindow::loadMode() {
 
 void MainWindow::switchMode(const QString& mode, Project* project) {
     if (m_centralWidget) {
-        delete m_centralWidget;
+        QWidget* oldWidget = takeCentralWidget();
+        if (oldWidget) {
+            oldWidget->deleteLater();
+        }
         m_centralWidget = nullptr;
     }
 
@@ -137,21 +142,15 @@ void MainWindow::switchMode(const QString& mode, Project* project) {
     m_statusMode->setText("Mode: " + mode.toUpper());
 
     if (mode == "wizard") {
-        // TODO: Create WizardMode widget
-        m_centralWidget = new QWidget(this);
-        QLabel* placeholder = new QLabel("🎤 Wizard Mode — Coming Soon", m_centralWidget);
-        placeholder->setAlignment(Qt::AlignCenter);
-        placeholder->setStyleSheet("font-size: 24px; color: #6366f1;");
-        auto* layout = new QVBoxLayout(m_centralWidget);
-        layout->addWidget(placeholder);
+        auto* wizard = new WizardMode(this);
+        connect(wizard, &WizardMode::projectReady, this, [this](Project* project) {
+            m_currentProject = project;
+            switchMode("editor", project);
+        });
+        m_centralWidget = wizard;
     } else {
-        // TODO: Create EditorMode widget
-        m_centralWidget = new QWidget(this);
-        QLabel* placeholder = new QLabel("🎵 Editor Mode — Coming Soon", m_centralWidget);
-        placeholder->setAlignment(Qt::AlignCenter);
-        placeholder->setStyleSheet("font-size: 24px; color: #8b5cf6;");
-        auto* layout = new QVBoxLayout(m_centralWidget);
-        layout->addWidget(placeholder);
+        auto* editor = new EditorMode(project ? project : m_currentProject, this);
+        m_centralWidget = editor;
     }
 
     setCentralWidget(m_centralWidget);

@@ -24,7 +24,9 @@ int main(int argc, char* argv[])
     app.setApplicationVersion("1.0.0");
 
     // ─── Set App Icon & Splash ──────────────────────────────────────────────
-    const QString iconPath = QCoreApplication::applicationDirPath() + "/../assets/logo.png";
+    // Strict hardcoded path to prevent any CWD variances when launched via PowerShell
+    const QString rootDir = "D:/Document/NC-KTV";
+    const QString iconPath = rootDir + "/assets/logo.png";
     QSplashScreen* splash = nullptr;
 
     if (QFile::exists(iconPath)) {
@@ -40,6 +42,9 @@ int main(int argc, char* argv[])
             Qt::AlignBottom | Qt::AlignHCenter, Qt::white);
         app.processEvents();
     }
+    else {
+        qWarning() << "Logo not found at:" << iconPath;
+    }
 
     // ─── Apply Dark Theme ───────────────────────────────────────────────────
     QFile styleFile(":/styles/dark_theme.qss");
@@ -49,10 +54,13 @@ int main(int argc, char* argv[])
     }
 
     // ─── Add FFmpeg to PATH if bundled ──────────────────────────────────────
-    const QString ffmpegDir = QCoreApplication::applicationDirPath() + "/../ffmpeg";
+    // ffmpeg might be in the python_embed/Scripts folder since we bundled it there
+    const QString ffmpegDir = rootDir + "/python_embed/Scripts";
     if (QDir(ffmpegDir).exists()) {
         QString path = qEnvironmentVariable("PATH");
         qputenv("PATH", (ffmpegDir + ";" + path).toUtf8());
+    } else {
+        qWarning() << "FFmpeg directory not found at:" << ffmpegDir;
     }
 
     // ─── Create Main Window ─────────────────────────────────────────────────

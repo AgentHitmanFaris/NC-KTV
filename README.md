@@ -64,28 +64,29 @@ NC-KTV is now built using standard `CMake` and requires a modern C++17 compliant
 - **Qt 6.x** (Core, Gui, Widgets)
 - **vcpkg** (for automatic dependency management)
 
-### Building from Source
+### Building from Source (Windows)
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/nc-ktv/cpp.git
-cd cpp
+To build the project on Windows using the provided presets:
 
-# 2. Configure the project via CMake presets
-cmake --preset windows-release
+```powershell
+# 1. Initialize MSVC environment and configure
+cmd /c "call \"D:\ProgramData\Microsoft Visual Studio\VC\Auxiliary\Build\vcvars64.bat\" && \"D:\ProgramData\Qt\Tools\CMake_64\bin\cmake.exe\" --preset windows-debug"
 
-# 3. Build the application
-cmake --build --preset windows-release
+# 2. Build the application
+cmd /c "call \"D:\ProgramData\Microsoft Visual Studio\VC\Auxiliary\Build\vcvars64.bat\" && \"D:\ProgramData\Qt\Tools\CMake_64\bin\cmake.exe\" --build --preset windows-debug"
 
-# 4. Run tests
-ctest --preset windows-release
+# 3. Run tests
+$env:PATH = "D:\ProgramData\Qt\6.10.2\msvc2022_64\bin;" + $env:PATH
+.\out\build\windows-debug\tests\ncktv_tests.exe
 ```
+
+The compiled executable will be at `out/build/windows-debug/src/gui/ncktv.exe`.
 
 Once compiled, the `ncktv` executable and tests will be placed in `cpp/out/build/windows-release/`.
 
 ---
 
-##  Architecture & Documentation
+## Architecture & Documentation
 
 For a deep dive into the completely revamped C++ architecture, hardware-accelerated UI patterns, and the multithreaded audio pipeline, please see our dedicated [**Technical Documentation (DOCS.md)**](DOCS.md).
 

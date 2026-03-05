@@ -38,6 +38,7 @@ set(GUI_SOURCES
 
     # Workers
     workers/transcription_worker.cpp
+    workers/vocal_separator_worker.cpp
     workers/processing_worker.cpp
     workers/export_worker.cpp
     workers/online_search_worker.cpp
@@ -74,14 +75,15 @@ set(GUI_HEADERS
     dialogs/export_credits_dialog.h
     dialogs/word_editor.h
     workers/transcription_worker.h
+    workers/vocal_separator_worker.h
     workers/processing_worker.h
     workers/export_worker.h
     workers/online_search_worker.h
     workers/progress_reporter.h
 )
 
-# Win32 app (no console window in Release)
-add_executable(ncktv WIN32 ${GUI_SOURCES} ${GUI_HEADERS})
+# Win32 app (no console window in Release) - TEMPORARILY DISABLED for debugging
+add_executable(ncktv ${GUI_SOURCES} ${GUI_HEADERS})
 
 target_include_directories(ncktv PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -91,5 +93,4 @@ target_link_libraries(ncktv PRIVATE
     Qt6::Multimedia
     Qt6::MultimediaWidgets
     Qt6::Network
-    Qt6::Core5Compat
 )
