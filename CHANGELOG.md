@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0-rc2] - 2026-03-06
+
+### Added
+- **New Project Dialog**: Full project creation UI with name, source file browser, UVR model selection, and GPU toggle.
+- **Import Dialog**: Subtitle/lyrics file browser with auto format detection (LRC/SRT/VTT/ASS/TTML/JSON/TXT) and file preview.
+- **Export Dialog**: 4 export presets (Karaoke Video, Lyrics Video, Audio Only, Subtitles Only), format/resolution/codec selection, lyrics style picker.
+- **Video Options Dialog**: Resolution presets + custom, codec (H.264/H.265/VP9/AV1), FPS, bitrate slider, hardware encoding toggle.
+- **Precision Mode Rebuild**: UI overhauled to strictly mirror the *Karaoke Builder Studio* vertical authoring experience.
+  - **Vertical Word Canvas**: Syllables now stack vertically descending alongside a fixed left-aligned waveform visualization.
+  - **Lyrics Map Table**: Right-sided `QTableWidget` to instantly select, edit, and navigate syllable text synchronizing perfectly with the canvas.
+  - **Play Segment**: Added an auto-isolating playback button that seeks and automatically stops exactly on word boundaries, compensating for QMediaPlayer async lag.
+  - **60fps Real-Time Sync**: Rewritten AudioPlayer utilizing `QTimer` at 16ms to power smooth auto-scrolling and frame-perfect Video Preview Picture-in-Picture sync.
+- **Preferences Dialog**: 4-tab layout (General, Audio, AI Models, Paths) with start mode, auto-save, sample rate, GPU, model, and language config.
+- **Shortcuts Dialog**: Comprehensive keyboard shortcut reference table with 17 entries and styled key highlighting.
+- **Model Manager Dialog/Widget**: Whisper model list with install status, download/remove buttons, progress bar, and local directory scanning.
+- **Plugin Manager Dialog**: Split-panel layout with plugin list, detail view (name/author/version/description), enable/disable toggle, install from `.nckplugin`, uninstall.
+- **Theme Manager Dialog**: Split-panel with theme list, preview area, apply/install/uninstall controls, built-in theme protection.
+- **Export Credits Dialog**: Song info (title/artist), custom credits text, countdown toggle, intro duration spinner.
+- **Curve Editor Component**: Visual Bézier curve editor with grid, draggable control points, preset easing curves, and smooth cubic rendering.
+- **Effect Panel Component**: Effect list with 9 effect types, start/duration/easing controls, integrated CurveEditor widget, bidirectional model sync.
+- **Timing Calibration Component**: ±5s master offset slider (0.001s precision), large numeric display, per-source latency compensation (UVR/transcription/playback).
+
+### Changed
+- **Export Worker**: Full FFmpeg QProcess pipeline with subtitle burn-in, multi-codec support (H.264/H.265/VP9), stderr progress parsing.
+- **Online Search Worker**: LRCLIB API integration via `LrcLibClient`, JSON result serialization, progress and error signals.
+- **Processing Worker**: 2-phase pipeline orchestration (UVR separation 0-50% → Whisper transcription 50-100%) with graceful transcription fallback.
+- **Main Window**: Wired Preferences, Theme Manager, Plugin Manager, and Shortcuts menus to actual dialog classes (removed placeholder QMessageBox stubs).
+- **Root Path Detection**: Replaced hardcoded `D:/Document/NC-KTV` path in `main.cpp` with dynamic resolution — walks up from executable directory looking for `assets/logo.png` marker.
+- **AudioClock Drift**: Implemented sample-rate-based drift calculation with latency correction summation in `getDriftAtTime()`.
+
+### Fixed
+- Missing `#include <QSpinBox>` in `export_credits_dialog.h` causing MSVC C2143 syntax error.
+
+---
+
 ## [1.0.0-rc1] - 2026-03-05
 
 ### Added

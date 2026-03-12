@@ -21,6 +21,10 @@ void AudioPlayer::setupPlayerConnections() {
     // Capture pointers explicitly to avoid any 'this' confusion in lambdas if possible
     auto* player = m_player;
 
+    QObject::connect(player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error error, const QString &errorString) {
+        qDebug() << "AudioPlayer: Media Error (" << error << "): " << errorString;
+    });
+
     QObject::connect(player, &QMediaPlayer::positionChanged, this, [this, player](qint64 pos) {
         double seconds = pos / 1000.0;
         double total = player->duration() / 1000.0;
@@ -48,6 +52,19 @@ void AudioPlayer::setupPlayerConnections() {
             }
         }
         emit this->mediaStatusChanged(status);
+        qDebug() << "AudioPlayer: Media Status Changed to" << status;
+    });
+
+    // High frequency timer for smooth UI updates since Qt6 QMediaPlayer doesn't have notifyInterval
+    m_syncTimer = new QTimer(this);
+    m_syncTimer->setInterval(16); // ~60fps
+    QObject::connect(m_syncTimer, &QTimer::timeout, this, [this, player]() {
+        if (player->playbackState() == QMediaPlayer::PlayingState) {
+            double seconds = player->position() / 1000.0;
+            double total = player->duration() / 1000.0;
+            this->setTime(seconds, total);
+            emit this->positionChanged(seconds);
+        }
     });
 }
 
@@ -67,6 +84,7 @@ void AudioPlayer::loadSource(const QString& filePath) {
 
 void AudioPlayer::seek(double timeSeconds) {
     m_player->setPosition(static_cast<qint64>(timeSeconds * 1000.0));
+    emit seekRequested(timeSeconds);
 }
 
 void AudioPlayer::setupUi() {
@@ -102,6 +120,11 @@ void AudioPlayer::setupUi() {
 
     QObject::connect(m_player, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState state) {
         this->setPlaying(state == QMediaPlayer::PlayingState);
+        if (state == QMediaPlayer::PlayingState) {
+            this->m_syncTimer->start();
+        } else {
+            this->m_syncTimer->stop();
+        }
     });
 
     QObject::connect(m_stopBtn, &QPushButton::clicked, this, [this]() {

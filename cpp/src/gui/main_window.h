@@ -1,61 +1,56 @@
 #pragma once
 /*
  * NC-KTV GUI — Main Window
- * Port of main_window.py — Mode switching between Wizard and Editor
+ * Phase 5 100% Native C++ UI implementation.
  */
 
 #include <QMainWindow>
-#include <QStackedWidget>
-#include <QMenuBar>
-#include <QStatusBar>
-#include <QLabel>
+#include <memory>
+#include "../core/project/ncktv_project.hpp"
 
-#include "config/config_manager.h"
-#include "plugins/plugin_manager.h"
-#include "themes/theme_manager.h"
-#include "project/project.h"
+class QStackedWidget;
 
 namespace ncktv {
+
+class VocalSeparatorWorker;
+class TranscriptionWorker;
+class WizardMode;
+class EditorMode;
+class Project;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
-    ~MainWindow() override = default;
-
-protected:
-    void closeEvent(QCloseEvent* event) override;
+    explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
 
 private slots:
-    void newProject();
-    void openProject();
-    bool saveProject();
-    bool saveProjectAs();
-    void showPreferences();
-    void showThemeManager();
-    void showPluginManager();
-    void showAbout();
-    void showShortcuts();
+    void onActionNewProject();
+    void onWorkerProgress(int percent, const QString& message);
+    void onWorkerError(const QString& errorMsg);
+    void onVocalSeparationFinished(const QString& instPath, const QString& vocPath);
+    void onTranscriptionFinished(const QString& resultJson);
+    void onProjectReady(Project* project);
 
 private:
-    void createMenuBar();
-    void createStatusBar();
-    void checkPrerequisites();
-    void switchMode(const QString& mode, Project* project = nullptr);
-    void loadMode();
-    bool checkUnsavedChanges();
+    void setupApplicationUI();
+    void setupWorkers();
 
-    ConfigManager   m_config;
-    PluginManager*  m_pluginManager;
-    ThemeManager*   m_themeManager;
-
-    QWidget* m_centralWidget = nullptr;
-    Project* m_currentProject = nullptr;
-    QString  m_currentMode = "wizard";
-
-    QLabel*  m_statusGpu = nullptr;
-    QLabel*  m_statusMode = nullptr;
+    QStackedWidget* mainStack_ = nullptr;
+    WizardMode* wizardMode_ = nullptr;
+    EditorMode* editorMode_ = nullptr;
+    
+    std::shared_ptr<core::Project> activeProject_;
+    std::shared_ptr<Project> legacyProject_; // For compatibility with WizardMode
+    
+    // Workers and Threads for Multi-threaded AI
+    VocalSeparatorWorker* vocalWorker_ = nullptr;
+    QThread* vocalThread_ = nullptr;
+    
+    TranscriptionWorker* transcriptionWorker_ = nullptr;
+    QThread* transcriptionThread_ = nullptr;
 };
+
 
 } // namespace ncktv

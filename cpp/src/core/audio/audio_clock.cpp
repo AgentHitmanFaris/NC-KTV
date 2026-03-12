@@ -50,9 +50,23 @@ double AudioClock::getLatency(const QString& source) const {
     return m_latencyCorrections.value(source, 0.0);
 }
 
-double AudioClock::getDriftAtTime(double /*seconds*/) const {
-    // TODO: Implement actual drift calculation based on sample rate mismatches
-    return 0.0;
+double AudioClock::getDriftAtTime(double seconds) const {
+    // Drift = accumulated timing error due to actual sample rate vs nominal rate.
+    // If the actual clock runs at m_sampleRate but the reference is 48000 Hz,
+    // after T seconds the drift is:  T * (m_sampleRate - 48000) / 48000
+    constexpr int REFERENCE_RATE = 48000;
+    if (m_sampleRate == REFERENCE_RATE || seconds <= 0.0) return 0.0;
+
+    double rateRatio = static_cast<double>(m_sampleRate) / REFERENCE_RATE;
+    double drift = seconds * (rateRatio - 1.0);
+
+    // Also incorporate the sum of all latency corrections as a constant offset
+    double totalLatency = 0.0;
+    for (auto it = m_latencyCorrections.begin(); it != m_latencyCorrections.end(); ++it) {
+        totalLatency += it.value();
+    }
+
+    return drift + totalLatency;
 }
 
 // ── Serialization ────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ Main interface for editing and synchronizing lyrics
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QSplitter, 
+    QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QStackedWidget,
     QTextEdit, QTableWidget, QTableWidgetItem, 
     QPushButton, QLabel, QGroupBox, QHeaderView,
     QMessageBox, QProgressDialog, QProgressBar, QFileDialog, QComboBox,
@@ -82,7 +82,19 @@ class EditorMode(QWidget):
     def _init_ui(self):
         """Initialize UI layout"""
         logger.info("[DEBUG] _init_ui started")
-        layout = QVBoxLayout(self)
+
+        # Root stacked widget – index 0 = normal editor, index 1 = Lyrical Pro
+        self._root_stack = QStackedWidget(self)
+        root_outer = QVBoxLayout(self)
+        root_outer.setContentsMargins(0, 0, 0, 0)
+        root_outer.addWidget(self._root_stack)
+
+        # ── Page 0: normal editor container ─────────────────────────────────
+        self._editor_page = QWidget()
+        self._root_stack.addWidget(self._editor_page)
+        self._root_stack.setCurrentIndex(0)
+
+        layout = QVBoxLayout(self._editor_page)
         
         # Top toolbar
         toolbar = QHBoxLayout()
@@ -115,7 +127,18 @@ class EditorMode(QWidget):
         btn_export.clicked.connect(self._export_video)
         btn_export.setStyleSheet("background-color: #E91E63; color: white; font-weight: bold;")
         toolbar.addWidget(btn_export)
-        
+
+        # Lyrical Pro Mode toggle
+        btn_lyrical_pro = QPushButton("🎤 Lyrical Pro Mode")
+        btn_lyrical_pro.setToolTip("Open the immersive teleprompter lyrics editor")
+        btn_lyrical_pro.setStyleSheet(
+            "background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            "stop:0 #c0522a,stop:1 #e07a4a);"
+            "color: white; font-weight: bold;"
+        )
+        btn_lyrical_pro.clicked.connect(self._toggle_lyrical_pro)
+        toolbar.addWidget(btn_lyrical_pro)
+
         layout.addLayout(toolbar)
         
         # Main Splitter (Left: Editor, Right: Preview)
@@ -497,6 +520,42 @@ class EditorMode(QWidget):
         self.sync_mode_active = False
         self._update_status_bar()
         logger.info("[DEBUG] _init_ui finished")
+
+    # ─── Lyrical Pro Mode ─────────────────────────────────────────────────────
+
+    def _toggle_lyrical_pro(self):
+        """Switch to Lyrical Pro teleprompter view."""
+        from gui.components.lyrical_pro_editor import LyricalProEditorWidget
+
+        # Only create the page once
+        if self._root_stack.count() < 2:
+            lyrical_page = LyricalProEditorWidget(
+                player      = self.player,
+                lyrics_data = self.lyrics_data,
+                project     = self.project,
+                parent      = self._root_stack,
+            )
+            lyrical_page.close_session.connect(self._exit_lyrical_pro)
+            self._root_stack.addWidget(lyrical_page)
+            self._lyrical_pro_widget = lyrical_page
+        else:
+            # Refresh lyrics data in case it changed
+            self._lyrical_pro_widget.update_lyrics(self.lyrics_data)
+
+        # Set project BPM / key if available
+        if hasattr(self.project, 'bpm') and self.project.bpm:
+            self._lyrical_pro_widget.set_bpm_key(
+                int(self.project.bpm),
+                getattr(self.project, 'key', 'Unknown')
+            )
+
+        self._root_stack.setCurrentIndex(1)
+        logger.info("[LyricalPro] Switched to Lyrical Pro teleprompter mode")
+
+    def _exit_lyrical_pro(self):
+        """Return to normal editor view from Lyrical Pro mode."""
+        self._root_stack.setCurrentIndex(0)
+        logger.info("[LyricalPro] Exited Lyrical Pro mode")
 
     def cleanup(self):
         """Release resources"""

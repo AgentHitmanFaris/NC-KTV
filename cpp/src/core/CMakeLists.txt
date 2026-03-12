@@ -11,9 +11,6 @@ set(CORE_SOURCES
 
     # Audio engine
     audio/audio_clock.cpp
-    audio/audio_processor.cpp
-    audio/vocal_remover.cpp
-    audio/ffmpeg_utils.cpp
 
     # Effects
     effects/effect_compositor.cpp
@@ -48,9 +45,6 @@ set(CORE_HEADERS
     lyrics/lyrics_data.h
     timeline/timeline_data.h
     audio/audio_clock.h
-    audio/audio_processor.h
-    audio/vocal_remover.h
-    audio/ffmpeg_utils.h
     effects/effect_compositor.h
     parsers/subtitle_parser.h
     parsers/lrc_parser.h
@@ -74,13 +68,22 @@ add_library(ncktv_core STATIC ${CORE_SOURCES} ${CORE_HEADERS})
 # #include "nlohmann/json.hpp" both resolve correctly.
 target_include_directories(ncktv_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-# ── Qt dependencies ───────────────────────────────────────────────────────────
+# ── Qt & External dependencies ────────────────────────────────────────────────
 target_link_libraries(ncktv_core
     PUBLIC
         Qt6::Core
         Qt6::Gui
         Qt6::Network
+        nlohmann_json::nlohmann_json
 )
+
+# ONNX Runtime — only available on MSVC builds (prebuilt .lib)
+if(TARGET onnx_shared)
+    target_link_libraries(ncktv_core PUBLIC onnx_shared)
+    target_compile_definitions(ncktv_core PUBLIC NCKTV_HAS_ONNX=1)
+else()
+    target_compile_definitions(ncktv_core PUBLIC NCKTV_HAS_ONNX=0)
+endif()
 
 # ── Optional: OpenSSL (for AES-256-GCM in NCTV file format) ──────────────────
 find_package(OpenSSL QUIET)

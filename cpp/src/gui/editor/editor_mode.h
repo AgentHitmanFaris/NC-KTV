@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QToolBar>
@@ -14,14 +15,16 @@
 #include <QAudioOutput>
 #include <QProgressBar>
 
-#include "project/project.h"
+#include "../core/project/ncktv_project.hpp"
 #include "undo_manager.h"
 #include "timing_offset_handler.h"
 #include "../components/timeline_widget.h"
 #include "../components/karaoke_preview.h"
 #include "../components/waveform_widget.h"
 #include "../components/audio_player.h"
+#include "../components/lyrical_pro_widget.h"
 #include <QListWidget>
+#include <memory>
 
 namespace ncktv {
 
@@ -29,7 +32,7 @@ class EditorMode : public QWidget {
     Q_OBJECT
 
 public:
-    explicit EditorMode(Project* project, QWidget* parent = nullptr);
+    explicit EditorMode(std::shared_ptr<core::Project> project, QWidget* parent = nullptr);
 
 signals:
     void requestSave();
@@ -51,13 +54,18 @@ private slots:
     void onAutoWhisperClicked();
     void onImportSubtitleClicked();
 
+    // Lyrical Pro Mode
+    void toggleLyricalPro();
+    void exitLyricalPro();
+
 private:
     void setupUi();
     void setupToolBar();
     void setupConnections();
     void applyTheme();
+    void syncLyricalProState();
 
-    Project* m_project = nullptr;
+    std::shared_ptr<core::Project> m_project;
     double m_currentTime = 0.0;
     
     // Components
@@ -71,7 +79,11 @@ private:
     UndoManager*         m_undoManager = nullptr;
     TimingOffsetHandler* m_timingHandler = nullptr;
 
-    // Layout
+    // Layout — root stack (page 0 = normal editor, page 1 = Lyrical Pro)
+    QStackedWidget* m_rootStack   = nullptr;
+    QWidget*        m_editorPage  = nullptr;   // page 0
+    LyricalProWidget* m_lyricalPro = nullptr;  // page 1
+
     QToolBar*  m_toolBar = nullptr;
     QSplitter* m_mainSplitter = nullptr;
     QSplitter* m_lowerSplitter = nullptr;
@@ -81,6 +93,8 @@ private:
     QLineEdit*   m_subtitleInput = nullptr;
     QPushButton* m_addSubtitleBtn = nullptr;
     QPushButton* m_whisperBtn = nullptr;
+    QPushButton* m_precisionBtn = nullptr;
+    QPushButton* m_lyricalProBtn = nullptr;   // toolbar button
     QComboBox*   m_langCombo = nullptr;
     QPushButton* m_importBtn = nullptr;
     QLabel*      m_statusLabel = nullptr;

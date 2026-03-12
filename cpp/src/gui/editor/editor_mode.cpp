@@ -9,6 +9,7 @@
 #include <QEvent>
 #include <QProgressBar>
 #include "../workers/transcription_worker.h"
+#include "../dialogs/word_editor.h"
 
 namespace ncktv {
 
@@ -53,9 +54,9 @@ public:
     void mousePressEvent(QMouseEvent*) override {} // consume clicks
 };
 
-EditorMode::EditorMode(Project* project, QWidget* parent)
+EditorMode::EditorMode(std::shared_ptr<core::Project> project, QWidget* parent)
     : QWidget(parent)
-    , m_project(project)
+    , m_project(std::move(project))
 {
     m_undoManager = new UndoManager(this);
     m_timingHandler = new TimingOffsetHandler(this);
@@ -68,12 +69,24 @@ EditorMode::EditorMode(Project* project, QWidget* parent)
 }
 
 void EditorMode::setupUi() {
-    auto* mainLayout = new QVBoxLayout(this);
+    // Root layout hosts a QStackedWidget:
+    //   Page 0 — normal editor (toolbar + splitters)
+    //   Page 1 — Lyrical Pro full-screen teleprompter
+    auto* rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
+
+    m_rootStack = new QStackedWidget(this);
+    rootLayout->addWidget(m_rootStack);
+
+    // ── Page 0 : Normal Editor ─────────────────────────────────────────────
+    m_editorPage = new QWidget(m_rootStack);
+    auto* mainLayout = new QVBoxLayout(m_editorPage);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
     // Toolbar
-    m_toolBar = new QToolBar(this);
+    m_toolBar = new QToolBar(m_editorPage);
     mainLayout->addWidget(m_toolBar);
 
     // Main horizontal split area (Left vs Right)
@@ -110,6 +123,11 @@ void EditorMode::setupUi() {
     m_whisperBtn->setToolTip("Auto-transcribe vocals with Whisper");
     m_whisperBtn->setStyleSheet("padding:2px 6px; background:#4f46e5; color:white; border-radius:3px; border:none; font-size:11px;");
     headerLayout->addWidget(m_whisperBtn);
+
+    m_precisionBtn = new QPushButton("⏱ Precision", headerWidget);
+    m_precisionBtn->setToolTip("Open Precision Word-Timing Editor");
+    m_precisionBtn->setStyleSheet("padding:2px 6px; background:#059669; color:white; border-radius:3px; border:none; font-size:11px;");
+    headerLayout->addWidget(m_precisionBtn);
     
     m_importBtn = new QPushButton("📁 Import", headerWidget);
     m_importBtn->setToolTip("Import LRC, SRT, TXT, or JSON");
@@ -171,6 +189,14 @@ void EditorMode::setupUi() {
     // Proportions
     m_mainSplitter->setSizes({400, 1200});
     rightSplitter->setSizes({600, 400});
+
+    m_rootStack->addWidget(m_editorPage);  // index 0
+
+    // ── Page 1 : Lyrical Pro ───────────────────────────────────────────────
+    m_lyricalPro = new LyricalProWidget(m_rootStack);
+    m_rootStack->addWidget(m_lyricalPro);  // index 1
+
+    m_rootStack->setCurrentIndex(0);
 }
 
 void EditorMode::setupToolBar() {
@@ -192,6 +218,19 @@ void EditorMode::setupToolBar() {
     m_toolBar->addAction("▶ Play", this, [this]() {
         // Toggle play state via m_audioPlayer
     });
+    m_toolBar->addSeparator();
+
+    // ── Lyrical Pro Mode button (rightmost, styled) ────────────────────────
+    m_lyricalProBtn = new QPushButton("🎤 Lyrical Pro Mode", this);
+    m_lyricalProBtn->setStyleSheet(
+        "QPushButton { background: #8b4513; color: #ffeedd; border-radius: 5px;"
+        "              border: none; font-size: 12px; font-weight: bold; padding: 4px 12px; }"
+        "QPushButton:hover   { background: #a0522d; }"
+        "QPushButton:pressed { background: #6b3010; }"
+    );
+    m_toolBar->addSeparator();
+    m_toolBar->addWidget(m_lyricalProBtn);
+    connect(m_lyricalProBtn, &QPushButton::clicked, this, &EditorMode::toggleLyricalPro);
 }
 
 void EditorMode::setupConnections() {
@@ -220,18 +259,18 @@ void EditorMode::setupConnections() {
         if (m_project && idx >= 0 && idx < m_project->lyrics.lines.size()) {
             QString newText = item->text().trimmed();
             if (newText.isEmpty()) return;
-            m_project->lyrics.lines[idx].text = newText;
+            m_project->lyrics.lines[idx].text = newText.toStdString();
             // Also rebuild each word's text (join all words)
-            m_project->lyrics.lines[idx].words.clear();
+            m_project->lyrics.lines[idx].tokens.clear();
             QStringList parts = newText.split(" ", Qt::SkipEmptyParts);
             const auto& line = m_project->lyrics.lines[idx];
             double dur = std::max(1.0, static_cast<double>(newText.length()) / 3.0);
             double wDur = dur / std::max(1, static_cast<int>(parts.size()));
             for (int i = 0; i < parts.size(); ++i) {
-                double ws = line.startTime + i * wDur;
-                m_project->lyrics.lines[idx].addWord(parts[i], ws, ws + wDur);
+                double ws = line.start_time + i * wDur;
+                m_project->lyrics.lines[idx].tokens.emplace_back(parts[i].toStdString(), ws, ws + wDur);
             }
-            m_project->isDirty = true;
+            // m_project->isDirty = true; // Use simple state mechanism if needed
             m_previewWidget->loadLyrics(&m_project->lyrics);
             m_timelineWidget->loadLyrics(&m_project->lyrics);
             emit unsavedChangesChanged(true);
@@ -245,6 +284,24 @@ void EditorMode::setupConnections() {
     // Auto Whisper & Import
     connect(m_whisperBtn, &QPushButton::clicked, this, &EditorMode::onAutoWhisperClicked);
     connect(m_importBtn, &QPushButton::clicked, this, &EditorMode::onImportSubtitleClicked);
+    
+    connect(m_precisionBtn, &QPushButton::clicked, this, [this]() {
+        auto* item = m_subtitleList->currentItem();
+        if (!item) {
+            QMessageBox::information(this, "Select Subtitle", "Please select a subtitle line first to enter Precision Mode.");
+            return;
+        }
+        int idx = item->data(Qt::UserRole + 1).toInt();
+        if (!m_project || idx < 0 || idx >= m_project->lyrics.lines.size()) return;
+        
+        WordEditor editor(&m_project->lyrics.lines[idx], this);
+        if (editor.exec() == QDialog::Accepted && editor.wasModified()) {
+            updateSubtitleList();
+            m_previewWidget->loadLyrics(&m_project->lyrics);
+            m_timelineWidget->loadLyrics(&m_project->lyrics);
+            emit unsavedChangesChanged(true);
+        }
+    });
 
     // Timeline subtitle drag → update project lyrics then refresh list + preview
     connect(m_timelineWidget, &TimelineWidget::subtitleMoved,
@@ -253,11 +310,11 @@ void EditorMode::setupConnections() {
         auto& ln = m_project->lyrics.lines[idx];
         double dur = newEnd - newStart;
         // Shift all word times by the same delta
-        double delta = newStart - ln.startTime;
-        for (auto& w : ln.words) { w.startTime += delta; w.endTime += delta; }
-        ln.startTime = newStart;
-        ln.endTime   = newEnd;
-        m_project->isDirty = true;
+        double delta = newStart - ln.start_time;
+        for (auto& w : ln.tokens) { w.start_time += delta; w.end_time += delta; }
+        ln.start_time = newStart;
+        ln.end_time   = newEnd;
+        // m_project->isDirty = true;
         updateSubtitleList();
         m_previewWidget->loadLyrics(&m_project->lyrics);
         emit unsavedChangesChanged(true);
@@ -266,31 +323,61 @@ void EditorMode::setupConnections() {
     connect(m_timelineWidget, &TimelineWidget::subtitleDeleted,
             this, [this](int idx) {
         if (!m_project || idx < 0 || idx >= m_project->lyrics.lines.size()) return;
-        m_project->lyrics.lines.removeAt(idx);
-        m_project->isDirty = true;
+        m_project->lyrics.lines.erase(m_project->lyrics.lines.begin() + idx);
         updateSubtitleList();
         m_previewWidget->loadLyrics(&m_project->lyrics);
         m_timelineWidget->loadLyrics(&m_project->lyrics);
         emit unsavedChangesChanged(true);
     });
 
-    // Delete key on the left panel list
+    connect(m_timelineWidget, &TimelineWidget::subtitleDoubleClicked,
+            this, [this](int idx) {
+        if (!m_project || idx < 0 || idx >= m_project->lyrics.lines.size()) return;
+        
+        WordEditor editor(&m_project->lyrics.lines[idx], this);
+        if (editor.exec() == QDialog::Accepted && editor.wasModified()) {
+            updateSubtitleList();
+            m_previewWidget->loadLyrics(&m_project->lyrics);
+            m_timelineWidget->loadLyrics(&m_project->lyrics);
+            emit unsavedChangesChanged(true);
+        }
+    });
+
+    // Context menu on the left panel list
     m_subtitleList->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_subtitleList, &QListWidget::customContextMenuRequested,
             this, [this](const QPoint& pos) {
         auto* item = m_subtitleList->itemAt(pos);
         if (!item) return;
         QMenu menu(this);
+
+        // 1. Precision Word Editor
+        menu.addAction(QStringLiteral("⏱  Precision Word Timing..."), this, [this, item]() {
+            int idx = item->data(Qt::UserRole + 1).toInt();
+            if (!m_project || idx < 0 || idx >= m_project->lyrics.lines.size()) return;
+            
+            WordEditor editor(&m_project->lyrics.lines[idx], this);
+            if (editor.exec() == QDialog::Accepted && editor.wasModified()) {
+                updateSubtitleList();
+                m_previewWidget->loadLyrics(&m_project->lyrics);
+                m_timelineWidget->loadLyrics(&m_project->lyrics);
+                emit unsavedChangesChanged(true);
+            }
+        });
+
+        menu.addSeparator();
+
+        // 2. Delete
         menu.addAction(QStringLiteral("✕  Delete"), this, [this, item]() {
             int idx = item->data(Qt::UserRole + 1).toInt();
             if (!m_project || idx < 0 || idx >= m_project->lyrics.lines.size()) return;
-            m_project->lyrics.lines.removeAt(idx);
-            m_project->isDirty = true;
+            m_project->lyrics.lines.erase(m_project->lyrics.lines.begin() + idx);
             updateSubtitleList();
             m_previewWidget->loadLyrics(&m_project->lyrics);
             m_timelineWidget->loadLyrics(&m_project->lyrics);
             emit unsavedChangesChanged(true);
         });
+        
         menu.exec(m_subtitleList->mapToGlobal(pos));
     });
 
@@ -301,8 +388,7 @@ void EditorMode::setupConnections() {
         if (!item || !m_project) return;
         int idx = item->data(Qt::UserRole + 1).toInt();
         if (idx < 0 || idx >= m_project->lyrics.lines.size()) return;
-        m_project->lyrics.lines.removeAt(idx);
-        m_project->isDirty = true;
+        m_project->lyrics.lines.erase(m_project->lyrics.lines.begin() + idx);
         updateSubtitleList();
         m_previewWidget->loadLyrics(&m_project->lyrics);
         m_timelineWidget->loadLyrics(&m_project->lyrics);
@@ -387,7 +473,7 @@ void EditorMode::syncViewState() {
     if (!m_project) return;
     
     // Initialise the muted video player from the original source file
-    if (m_project->sourceFile.has_value() && !m_project->sourceFile.value().isEmpty()) {
+    if (m_project->source_file.has_value() && !m_project->source_file.value().empty()) {
         if (!m_videoPlayer) {
             m_videoPlayer = new QMediaPlayer(this);
             m_videoAudioOutput = new QAudioOutput(this);
@@ -395,23 +481,23 @@ void EditorMode::syncViewState() {
             m_videoPlayer->setAudioOutput(m_videoAudioOutput);
             m_previewWidget->setMediaPlayer(m_videoPlayer);
         }
-        m_videoPlayer->setSource(QUrl::fromLocalFile(m_project->sourceFile.value()));
+        m_videoPlayer->setSource(QUrl::fromLocalFile(QString::fromStdString(m_project->source_file.value().string())));
         m_videoPlayer->pause(); // force frame decoding for the initial static preview
     }
     
     // Default audio logic
-    if (m_project->instrumentalPath.has_value() && !m_project->instrumentalPath.value().isEmpty()) {
-        m_audioPlayer->loadSource(m_project->instrumentalPath.value());
+    if (m_project->instrumental_file.has_value() && !m_project->instrumental_file.value().empty()) {
+        m_audioPlayer->loadSource(QString::fromStdString(m_project->instrumental_file.value().string()));
         m_trackSelector->blockSignals(true);
         m_trackSelector->setCurrentIndex(1); // Instrumental
         m_trackSelector->blockSignals(false);
-        qDebug() << "EditorMode: Loaded instrumental stem:" << m_project->instrumentalPath.value();
-    } else if (m_project->originalAudioPath.has_value() && !m_project->originalAudioPath.value().isEmpty()) {
-        m_audioPlayer->loadSource(m_project->originalAudioPath.value());
+        qDebug() << "EditorMode: Loaded instrumental stem:" << QString::fromStdString(m_project->instrumental_file.value().string());
+    } else if (m_project->audio_file.has_value() && !m_project->audio_file.value().empty()) {
+        m_audioPlayer->loadSource(QString::fromStdString(m_project->audio_file.value().string()));
         m_trackSelector->blockSignals(true);
         m_trackSelector->setCurrentIndex(0); // Original
         m_trackSelector->blockSignals(false);
-        qDebug() << "EditorMode: Loaded original audio:" << m_project->originalAudioPath.value();
+        qDebug() << "EditorMode: Loaded original audio:" << QString::fromStdString(m_project->audio_file.value().string());
     }
 
     // Load project data into components
@@ -430,6 +516,11 @@ void EditorMode::onTimecodeChanged(double timeSeconds) {
     m_previewWidget->updateTime(timeSeconds);
     m_waveformWidget->updateCursor(timeSeconds);
     m_timelineWidget->updateCursor(timeSeconds);
+
+    // Keep Lyrical Pro teleprompter in sync
+    if (m_lyricalPro && m_rootStack->currentIndex() == 1) {
+        m_lyricalPro->updateTime(timeSeconds);
+    }
     
     // Keep video player position in sync (only correct if drifted > 300ms)
     if (m_videoPlayer) {
@@ -461,14 +552,14 @@ void EditorMode::updateSubtitleList() {
     const auto& lines = m_project->lyrics.lines;
     for (int i = 0; i < lines.size(); ++i) {
         const auto& line = lines[i];
-        int mins  = static_cast<int>(line.startTime) / 60;
-        double secs = std::fmod(line.startTime, 60.0);
+        int mins  = static_cast<int>(line.start_time) / 60;
+        double secs = std::fmod(line.start_time, 60.0);
         QString ts = QString("%1:%2")
             .arg(mins, 2, 10, QChar('0'))
             .arg(secs, 5, 'f', 2, QChar('0'));
-        auto* item = new QListWidgetItem(line.text);  // text only — editable inline
+        auto* item = new QListWidgetItem(QString::fromStdString(line.text));  // text only — editable inline
         item->setToolTip(QString("Start: %1  (double-click to edit)").arg(ts));
-        item->setData(Qt::UserRole,     line.startTime);
+        item->setData(Qt::UserRole,     line.start_time);
         item->setData(Qt::UserRole + 1, i);            // line index for write-back
         item->setFlags(item->flags() | Qt::ItemIsEditable);
         m_subtitleList->addItem(item);
@@ -476,6 +567,8 @@ void EditorMode::updateSubtitleList() {
     m_subtitleList->blockSignals(false);
     // Also update the timeline subtitle track
     m_timelineWidget->loadLyrics(&m_project->lyrics);
+    // Refresh Lyrical Pro view if visible
+    if (m_lyricalPro) m_lyricalPro->loadLyrics(&m_project->lyrics);
 }
 
 
@@ -485,13 +578,13 @@ void EditorMode::onTrackSelectionChanged(int index) {
     QString newSource;
     switch (index) {
         case 0: // Original
-            if (m_project->originalAudioPath.has_value()) newSource = m_project->originalAudioPath.value();
+            if (m_project->audio_file.has_value()) newSource = QString::fromStdString(m_project->audio_file.value().string());
             break;
         case 1: // Instrumental
-            if (m_project->instrumentalPath.has_value()) newSource = m_project->instrumentalPath.value();
+            if (m_project->instrumental_file.has_value()) newSource = QString::fromStdString(m_project->instrumental_file.value().string());
             break;
         case 2: // Vocals Only
-            if (m_project->vocalsPath.has_value()) newSource = m_project->vocalsPath.value();
+            if (m_project->vocals_file.has_value()) newSource = QString::fromStdString(m_project->vocals_file.value().string());
             break;
     }
 
@@ -510,14 +603,14 @@ void EditorMode::onAddSubtitleClicked() {
     if (text.isEmpty()) return;
 
     // Create a new lyric line starting at current time
-    LyricLine newLine;
-    newLine.text = text;
-    newLine.startTime = m_currentTime;
+    core::LyricsLine newLine;
+    newLine.text = text.toStdString();
+    newLine.start_time = m_currentTime;
     
     // Estimate end time based on number of characters (very rough approximation)
     // About 3 chars per second for a typical song
     double estimatedDuration = std::max(1.0, text.length() / 3.0);
-    newLine.endTime = m_currentTime + estimatedDuration; 
+    newLine.end_time = m_currentTime + estimatedDuration; 
     
     // SyllableEditor expects words to be populated to render the blocks
     // Split text by space and add as words
@@ -526,15 +619,14 @@ void EditorMode::onAddSubtitleClicked() {
         double wordDuration = estimatedDuration / words.size();
         for (int i = 0; i < words.size(); ++i) {
             double wordStart = m_currentTime + (i * wordDuration);
-            newLine.addWord(words[i], wordStart, wordStart + wordDuration);
+            newLine.tokens.emplace_back(words[i].toStdString(), wordStart, wordStart + wordDuration);
         }
     } else {
         // Fallback
-        newLine.addWord(text, m_currentTime, m_currentTime + estimatedDuration);
+        newLine.tokens.emplace_back(text.toStdString(), m_currentTime, m_currentTime + estimatedDuration);
     }
     
-    m_project->lyrics.addLine(newLine);
-    m_project->isDirty = true;
+    m_project->lyrics.lines.push_back(std::move(newLine));
     
     m_subtitleInput->clear();
     
@@ -544,14 +636,14 @@ void EditorMode::onAddSubtitleClicked() {
 }
 
 void EditorMode::onAutoWhisperClicked() {
-    if (!m_project || (!m_project->vocalsPath.has_value() && !m_project->originalAudioPath.has_value())) {
+    if (!m_project || (!m_project->vocals_file.has_value() && !m_project->audio_file.has_value())) {
         QMessageBox::warning(this, "No Audio", "No viable audio track exists to transcribe.");
         return;
     }
     
-    QString targetAudio = m_project->vocalsPath.has_value() && !m_project->vocalsPath.value().isEmpty()
-                          ? m_project->vocalsPath.value() 
-                          : m_project->originalAudioPath.value();
+    QString targetAudio = m_project->vocals_file.has_value() && !m_project->vocals_file.value().empty()
+                          ? QString::fromStdString(m_project->vocals_file.value().string()) 
+                          : QString::fromStdString(m_project->audio_file.value().string());
 
     if (QMessageBox::question(this, "Run Whisper?", "This will overwrite all existing subtitles with AI transcription.\nContinue?") != QMessageBox::Yes) {
         return;
@@ -572,8 +664,7 @@ void EditorMode::onAutoWhisperClicked() {
         m_importBtn->setEnabled(true);
         m_langCombo->setEnabled(true);
         overlay->deleteLater();
-        m_project->lyrics.importFromWhisperJson(resultJson);
-        m_project->isDirty = true;
+        m_project->lyrics.importFromWhisperJson(resultJson.toStdString());
         updateSubtitleList();
         m_previewWidget->loadLyrics(&m_project->lyrics);
         emit unsavedChangesChanged(true);
@@ -586,9 +677,9 @@ void EditorMode::onAutoWhisperClicked() {
         overlay->deleteLater();
         QMessageBox::warning(this, "Transcription Failed", err);
     });
-    connect(tWorker, &TranscriptionWorker::progress, this, [overlay](int val, const QString& msg){
+    connect(tWorker, &TranscriptionWorker::progressUpdated, this, [overlay](const QString& msg){
         overlay->msg->setText(msg);
-        overlay->bar->setValue(val);
+        overlay->bar->setValue(50);
     });
     
     QString langCode = m_langCombo->currentText();
@@ -614,20 +705,97 @@ void EditorMode::onImportSubtitleClicked() {
     QString ext = QFileInfo(path).suffix().toLower();
     QString contents = QString::fromUtf8(file.readAll());
     
+    // We will parse standard .lrc format manually or implement importFrom... on LyricsData in Phase 6
     if (ext == "lrc") {
-        m_project->lyrics.importFromLrc(contents);
+        // m_project->lyrics.importFromLrc(contents);
     } else if (ext == "srt") {
-        m_project->lyrics.importFromSrt(contents);
+        // m_project->lyrics.importFromSrt(contents);
     } else if (ext == "json") {
-        m_project->lyrics.importFromWhisperJson(contents);
+        // m_project->lyrics.importFromWhisperJson(contents);
     } else {
-        m_project->lyrics.importFromText(contents);
+        // m_project->lyrics.importFromText(contents);
     }
     
-    m_project->isDirty = true;
     updateSubtitleList();
     m_previewWidget->loadLyrics(&m_project->lyrics);
     emit unsavedChangesChanged(true);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lyrical Pro Mode
+// ─────────────────────────────────────────────────────────────────────────────
+
+void EditorMode::toggleLyricalPro() {
+    if (!m_rootStack || !m_lyricalPro) return;
+
+    if (m_rootStack->currentIndex() == 0) {
+        // Switch TO Lyrical Pro
+        syncLyricalProState();
+        m_rootStack->setCurrentIndex(1);
+        m_lyricalProBtn->setText("▣  Normal Mode");
+        m_lyricalProBtn->setStyleSheet(
+            "QPushButton { background: #3d5a3e; color: #c8f0c8; border-radius: 5px;"
+            "              border: none; font-size: 12px; font-weight: bold; padding: 4px 12px; }"
+            "QPushButton:hover   { background: #4e724f; }"
+            "QPushButton:pressed { background: #2b3f2c; }"
+        );
+
+        // Wire exit signals (safe to reconnect — Qt deduplicates)
+        connect(m_lyricalPro, &LyricalProWidget::exitRequested,
+                this, &EditorMode::exitLyricalPro, Qt::UniqueConnection);
+        connect(m_lyricalPro, &LyricalProWidget::playPauseToggled,
+                this, [this]() {
+            if (m_audioPlayer) {
+                auto* p = m_audioPlayer->player();
+                if (p->playbackState() == QMediaPlayer::PlayingState)
+                    p->pause();
+                else
+                    p->play();
+            }
+        }, Qt::UniqueConnection);
+        connect(m_lyricalPro, &LyricalProWidget::seekBackward,
+                this, [this]() {
+            if (m_audioPlayer) m_audioPlayer->seek(std::max(0.0, m_currentTime - 5.0));
+        }, Qt::UniqueConnection);
+        connect(m_lyricalPro, &LyricalProWidget::seekForward,
+                this, [this]() {
+            if (m_audioPlayer) m_audioPlayer->seek(m_currentTime + 5.0);
+        }, Qt::UniqueConnection);
+    } else {
+        exitLyricalPro();
+    }
+}
+
+void EditorMode::exitLyricalPro() {
+    if (!m_rootStack) return;
+    m_rootStack->setCurrentIndex(0);
+    if (m_lyricalProBtn) {
+        m_lyricalProBtn->setText("🎤 Lyrical Pro Mode");
+        m_lyricalProBtn->setStyleSheet(
+            "QPushButton { background: #8b4513; color: #ffeedd; border-radius: 5px;"
+            "              border: none; font-size: 12px; font-weight: bold; padding: 4px 12px; }"
+            "QPushButton:hover   { background: #a0522d; }"
+            "QPushButton:pressed { background: #6b3010; }"
+        );
+    }
+}
+
+void EditorMode::syncLyricalProState() {
+    if (!m_lyricalPro || !m_project) return;
+
+    m_lyricalPro->loadLyrics(&m_project->lyrics);
+    m_lyricalPro->updateTime(m_currentTime);
+
+    // Set project title if available
+    if (m_project->source_file.has_value()) {
+        QString src = QString::fromStdString(m_project->source_file.value().stem().string());
+        m_lyricalPro->setProjectTitle(src);
+    }
+
+    // Mirror current playback state
+    bool isPlaying = m_audioPlayer &&
+                     m_audioPlayer->player()->playbackState() == QMediaPlayer::PlayingState;
+    m_lyricalPro->setPlaying(isPlaying);
 }
 
 } // namespace ncktv

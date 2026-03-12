@@ -62,9 +62,9 @@ Located in `src/gui/`, the UI utilizes Qt's `QWidget` event loops for complex ti
 
 ### The Editor Workspace (`EditorMode`):
 Constructed entirely using nested `QSplitter` layouts, allowing robust resizing:
-- **`AudioPlayer`**: Controls global playback state and triggers rapid `QTimer` invalidations (refreshing at ~60Hz).
-- **`SyllableEditor`**: Manages fine-tuning the active syllable's word-spacing via native font metric calculation.
-- **`TimelineWidget`**: Responsible for the top-level composition view of multitracked clips. Tracks deep word-level metrics natively from Whisper outputs, supporting granular drag-and-drop structural updates. Render operations are strictly debounced utilizing a >= 1.0 pixel threshold to radically lower `update()` saturation.
+- **`AudioPlayer`**: Controls global playback state and implements hardware `QTimer` invalidations (refreshing at ~60Hz) specifically designed to circumvent asynchronous lag inherent to native `QMediaPlayer::seek` methodologies.
+- **`PrecisionMode` & `WordCanvas`**: A complete vertical cascading UI mirroring traditional Karaoke Builder Studio workflows. Employs a fixed left-aligned Y-axis waveform, enabling syllable blocks to be dragged vertically independently without interfering with standard X-axis track data.
+- **`TimelineWidget`**: Responsible for the top-level horizontal composition view of multitracked clips. Tracks deep word-level metrics natively from Whisper outputs, supporting granular drag-and-drop structural updates. Render operations are strictly debounced utilizing a >= 1.0 pixel threshold to radically lower `update()` saturation.
 - **`WaveformWidget`**: Employs Level-of-Detail (LOD) downsampling; waveforms are generated dynamically using pixel-bucketing algorithms tracking the min/max variance inside a static screen column. This compresses potentially millions of PCM samples into single vector bounds per frame line, yielding instantaneous scrolling logic.
 - **`KaraokePreview`**: A robust layout container rendering real-time representations of the `.ass` generator output atop a video background.
 

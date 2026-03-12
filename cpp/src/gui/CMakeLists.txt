@@ -12,6 +12,9 @@ set(GUI_SOURCES
     editor/timing_offset_handler.cpp
     editor/undo_manager.cpp
 
+    # Precision
+    precision/precision_mode.cpp
+
     # Components
     components/syllable_editor.cpp
     components/karaoke_preview.cpp
@@ -21,6 +24,7 @@ set(GUI_SOURCES
     components/curve_editor.cpp
     components/effect_panel.cpp
     components/timing_calibration.cpp
+    components/lyrical_pro_widget.cpp
 
     # Dialogs
     dialogs/export_dialog.cpp
@@ -54,6 +58,7 @@ set(GUI_HEADERS
     editor/editor_mode.h
     editor/timing_offset_handler.h
     editor/undo_manager.h
+    precision/precision_mode.h
     components/syllable_editor.h
     components/karaoke_preview.h
     components/timeline_widget.h
@@ -62,6 +67,7 @@ set(GUI_HEADERS
     components/curve_editor.h
     components/effect_panel.h
     components/timing_calibration.h
+    components/lyrical_pro_widget.h
     dialogs/export_dialog.h
     dialogs/import_dialog.h
     dialogs/new_project_dialog.h

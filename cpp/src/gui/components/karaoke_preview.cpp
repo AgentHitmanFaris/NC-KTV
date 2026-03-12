@@ -10,7 +10,7 @@ KaraokePreview::KaraokePreview(QWidget* parent)
     setMinimumSize(320, 180); // 16:9 aspect ratio minimum
 }
 
-void KaraokePreview::loadLyrics(LyricsData* data) {
+void KaraokePreview::loadLyrics(core::LyricsData* data) {
     m_data = data;
     update();
 }
@@ -38,6 +38,10 @@ void KaraokePreview::setMediaPlayer(QMediaPlayer* player) {
 
 void KaraokePreview::onVideoFrameChanged(const QVideoFrame& frame) {
     if (!frame.isValid()) return;
+    static int frameCount = 0;
+    if (frameCount++ % 30 == 0) {
+        qDebug() << "KaraokePreview: Received video frame" << frameCount << "Size:" << frame.width() << "x" << frame.height();
+    }
     m_backgroundImg = frame.toImage();
     update();
 }
@@ -84,13 +88,13 @@ void KaraokePreview::paintEvent(QPaintEvent* /*event*/) {
 }
 
 void KaraokePreview::drawSubtitles(QPainter& painter) {
-    if (m_data->lines.isEmpty()) return;
+    if (m_data->lines.empty()) return;
 
     // Find active or upcoming line
     int activeIdx = -1;
     for (int i = 0; i < m_data->lines.size(); ++i) {
         const auto& line = m_data->lines[i];
-        if (m_currentTime >= line.startTime - 2.0 && m_currentTime <= line.endTime + 1.0) {
+        if (m_currentTime >= line.start_time - 2.0 && m_currentTime <= line.end_time + 1.0) {
             activeIdx = i;
             break;
         }
@@ -117,19 +121,19 @@ void KaraokePreview::drawSubtitles(QPainter& painter) {
     for (int i = activeIdx; i < m_data->lines.size() && drawnLines < linesToDraw; ++i) {
         const auto& line = m_data->lines[i];
         
-        bool isCurrentLine = (m_currentTime >= line.startTime && m_currentTime <= line.endTime);
+        bool isCurrentLine = (m_currentTime >= line.start_time && m_currentTime <= line.end_time);
         
         // Calculate total width to center the line
         int totalWidth = 0;
-        for (const auto& w : line.words) {
-            totalWidth += fm.horizontalAdvance(w.word) + 5; // 5px padding
+        for (const auto& w : line.tokens) {
+            totalWidth += fm.horizontalAdvance(QString::fromStdString(w.text)) + 5; // 5px padding
         }
         
         int currentX = (m_targetWidth - totalWidth) / 2;
         int currentY = baseY + (drawnLines * lineSpacing);
         
-        for (const auto& w : line.words) {
-            QString wordText = w.word;
+        for (const auto& w : line.tokens) {
+            QString wordText = QString::fromStdString(w.text);
             int wWidth = fm.horizontalAdvance(wordText);
             
             // Text Outline/Shadow
@@ -138,8 +142,8 @@ void KaraokePreview::drawSubtitles(QPainter& painter) {
             
             // Fill
             QColor fillColor = Qt::white;
-            if (isCurrentLine && m_currentTime >= w.startTime) {
-                if (m_currentTime >= w.startTime + w.duration()) {
+            if (isCurrentLine && m_currentTime >= w.start_time) {
+                if (m_currentTime >= w.end_time) {
                     // Fully sung
                     fillColor = QColor("#00a2ff"); // Blue sung color
                 } else {

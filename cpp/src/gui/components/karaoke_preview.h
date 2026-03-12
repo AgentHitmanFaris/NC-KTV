@@ -6,8 +6,7 @@
 #include <QVideoSink>
 #include <QVideoFrame>
 #include <QMediaPlayer>
-
-#include "../../core/lyrics/lyrics_data.h"
+#include "../../core/timeline/ncktv_core_data.hpp"
 
 namespace ncktv {
 
@@ -17,7 +16,8 @@ class KaraokePreview : public QWidget {
 public:
     explicit KaraokePreview(QWidget* parent = nullptr);
 
-    void loadLyrics(LyricsData* data);
+    // Data Loading
+    void loadLyrics(core::LyricsData* data);
     void updateTime(double timeSeconds);
     void setBackgroundImage(const QImage& img);
 
@@ -33,7 +33,7 @@ private slots:
 private:
     void drawSubtitles(QPainter& painter);
 
-    LyricsData* m_data = nullptr;
+    core::LyricsData* m_data = nullptr;
     double m_currentTime = 0.0;
     QImage m_backgroundImg;
     QVideoSink* m_videoSink = nullptr;

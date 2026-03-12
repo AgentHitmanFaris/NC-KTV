@@ -112,3 +112,12 @@ desktop.ini
 
 # Wiki
 NC-KTV.wiki/
+
+# Build artifacts
+NC-KTV-Portable/
+cpp/out/
+cpp/build/
+cpp/*.txt
+*.ncktv_run_sep.py
+fix_precision.py
+cpp/src/gui/dialogs/replace_words*.py

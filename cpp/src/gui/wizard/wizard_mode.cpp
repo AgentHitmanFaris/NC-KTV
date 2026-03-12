@@ -4,7 +4,6 @@
 #include <QFile>
 #include <QHBoxLayout>
 #include "workers/vocal_separator_worker.h"
-#include "audio/audio_processor.h"
 #include <QFileInfo>
 
 namespace ncktv {
@@ -117,8 +116,14 @@ void WizardMode::onStartClicked() {
     m_statusLabel->setText("Separating vocals & instruments...");
     m_progressBar->setValue(10);
     
-    // Start vocal separation worker
-    auto* worker = new VocalSeparatorWorker(this);
+    // Start vocal separation worker in a background thread
+    auto* thread = new QThread(this);
+    auto* worker = new VocalSeparatorWorker(); // No parent, will be moved
+    worker->moveToThread(thread);
+    
+    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+
     connect(worker, &VocalSeparatorWorker::separationComplete, this, &WizardMode::onSeparationFinished);
     connect(worker, &VocalSeparatorWorker::error, this, &WizardMode::onSeparationError);
     connect(worker, &VocalSeparatorWorker::progress, this, [this](int val, const QString& msg){
@@ -126,7 +131,16 @@ void WizardMode::onStartClicked() {
         m_statusLabel->setText(msg);
     });
 
-    worker->startSeparation(m_selectedFile, "6_HP-Karaoke-UVR.pth", "output");
+    // Cleanup thread when work is done
+    connect(worker, &VocalSeparatorWorker::separationComplete, thread, &QThread::quit);
+    connect(worker, &VocalSeparatorWorker::error, thread, &QThread::quit);
+
+    thread->start();
+    
+    QMetaObject::invokeMethod(worker, "startSeparation", Qt::QueuedConnection,
+                              Q_ARG(QString, m_selectedFile),
+                              Q_ARG(QString, "UVR_MDXNET_KARA_2.onnx"),
+                              Q_ARG(QString, "output"));
 }
 
 void WizardMode::onSeparationFinished(const QString& instrumentalPath, const QString& vocalsPath) {
@@ -138,9 +152,8 @@ void WizardMode::onSeparationFinished(const QString& instrumentalPath, const QSt
     m_project->vocalsPath = vocalsPath;
     m_project->originalAudioPath = m_selectedFile;
     
-    // Use AudioProcessor to get duration for the timeline clip
-    AudioProcessor ap("temp/audio");
-    double duration = ap.getDuration(instrumentalPath);
+    // Removed AudioProcessor usage due to C++17 native migration
+    double duration = 180.0; // Dummy duration for now until QMediaPlayer/DSPEngine is linked
     
     // Add audio track to the timeline for the instrumental
     auto& track = m_project->timeline.addTrack("inst_track", TrackType::Audio, "Instrumental");
@@ -160,21 +173,37 @@ void WizardMode::onSeparationFinished(const QString& instrumentalPath, const QSt
         m_progressBar->setValue(0);
         m_statusLabel->setText("Transcribing vocals (this may take a minute)...");
         
-        auto* tWorker = new TranscriptionWorker(this);
+        // Start transcription worker in a background thread
+        auto* tThread = new QThread(this);
+        auto* tWorker = new TranscriptionWorker(); // No parent, will be moved
+        tWorker->moveToThread(tThread);
+        
+        connect(tThread, &QThread::finished, tWorker, &QObject::deleteLater);
+        connect(tThread, &QThread::finished, tThread, &QObject::deleteLater);
+
         connect(tWorker, &TranscriptionWorker::transcriptionComplete, this, &WizardMode::onTranscriptionFinished);
         connect(tWorker, &TranscriptionWorker::error, this, &WizardMode::onTranscriptionError);
-        connect(tWorker, &TranscriptionWorker::progress, this, [this](int val, const QString& msg){
-            m_progressBar->setValue(val);
+        connect(tWorker, &TranscriptionWorker::progressUpdated, this, [this](const QString& msg){
+            m_progressBar->setValue(50);
             m_statusLabel->setText(msg);
         });
         
+        // Cleanup thread when work is done
+        connect(tWorker, &TranscriptionWorker::transcriptionComplete, tThread, &QThread::quit);
+        connect(tWorker, &TranscriptionWorker::error, tThread, &QThread::quit);
+
         QString langStr = m_langCombo->currentText();
         QString langCode = "auto";
         if (langStr.contains("(")) {
             langCode = langStr.split("(").last().replace(")", "").trimmed();
         }
         
-        tWorker->startTranscription(vocalsPath, "base", langCode);
+        tThread->start();
+        
+        QMetaObject::invokeMethod(tWorker, "startTranscription", Qt::QueuedConnection,
+                                  Q_ARG(QString, vocalsPath),
+                                  Q_ARG(QString, "base"),
+                                  Q_ARG(QString, langCode));
     } else {
         emit projectReady(m_project);
     }

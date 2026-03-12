@@ -27,8 +27,8 @@ Originally written in Python, we have completely overhauled the NC-KTV engine us
 
 NC-KTV automates the entire karaoke video creation workflow:
 1. **Import** any media file natively via FFmpeg.
-2. **Separate** vocals from instrumentals via hardware-accelerated AI models.
-3. **Transcribe** lyrics automatically (Whisper/ONNX) or import industry standards.
+2. **Extract** vocals cleanly using UVR-compatible **ONNX** models (MDX-Net / VR Architecture). (Hardware Accelerated on MSVC; pure Python bridge on MinGW).
+3. **Transcribe** lyrics automatically (Whisper) or import industry standards.
 4. **Sync** lyrics with sub-millisecond precision using the new Hardware-Accelerated Timeline.
 5. **Export** to professional-grade formats (ASS, MP4, MKV).
 
@@ -37,14 +37,14 @@ NC-KTV automates the entire karaoke video creation workflow:
 ## Core Features
 
 ###  AI Vocal Separation (Lightning Fast)
-- **High-Performance Inference**: Re-implemented with native ONNX Runtime for drastically reduced latency.
+- **High-Performance Inference**: Re-implemented with native ONNX Runtime for drastically reduced latency on MSVC builds, and a lightweight Python subprocess bridge for MinGW.
 - **Hardware Acceleration**: Automatic target detection for CUDA (NVIDIA), DirectML (Windows), and CoreML (Apple Silicon).
 - **Supported Models**: Native integration with MDX-Net and Ultimate Vocal Remover (UVR) ecosystems.
 
 ###  Hardware-Accelerated Studio Editor
 - **Native Qt6 UI**: Butter-smooth 60fps+ rendering of complex timeline data via `QPainter` and Hardware Accel, featuring smart render-debouncing.
 - **Interactive Waveforms**: Zoom, scrub, and manipulate gigabytes of audio data instantaneously using pixel-bucketing compression without UI blocking.
-- **Precision Syllable Editing**: Fine-tune word and syllable timings natively with exact visual drag-and-drop word boundaries directly on the timeline track.
+- **Precision Karaoke Builder Studio Mode**: Brand-new fully vertical syllable tracking interface. Features cascading blocks locked to a Y-axis left-waveform display, a dedicated instant-update Lyrics Map sidebar for transcription tuning, fully-synchronized auto-scrolling, and millisecond-accurate "Play Segment" vocal isolation capabilities.
 - **In-Editor AI Support**: Kick off Whisper transcripts dynamically directly from the editor mode, complete with language override parameters and dimming modal overlays.
 - **Live Karaoke Preview**: Configurable zero-latency ASS subtitle rendering overlaid onto the active video track.
 

@@ -7,6 +7,7 @@
 #include <QHBoxLayout>
 #include <QMediaPlayer>
 #include <QAudioOutput>
+#include <QTimer>
 
 namespace ncktv {
 
@@ -46,6 +47,7 @@ private:
 
     QMediaPlayer* m_player = nullptr;
     QAudioOutput* m_audioOutput = nullptr;
+    QTimer* m_syncTimer = nullptr;
     
     bool m_pendingPlay = false;
     double m_pendingSeek = -1.0;
