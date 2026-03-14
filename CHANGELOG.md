@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0-rc3] - 2026-03-14
+
+### Fixed
+- **Stem Separation Quality**: Replaced power-of-2 restricted FFT with a Mixed-Radix FFT implementation in `ncktv_mdx_dsp.hpp`. This fixes the "high-pitched / distorted" sound issue when using MDX-Net models with non-power-of-2 window sizes (e.g. 6144, 7680).
+- **Qt Deprecation Warning**: Fixed deprecated `QMouseEvent` constructor in `word_editor.cpp` by using the modern Qt 6 constructor with `position()` and `globalPosition()`.
+- **Memory Leak**: Fixed heap-allocated `QMouseEvent` in `WordCanvas::mouseReleaseEvent` that was never freed; replaced with stack-allocated event.
+
+### Changed
+- **Transcription Worker**: Restored the Python subprocess bridge for Whisper transcription (`python -m whisper`) with robust Python path detection (bundled portable, local venv, system fallback). The native C++ engine remains disabled on MinGW due to compiler limitations.
+- **DSP Engine**: The `rfft` and `ifft_full` functions now operate directly on the original window size without zero-padding, ensuring spectral bin accuracy matches model expectations.
+
+---
+
 ## [1.0.0-rc2] - 2026-03-06
 
 ### Added
@@ -133,7 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### Phase 7: Community Themes & Plugins 🎨
+#### Phase 7: Community Themes and Plugins
 - **Plugin Architecture**: Extensible plugin system for custom effects and export templates
 - **Plugin Manager**: GUI for installing, enabling, and configuring plugins
 - **Plugin API**: Safe API for plugins to access NC-KTV features
@@ -267,7 +280,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Timeline Data Model**: Track, Clip, and Effect classes with full serialization support
 - **Playhead Synchronization**: Real-time playhead visualization synced with audio playback
 - **Click-to-Seek**: Click timeline ruler to jump to any position
-- **Timeline Toggle**: "📊 Timeline View" button in editor to show/hide timeline panel
+- **Timeline Toggle**: "Timeline View" button in editor to show/hide timeline panel
 - **Auto-Population**: Timeline automatically populated with audio, video, and lyrics tracks on project load
 - **Lyrics Timeline Clips**: Each lyric line appears as a clip on the timeline showing the actual lyrics text
 - **J/K/L Shortcuts**: Professional playback control - J (rewind 5s), K (pause/play), L (forward 5s)

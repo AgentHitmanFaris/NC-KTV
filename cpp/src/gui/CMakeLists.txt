@@ -100,3 +100,8 @@ target_link_libraries(ncktv PRIVATE
     Qt6::MultimediaWidgets
     Qt6::Network
 )
+
+# On MinGW, ensure the import library is built before linking ncktv
+if(WIN32 AND NOT MSVC AND TARGET onnxruntime_implib)
+    add_dependencies(ncktv onnxruntime_implib)
+endif()

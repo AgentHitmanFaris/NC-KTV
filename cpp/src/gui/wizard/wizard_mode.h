@@ -44,6 +44,7 @@ private:
     QPushButton* m_startBtn;
     QCheckBox* m_transcribeCheck;
     QComboBox* m_langCombo;
+    QComboBox* m_modelCombo = nullptr;   // UVR model selector
 
     // Page 2: Processing
     QLabel* m_statusLabel;

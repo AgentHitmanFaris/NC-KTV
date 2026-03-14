@@ -467,6 +467,6 @@ karaoke:
 
 ---
 
-**Happy Theming! 🎨**
+**Happy Theming!**
 
 For theme showcase and sharing, visit: https://github.com/AgentHitmanFaris/NC-KTV

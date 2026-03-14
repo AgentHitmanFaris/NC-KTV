@@ -16,8 +16,7 @@
                 "CMAKE_MAKE_PROGRAM":  "D:/ProgramData/Qt/Tools/Ninja/ninja.exe",
                 "CMAKE_PREFIX_PATH":   "D:/ProgramData/Qt/6.10.2/mingw_64",
                 "CMAKE_C_COMPILER":    "D:/ProgramData/Qt/Tools/mingw1310_64/bin/gcc.exe",
-                "CMAKE_CXX_COMPILER":  "D:/ProgramData/Qt/Tools/mingw1310_64/bin/g++.exe",
-                "Python3_ROOT_DIR":    "D:/Program Files/Python"
+                "CMAKE_CXX_COMPILER":  "D:/ProgramData/Qt/Tools/mingw1310_64/bin/g++.exe"
             },
             "environment": {
                 "PATH": "D:/ProgramData/Qt/6.10.2/mingw_64/bin;D:/ProgramData/Qt/Tools/mingw1310_64/bin;D:/ProgramData/Qt/Tools/CMake_64/bin;D:/ProgramData/Qt/Tools/Ninja;$penv{PATH}"

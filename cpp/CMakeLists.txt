@@ -46,19 +46,73 @@ FetchContent_MakeAvailable(json)
 # FetchContent_MakeAvailable(whisper)
 
 # 3. ONNX Runtime (prebuilt, GPU-capable)
-# The prebuilt zip ships .lib import libs which only work with MSVC.
-# MinGW builds skip ONNX; vocal separation uses the Python subprocess bridge.
-if(MSVC)
+# Supports BOTH MSVC and MinGW on Windows:
+#   MSVC  → links against the shipped onnxruntime.lib import library.
+#   MinGW → uses dlltool to auto-generate a MinGW-compatible .a from the DLL.
+if(WIN32)
     set(ORT_VERSION "1.18.0")
     FetchContent_Declare(onnxruntime
-        URL "https://github.com/microsoft/onnxruntime/releases/download/v1.18.0/onnxruntime-win-x64-gpu-1.18.0.zip"
+        URL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-win-x64-gpu-${ORT_VERSION}.zip"
     )
     FetchContent_MakeAvailable(onnxruntime)
 
+    set(ORT_DLL "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.dll")
+    set(ORT_INC "${onnxruntime_SOURCE_DIR}/include")
+
     add_library(onnx_shared SHARED IMPORTED)
-    set_property(TARGET onnx_shared PROPERTY IMPORTED_IMPLIB   "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib")
-    set_property(TARGET onnx_shared PROPERTY IMPORTED_LOCATION "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.dll")
-    target_include_directories(onnx_shared INTERFACE "${onnxruntime_SOURCE_DIR}/include")
+    target_include_directories(onnx_shared INTERFACE "${ORT_INC}")
+    set_property(TARGET onnx_shared PROPERTY IMPORTED_LOCATION "${ORT_DLL}")
+
+    if(MSVC)
+        # MSVC: use the shipped .lib import library directly
+        set_property(TARGET onnx_shared PROPERTY IMPORTED_IMPLIB "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib")
+    else()
+        # MinGW: generate a .a import library from the DLL using dlltool
+        set(ORT_IMPLIB "${CMAKE_BINARY_DIR}/libonnxruntime.a")
+        set(ORT_DEF    "${CMAKE_BINARY_DIR}/onnxruntime.def")
+
+        find_program(DLLTOOL_EXE dlltool
+            HINTS "${CMAKE_CXX_COMPILER_DIR}"
+                  "D:/ProgramData/Qt/Tools/mingw1310_64/bin"
+            REQUIRED
+        )
+        find_program(GENDEF_EXE gendef
+            HINTS "${CMAKE_CXX_COMPILER_DIR}"
+                  "D:/ProgramData/Qt/Tools/mingw1310_64/bin"
+        )
+
+        if(GENDEF_EXE)
+            # Best path: gendef extracts the exports, dlltool creates the .a
+            add_custom_command(
+                OUTPUT  "${ORT_IMPLIB}"
+                COMMAND "${GENDEF_EXE}" "${ORT_DLL}"
+                COMMAND "${CMAKE_COMMAND}" -E rename
+                        "${CMAKE_BINARY_DIR}/onnxruntime.def" "${ORT_DEF}"
+                COMMAND "${DLLTOOL_EXE}" -d "${ORT_DEF}" -l "${ORT_IMPLIB}"
+                DEPENDS "${ORT_DLL}"
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                COMMENT "Generating MinGW .a for ONNX Runtime via gendef+dlltool"
+                VERBATIM
+            )
+        else()
+            # Fallback: dlltool alone using --dllname
+            add_custom_command(
+                OUTPUT  "${ORT_IMPLIB}"
+                COMMAND "${DLLTOOL_EXE}"
+                        --dllname onnxruntime.dll
+                        --output-lib "${ORT_IMPLIB}"
+                        "${ORT_DLL}"
+                DEPENDS "${ORT_DLL}"
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                COMMENT "Generating MinGW .a for ONNX Runtime via dlltool"
+                VERBATIM
+            )
+        endif()
+
+        add_custom_target(onnxruntime_implib DEPENDS "${ORT_IMPLIB}")
+        set_property(TARGET onnx_shared PROPERTY IMPORTED_IMPLIB "${ORT_IMPLIB}")
+    endif()
+
     set(NCKTV_HAS_ONNX ON)
 else()
     set(NCKTV_HAS_ONNX OFF)

@@ -36,8 +36,20 @@ $env:PATH = "$QtBin;" + $env:PATH
 & "$QtBin\windeployqt.exe" "$TargetDir\ncktv.exe"
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed." }
 
+Write-Host ">>> Copying ONNX Runtime DLLs (GPU Support)..."
+$OrtLib = ".\cpp\out\build\windows-release\_deps\onnxruntime-src\lib"
+if (Test-Path $OrtLib) {
+    $foundDlls = Get-ChildItem -Path $OrtLib -Filter "*.dll"
+    foreach ($file in $foundDlls) {
+        Copy-Item $file.FullName -Destination $TargetDir
+        Write-Host "Copied $($file.Name)"
+    }
+} else {
+    Write-Host "WARNING: ONNX Runtime lib dir not found at $OrtLib" -ForegroundColor Yellow
+}
+
 Write-Host ">>> Copying Assets and Resources..."
-$FoldersToCopy = @("assets", "models", "plugins", "python_embed", "themes")
+$FoldersToCopy = @("assets", "ffmpeg", "models", "plugins", "themes")
 foreach ($folder in $FoldersToCopy) {
     if (Test-Path ".\$folder") {
         Copy-Item -Recurse -Force ".\$folder" -Destination "$TargetDir\"

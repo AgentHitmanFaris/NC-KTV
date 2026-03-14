@@ -7,7 +7,7 @@ Comprehensive technical documentation covering the internal architecture, memory
 
 ---
 
-##  Table of Contents
+## Table of Contents
 
 1. [Architectural Overview](#1-architectural-overview)
 2. [Build System & Dependencies](#2-build-system--dependencies)
@@ -52,7 +52,7 @@ Located in `src/core/`, this library (`ncktv_core.lib`/`.a`) operates completely
   - `Clip`: Atomic, movable timing units containing specific `Effect` or subtitle metadata.
 - **`SubtitleParser`**: Lightning-fast RegEx parser for TTML, VTT, LRC, SRT. Converts all string constraints to standard `LyricsData` structures.
 - **`AssGenerator`**: Constructs robust, deeply stylized `.ass` scripts directly utilizing `QColor` matrices.
-- **`AudioProcessor`**: Manages FFT buffering, stem extraction, and vocal rendering.
+- **`AudioProcessor`**: Manages FFT buffering via a native Mixed-Radix FFT (supporting arbitrary window sizes such as 6144, 7680), stem extraction, and vocal rendering.
 
 ---
 
@@ -77,7 +77,7 @@ To prevent signal-flooding, UI interactions are debounced leveraging `QTimer::si
 The separation of GUI and Processing relies extensively on an asynchronous event model.
 
 - **Audio Extraction**: `VocalRemover` operates within a `std::thread` worker pool (or QThread/QRunnable). Results are dispatched back to the main thread via standard Qt `signals`.
-- **AI Transcription (`Whisper`)**: Driven purely by child `QProcess` streams. It bridges the C++ gap to Python via local environment mapping (explicitly forcing UTF-8 encoding streams). A custom modal overlay actively consumes `stdout` signals to inform a real-time progress bar while disabling overlapping interface modifications.
+- **AI Transcription (`Whisper`)**: Driven by child `QProcess` streams. Bridges the C++ app to the system Python `whisper` module via automatic path discovery (bundled portable, local venv, or system Python). A custom modal overlay actively consumes `stdout` signals to inform a real-time progress bar while disabling overlapping interface modifications.
 - **State Mutation**: The `TimelineData` tree is strictly accessible by the GUI thread unless explicitly mutexed. Long-running structural mutations clone the project state entirely.
 - **Undo / Redo Paradigm**: Deep copies (handled natively via `nlohmann_json` stringification or clone constructors) exist isolated from the `QObject` lifecycles.
 

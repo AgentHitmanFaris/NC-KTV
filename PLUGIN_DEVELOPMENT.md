@@ -496,6 +496,6 @@ def initialize(self, api):
 
 ---
 
-**Happy Plugin Development! 🎉**
+**Happy Plugin Development!**
 
 For questions and support, visit the NC-KTV repository: https://github.com/AgentHitmanFaris/NC-KTV

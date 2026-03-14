@@ -17,100 +17,51 @@
 
 namespace ncktv {
 
+// Helper to find Python interpreter
+static QString findPython() {
+    QString appDir = QCoreApplication::applicationDirPath();
+    // 1. Bundled portable
+    QString p = QDir::cleanPath(appDir + "/python_embed/python.exe");
+    if (QFile::exists(p)) return p;
+    // 2. Local venv
+    p = QDir::cleanPath(QDir::currentPath() + "/venv/Scripts/python.exe");
+    if (QFile::exists(p)) return p;
+    // 3. System
+    return "python";
+}
+
 TranscriptionWorker::TranscriptionWorker(QObject* parent) : QObject(parent) {}
 
 void TranscriptionWorker::startTranscription(const QString& audioPath,
-                                             const QString& model,
-                                             const QString& language)
+                                               const QString& model,
+                                               const QString& language)
 {
-    // ── Locate the embedded Python interpreter ────────────────────────────────
-    QString appDir   = QCoreApplication::applicationDirPath();
-    QString pyExe    = appDir + "/../python_embed/python.exe";
-    // Normalise path separators
-    pyExe = QDir::toNativeSeparators(QDir::cleanPath(pyExe));
+    emit progressUpdated("Initializing Whisper (Python bridge)...");
 
-    if (!QFile::exists(pyExe)) {
-        // Fallback: system Python
-        pyExe = "python";
-    }
+    QString pythonPath = findPython();
+    QProcess* proc = new QProcess(this);
 
-    // ── Build the whisper command ─────────────────────────────────────────────
-    // Usage: python -m whisper <audio> --model <model> --language <lang>
-    //        --output_format json --output_dir <tmpdir>
-    QString tmpDir   = QDir::tempPath() + "/ncktv_whisper";
-    QDir().mkpath(tmpDir);
-
-    QString modelArg = model.isEmpty() ? "base" : model;
-    QString langArg  = (language.isEmpty() || language == "Auto") ? "auto" : language;
-
-    QStringList args = {
-        "-m", "whisper",
-        audioPath,
-        "--model",         modelArg,
-        "--language",      langArg,
-        "--output_format", "json",
-        "--output_dir",    tmpDir
-    };
-
-    qDebug() << "TranscriptionWorker: Launching Python whisper:" << pyExe << args;
-    emit progressUpdated("Starting AI transcription (Python whisper)...");
-
-    // ── Run process synchronously (worker lives on a QThread) ─────────────────
-    QProcess proc;
-    proc.setProgram(pyExe);
-    proc.setArguments(args);
-    proc.setProcessChannelMode(QProcess::MergedChannels);
-    proc.start();
-
-    if (!proc.waitForStarted(5000)) {
-        emit error("Could not start Python process.\nMake sure Python + whisper are installed.");
-        return;
-    }
-
-    // Stream progress lines to UI
-    while (proc.state() != QProcess::NotRunning) {
-        proc.waitForReadyRead(500);
-        QString out = QString::fromUtf8(proc.readAll()).trimmed();
-        if (!out.isEmpty()) {
-            emit progressUpdated(out.left(120));   // truncate very long lines
+    connect(proc, &QProcess::finished, this, [this, proc](int exitCode) {
+        if (exitCode == 0) {
+            emit transcriptionComplete(QString::fromUtf8(proc->readAllStandardOutput()));
+        } else {
+            QString err = QString::fromUtf8(proc->readAllStandardError());
+            if (err.isEmpty()) err = "Process crashed or 'whisper' not found in Python environment.";
+            emit error(QString("Transcription failed (Exit %1): %2").arg(exitCode).arg(err));
         }
-    }
-    proc.waitForFinished(10 * 60 * 1000);  // 10 min max
+        proc->deleteLater();
+    });
 
-    if (proc.exitCode() != 0) {
-        QString err = QString::fromUtf8(proc.readAllStandardError()).trimmed();
-        emit error("Whisper process failed (exit " + QString::number(proc.exitCode()) + "):\n" + err);
-        return;
-    }
+    QStringList args = {"-m", "whisper", audioPath,
+                        "--model", model,
+                        "--output_format", "json"};
 
-    // ── Read the output JSON ──────────────────────────────────────────────────
-    // whisper names the file after the audio basename
-    QFileInfo fi(audioPath);
-    QString jsonPath = tmpDir + "/" + fi.completeBaseName() + ".json";
-
-    if (!QFile::exists(jsonPath)) {
-        // Scan tmpDir for any .json file
-        QDir dir(tmpDir);
-        QStringList jsonFiles = dir.entryList({"*.json"}, QDir::Files);
-        if (!jsonFiles.isEmpty())
-            jsonPath = tmpDir + "/" + jsonFiles.last();
+    if (language != "auto" && !language.isEmpty()) {
+        args << "--language" << language;
     }
 
-    if (!QFile::exists(jsonPath)) {
-        emit error("Whisper finished but produced no JSON output.\nExpected: " + jsonPath);
-        return;
-    }
-
-    QFile f(jsonPath);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        emit error("Could not read whisper JSON output: " + jsonPath);
-        return;
-    }
-    QString resultJson = QString::fromUtf8(f.readAll());
-    f.close();
-
-    emit progressUpdated("Transcription complete!");
-    emit transcriptionComplete(resultJson);
+    qDebug() << "TranscriptionWorker: launching" << pythonPath << args.join(" ");
+    proc->start(pythonPath, args);
 }
 
 QString TranscriptionWorker::serializeSegmentsToJson(

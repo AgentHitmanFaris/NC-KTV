@@ -2,13 +2,76 @@
  * @file ncktv_onnx_separator.hpp
  * @brief Native ONNX Runtime C++ inference for UVR / MDX-Net Models
  *
- * Only available when NCKTV_HAS_ONNX=1 (MSVC builds with prebuilt ONNX Runtime).
- * On MinGW, vocal separation is handled via the Python subprocess bridge.
+ * Available on all Windows builds (MSVC and MinGW) when NCKTV_HAS_ONNX=1.
+ * On MinGW, a MinGW-compatible import library (.a) is generated at build
+ * time via dlltool from the prebuilt onnxruntime.dll.
  */
 
 #pragma once
 
 #if NCKTV_HAS_ONNX
+
+// ── GCC/MinGW SAL compatibility shim ────────────────────────────────────────
+// ONNX Runtime headers use MSVC SAL annotations extensively
+// (_In_, _Out_, _Frees_ptr_opt_, etc.). GCC/MinGW has no SAL support, so we
+// stub them all out to empty before the first ONNX include.
+#if !defined(_MSC_VER) && !defined(__sal_h__)
+#define __sal_h__          // prevent sal.h from being included at all
+// Pointer annotations
+#define _In_
+#define _In_z_
+#define _In_opt_
+#define _In_opt_z_
+#define _In_reads_(s)
+#define _In_reads_opt_(s)
+#define _In_reads_bytes_(s)
+#define _In_reads_bytes_opt_(s)
+#define _Out_
+#define _Out_opt_
+#define _Out_writes_(s)
+#define _Out_writes_opt_(s)
+#define _Out_writes_bytes_(s)
+#define _Out_writes_bytes_opt_(s)
+#define _Inout_
+#define _Inout_opt_
+#define _Outptr_
+#define _Outptr_opt_
+#define _Outptr_result_maybenull_
+#define _Outptr_opt_result_maybenull_
+#define _Outptr_result_buffer_(s)
+#define _Outptr_result_bytebuffer_(s)
+#define _Outptr_result_z_
+#define _COM_Outptr_
+#define _COM_Outptr_opt_
+#define _Deref_out_z_
+#define _Frees_ptr_
+#define _Frees_ptr_opt_
+#define _Ret_maybenull_
+#define _Ret_notnull_
+#define _Ret_z_
+#define _Check_return_
+#define _Must_inspect_result_
+#define _Printf_format_string_
+#define _Success_(e)
+#define _When_(c, a)
+#define _At_(t, a)
+#define _Field_size_(s)
+#define _Field_size_opt_(s)
+#define _Field_size_bytes_(s)
+#define _Field_size_bytes_opt_(s)
+#define _Field_range_(lo, hi)
+#define _Null_terminated_
+#define _NullNull_terminated_
+#define _Pre_notnull_
+#define _Pre_maybenull_
+#define _Post_z_
+#define _Writable_elements_(s)
+#define _Readable_elements_(s)
+#define _Writable_bytes_(s)
+#define _Readable_bytes_(s)
+#define __drv_aliasesMem
+#endif
+// ─────────────────────────────────────────────────────────────────────────────
 
 #include <onnxruntime_cxx_api.h>
 #include <vector>
@@ -17,21 +80,23 @@
 #include <stdexcept>
 #include <future>
 #include <array>
+#include <memory>
 #include <iostream>
 
 namespace ncktv {
 namespace ai {
 
 class VocalSeparator {
-private:
+public:  // exposed for per-segment inference in VocalSeparatorWorker
     Ort::Env env_{ORT_LOGGING_LEVEL_WARNING, "NC-KTV-UVR"};
     std::unique_ptr<Ort::Session> session_;
     Ort::MemoryInfo memory_info_{Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)};
 
+private:
     int channels_{2};
     int sample_rate_{44100};
     int segment_size_{256};
-    
+
     std::vector<int64_t> input_shape_;
     std::vector<int64_t> output_shape_;
 
@@ -44,26 +109,38 @@ public:
         try {
             OrtCUDAProviderOptions cuda_options;
             session_options.AppendExecutionProvider_CUDA(cuda_options);
-            std::cout << "UVR: CUDA Provider enabled successfully." << std::endl;
+            std::cout << "UVR: CUDA Provider requested." << std::endl;
         } catch (const Ort::Exception& e) {
-            std::cerr << "UVR: CUDA not available, falling back to CPU. (" << e.what() << ")" << std::endl;
+            std::cerr << "UVR: CUDA fallback info: " << e.what() << std::endl;
         }
 
-        #ifdef _WIN32
-        std::wstring w_model_path(onnx_model_path.begin(), onnx_model_path.end());
-        session_ = std::make_unique<Ort::Session>(env_, w_model_path.c_str(), session_options);
-        #else
-        session_ = std::make_unique<Ort::Session>(env_, onnx_model_path.c_str(), session_options);
-        #endif
+        try {
+            #ifdef _WIN32
+            std::wstring w_model_path(onnx_model_path.begin(), onnx_model_path.end());
+            session_ = std::make_unique<Ort::Session>(env_, w_model_path.c_str(), session_options);
+            #else
+            session_ = std::make_unique<Ort::Session>(env_, onnx_model_path.c_str(), session_options);
+            #endif
 
-        Ort::AllocatorWithDefaultOptions allocator;
-        auto input_type_info = session_->GetInputTypeInfo(0);
-        auto tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
-        input_shape_ = tensor_info.GetShape();
-        if (input_shape_[0] == -1) input_shape_[0] = 1;
+            if (!session_) throw std::runtime_error("Failed to create ONNX session");
+
+            Ort::AllocatorWithDefaultOptions allocator;
+            auto input_type_info = session_->GetInputTypeInfo(0);
+            auto tensor_info = input_type_info.GetTensorTypeAndShapeInfo();
+            input_shape_ = tensor_info.GetShape();
+            if (input_shape_[0] == -1) input_shape_[0] = 1;
+            std::cout << "UVR: Session created successfully for " << onnx_model_path << std::endl;
+        } catch (const Ort::Exception& e) {
+             std::cerr << "UVR ERROR: Failed to create ONNX session: " << e.what() << std::endl;
+             throw; // rethrow to worker
+        } catch (const std::exception& e) {
+             std::cerr << "UVR ERROR: " << e.what() << std::endl;
+             throw;
+        }
     }
 
     size_t getInputExpectedSize() const {
+        if (!session_) return 0;
         size_t size = 1;
         for (auto dim : input_shape_) size *= dim;
         return size;

@@ -312,10 +312,12 @@ void WordCanvas::mouseMoveEvent(QMouseEvent* event) {
     update();
 }
 
-void WordCanvas::mouseReleaseEvent(QMouseEvent*) {
+void WordCanvas::mouseReleaseEvent(QMouseEvent* event) {
     m_dragMode = None;
-    int y = mapFromGlobal(QCursor::pos()).y();
-    mouseMoveEvent(new QMouseEvent(QEvent::MouseMove, QPointF(0, y), Qt::NoButton, Qt::NoButton, Qt::NoModifier)); // reset cursor
+    // Use the current event position for the mouse move reset
+    QMouseEvent ev(QEvent::MouseMove, event->position(), event->globalPosition(), 
+                   Qt::NoButton, Qt::NoButton, event->modifiers());
+    mouseMoveEvent(&ev); // reset cursor
 }
 
 void WordCanvas::mouseDoubleClickEvent(QMouseEvent* event) {

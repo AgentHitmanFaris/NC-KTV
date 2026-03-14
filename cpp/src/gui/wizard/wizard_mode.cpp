@@ -5,6 +5,8 @@
 #include <QHBoxLayout>
 #include "workers/vocal_separator_worker.h"
 #include <QFileInfo>
+#include <QDir>
+#include <QCoreApplication>
 
 namespace ncktv {
 
@@ -69,6 +71,43 @@ void WizardMode::createWelcomePage() {
     transcribeLayout->addWidget(m_langCombo);
     
     layout->addLayout(transcribeLayout);
+
+    // ── UVR Model Selector ─────────────────────────────────────────────────
+    auto* modelLayout = new QHBoxLayout();
+    modelLayout->setAlignment(Qt::AlignCenter);
+
+    auto* modelLabel = new QLabel("Separation Model: ", this);
+    modelLabel->setStyleSheet("color: #475569; font-size: 14px; margin-top: 6px;");
+    modelLayout->addWidget(modelLabel);
+
+    m_modelCombo = new QComboBox(this);
+    m_modelCombo->setMinimumWidth(280);
+    m_modelCombo->setStyleSheet("margin-top: 6px; padding: 4px;");
+
+    // Scan models/uvr directory (next to the executable, or in project root)
+    QStringList modelDirs = {
+        QCoreApplication::applicationDirPath() + "/models/uvr",
+        QDir::currentPath() + "/models/uvr"
+    };
+    QStringList found;
+    for (const QString& dirPath : modelDirs) {
+        QDir dir(dirPath);
+        if (dir.exists()) {
+            const auto entries = dir.entryList({"*.onnx", "*.pth"}, QDir::Files);
+            for (const QString& f : entries) {
+                if (!found.contains(f)) found << f;
+            }
+        }
+    }
+    if (found.isEmpty()) {
+        // Fallback list so the combo is never blank
+        found << "UVR_MDXNET_KARA_2.onnx" << "UVR-MDX-NET-Inst_HQ_3.onnx";
+    }
+    m_modelCombo->addItems(found);
+
+    modelLayout->addWidget(m_modelCombo);
+    layout->addLayout(modelLayout);
+    // ──────────────────────────────────────────────────────────────────────
 
     m_startBtn = new QPushButton("🚀 Start Magic", this);
     m_startBtn->setEnabled(false);
@@ -137,9 +176,12 @@ void WizardMode::onStartClicked() {
 
     thread->start();
     
+    QString selectedModel = m_modelCombo ? m_modelCombo->currentText() : "UVR_MDXNET_KARA_2.onnx";
+    if (selectedModel.isEmpty()) selectedModel = "UVR_MDXNET_KARA_2.onnx";
+
     QMetaObject::invokeMethod(worker, "startSeparation", Qt::QueuedConnection,
                               Q_ARG(QString, m_selectedFile),
-                              Q_ARG(QString, "UVR_MDXNET_KARA_2.onnx"),
+                              Q_ARG(QString, selectedModel),
                               Q_ARG(QString, "output"));
 }
 
