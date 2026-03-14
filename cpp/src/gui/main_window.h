@@ -17,6 +17,7 @@ class TranscriptionWorker;
 class WizardMode;
 class EditorMode;
 class Project;
+class ConfigManager;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -43,6 +44,8 @@ private:
     
     std::shared_ptr<core::Project> activeProject_;
     std::shared_ptr<Project> legacyProject_; // For compatibility with WizardMode
+    
+    ConfigManager* m_config = nullptr;
     
     // Workers and Threads for Multi-threaded AI
     VocalSeparatorWorker* vocalWorker_ = nullptr;

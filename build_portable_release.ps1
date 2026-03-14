@@ -11,11 +11,11 @@ if (Test-Path "out\build\windows-release") {
 }
 
 Write-Host ">>> Configuring CMake (Release)..."
-cmd.exe /c "call `"$VsVars`" && `"$CMake`" --preset windows-release"
+& "$CMake" --preset windows-release
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed." }
 
 Write-Host ">>> Building Project..."
-cmd.exe /c "call `"$VsVars`" && `"$CMake`" --build --preset windows-release"
+& "$CMake" --build --preset windows-release
 if ($LASTEXITCODE -ne 0) { throw "CMake build failed." }
 
 Set-Location ..
@@ -49,7 +49,7 @@ if (Test-Path $OrtLib) {
 }
 
 Write-Host ">>> Copying Assets and Resources..."
-$FoldersToCopy = @("assets", "ffmpeg", "models", "plugins", "themes")
+$FoldersToCopy = @("assets", "ffmpeg", "models", "plugins", "themes", "python_embed")
 foreach ($folder in $FoldersToCopy) {
     if (Test-Path ".\$folder") {
         Copy-Item -Recurse -Force ".\$folder" -Destination "$TargetDir\"
@@ -60,6 +60,10 @@ foreach ($folder in $FoldersToCopy) {
 if (Test-Path ".\config.yaml") {
     Copy-Item ".\config.yaml" -Destination $TargetDir
 }
+
+Write-Host ">>> Copying Python Bridge Files..."
+Copy-Item ".\python_bridge.py" -Destination $TargetDir
+Copy-Item ".\requirements.txt" -Destination $TargetDir
 
 Write-Host ">>> Release build completed successfully in portable directory!"
 

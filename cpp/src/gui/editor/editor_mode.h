@@ -26,13 +26,19 @@
 #include <QListWidget>
 #include <memory>
 
+#include "../dialogs/export_dialog.h"
+#include "../workers/export_worker.h"
+#include "../../core/parsers/ass_generator.h"
+
+#include "../core/config/config_manager.h"
+
 namespace ncktv {
 
 class EditorMode : public QWidget {
     Q_OBJECT
 
 public:
-    explicit EditorMode(std::shared_ptr<core::Project> project, QWidget* parent = nullptr);
+    explicit EditorMode(std::shared_ptr<core::Project> project, ConfigManager* config, QWidget* parent = nullptr);
 
 signals:
     void requestSave();
@@ -57,6 +63,9 @@ private slots:
     // Lyrical Pro Mode
     void toggleLyricalPro();
     void exitLyricalPro();
+
+    void onExportClicked();
+    void onExportSettingsClicked();
 
 private:
     void setupUi();
@@ -102,6 +111,7 @@ private:
     // Dedicated video-only player (always plays original file, muted)
     QMediaPlayer* m_videoPlayer = nullptr;
     QAudioOutput* m_videoAudioOutput = nullptr;
+    ConfigManager* m_config = nullptr;
 };
 
 } // namespace ncktv

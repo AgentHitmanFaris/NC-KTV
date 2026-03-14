@@ -51,7 +51,7 @@ Located in `src/core/`, this library (`ncktv_core.lib`/`.a`) operates completely
   - `Track`: Represents a single Audio, Video, Effects, or Lyrics channel.
   - `Clip`: Atomic, movable timing units containing specific `Effect` or subtitle metadata.
 - **`SubtitleParser`**: Lightning-fast RegEx parser for TTML, VTT, LRC, SRT. Converts all string constraints to standard `LyricsData` structures.
-- **`AssGenerator`**: Constructs robust, deeply stylized `.ass` scripts directly utilizing `QColor` matrices.
+- **`AssGenerator`**: Constructs robust, deeply stylized `.ass` scripts. Features a dual-model interface supporting both Qt-native `LyricsData` (QString-based) and high-performance `core::LyricsData` (std::string-based), enabling seamless transitions between the UI and export engine.
 - **`AudioProcessor`**: Manages FFT buffering via a native Mixed-Radix FFT (supporting arbitrary window sizes such as 6144, 7680), stem extraction, and vocal rendering.
 
 ---

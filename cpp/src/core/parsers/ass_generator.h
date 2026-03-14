@@ -7,6 +7,7 @@
 #include <QString>
 #include <QColor>
 #include "lyrics/lyrics_data.h"
+#include "../timeline/ncktv_core_data.hpp"
 
 namespace ncktv {
 
@@ -24,6 +25,9 @@ class AssGenerator {
 public:
     /// Generate ASS subtitle content from lyrics data
     static QString generate(const LyricsData& lyrics, const AssStyle& style = {},
+                            int videoWidth = 1920, int videoHeight = 1080);
+
+    static QString generate(const core::LyricsData& lyrics, const AssStyle& style = {},
                             int videoWidth = 1920, int videoHeight = 1080);
 
 private:

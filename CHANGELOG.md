@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0-rc4] - 2026-03-15
+
+### Added
+- **AssGenerator Overload**: Added native support for `core::LyricsData` in `AssGenerator::generate`, allowing direct export from high-performance C++ core structures.
+- **Whisper Configuration**: Added Whisper model selection to Preferences with settings persistence in `config.ini`.
+
+### Fixed
+- **ConfigManager Template**: Fixed C++ template syntax error in `ConfigManager::get` by adding the `template` keyword for dependent names, resolving MinGW/GCC compilation failures.
+- **Editor Mode Compilation**: Fixed multiple missing header errors in `editor_mode.cpp` for `ExportDialog`, `PreferencesDialog`, and `AssGenerator`.
+- **Preferences Dialog**: Fixed missing `QCoreApplication` include causing build failure in `preferences_dialog.cpp`.
+- **Vocal Separator Stability**: Resolved a critical crash occurring in Wizard Mode when transitioning to Vocal Separation.
+- **Video Export Sync**: Fixed FFmpeg parameter mismatch in `export_worker.cpp` that prevented successful burning of synchronized lyrics into video exports.
+
+### Changed
+- **Portable Release**: Optimized the `build_portable_release.ps1` script to ensure all necessary runtime DLLs and Python bridge files are correctly staged in the final output.
+
+---
+
 ## [1.0.0-rc3] - 2026-03-14
 
 ### Fixed

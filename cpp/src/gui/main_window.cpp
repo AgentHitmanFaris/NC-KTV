@@ -20,6 +20,9 @@
 #include "workers/vocal_separator_worker.h"
 #include "wizard/wizard_mode.h"
 #include "editor/editor_mode.h"
+#include "dialogs/preferences_dialog.h"
+#include "../core/config/config_manager.h"
+#include "project/project.h"
 
 namespace ncktv {
 
@@ -28,6 +31,9 @@ MainWindow::MainWindow(QWidget *parent)
     //, ui(new Ui::MainWindow)
 {
     // ui->setupUi(this);
+
+    // Initialize Config
+    m_config = new ConfigManager("config.ini");
 
     // Initialize UI Layout
     setupApplicationUI();
@@ -40,6 +46,7 @@ MainWindow::MainWindow(QWidget *parent)
 }
 
 MainWindow::~MainWindow() {
+    delete m_config;
     if (vocalThread_) {
         vocalThread_->quit();
         vocalThread_->wait();
@@ -60,7 +67,7 @@ void MainWindow::setupApplicationUI() {
     
     // Stacked widget manages Wizard vs Editor mode natively
     mainStack_ = new QStackedWidget(this);
-    wizardMode_ = new WizardMode(this);
+    wizardMode_ = new WizardMode(m_config, this);
     
     // EditorMode requires a project, we'll create it when the project is ready
     // editorMode_ = new EditorMode(activeProject_, this); 
@@ -79,6 +86,12 @@ void MainWindow::setupApplicationUI() {
     QMenu* fileMenu = menuBar()->addMenu("&File");
     QAction* newAction = fileMenu->addAction("New Project (Native)...", this, &MainWindow::onActionNewProject);
     newAction->setShortcut(QKeySequence::New);
+
+    fileMenu->addSeparator();
+    fileMenu->addAction("Preferences...", this, [this]() {
+        PreferencesDialog dialog(m_config, this);
+        dialog.exec();
+    });
 
     statusBar()->showMessage("Native C++ Core initialized. Zero Python Runtime detected.");
 }
@@ -124,9 +137,11 @@ void MainWindow::onActionNewProject() {
     // Trigger Phase 3 Native ONNX via Thread-Safe Invocation
     QString outDir = QDir::currentPath() + "/temp/project_" + QFileInfo(videoFile).baseName();
     
+    QString selectedUvr = m_config ? m_config->get<QString>("ai.uvr_model", "UVR_MDXNET_KARA_2.onnx") : "UVR_MDXNET_KARA_2.onnx";
+
     QMetaObject::invokeMethod(vocalWorker_, "startSeparation", Qt::QueuedConnection,
                               Q_ARG(QString, videoFile),
-                              Q_ARG(QString, QString::fromStdString(activeProject_->settings.uvr_model)),
+                              Q_ARG(QString, selectedUvr),
                               Q_ARG(QString, outDir));
 }
 
@@ -148,10 +163,14 @@ void MainWindow::onVocalSeparationFinished(const QString& instPath, const QStrin
 
     // 2. Cascade directly into Phase 3 Native Whisper Transcription via Thread-Safe Invocation
     statusBar()->showMessage("Commencing AI Lyrics Transcription...");
+    QString whisperModel = m_config ? m_config->get<QString>("ai.whisper_model", "medium") : "medium";
+    QString langCode = m_config ? m_config->get<QString>("ai.language", "auto") : "auto";
+    if (langCode.toLower() == "auto") langCode = "auto";
+
     QMetaObject::invokeMethod(transcriptionWorker_, "startTranscription", Qt::QueuedConnection,
                               Q_ARG(QString, vocPath),
-                              Q_ARG(QString, "ggml-large-v3.bin"),
-                              Q_ARG(QString, "auto"));
+                              Q_ARG(QString, whisperModel),
+                              Q_ARG(QString, langCode));
 }
 
 void MainWindow::onTranscriptionFinished(const QString& resultJson) {
@@ -206,7 +225,7 @@ void MainWindow::onProjectReady(Project* project) {
         delete editorMode_;
     }
     
-    editorMode_ = new EditorMode(activeProject_, this);
+    editorMode_ = new EditorMode(activeProject_, m_config, this);
     mainStack_->addWidget(editorMode_);
     mainStack_->setCurrentWidget(editorMode_);
 }

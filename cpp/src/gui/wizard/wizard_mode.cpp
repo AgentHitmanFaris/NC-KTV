@@ -10,8 +10,9 @@
 
 namespace ncktv {
 
-WizardMode::WizardMode(QWidget* parent)
+WizardMode::WizardMode(ConfigManager* config, QWidget* parent)
     : QWidget(parent)
+    , m_config(config)
 {
     setupUi();
 }
@@ -105,8 +106,23 @@ void WizardMode::createWelcomePage() {
     }
     m_modelCombo->addItems(found);
 
+    // Set default UVR model from config
+    if (m_config) {
+        QString defUvr = m_config->get<QString>("ai.uvr_model", "UVR_MDXNET_KARA_2.onnx");
+        int idx = m_modelCombo->findText(defUvr);
+        if (idx != -1) m_modelCombo->setCurrentIndex(idx);
+        else m_modelCombo->setCurrentText(defUvr);
+    }
+
     modelLayout->addWidget(m_modelCombo);
     layout->addLayout(modelLayout);
+
+    // Default Language from config
+    if (m_config) {
+        QString defLang = m_config->get<QString>("ai.language", "Auto");
+        int idx = m_langCombo->findText(defLang, Qt::MatchContains);
+        if (idx != -1) m_langCombo->setCurrentIndex(idx);
+    }
     // ──────────────────────────────────────────────────────────────────────
 
     m_startBtn = new QPushButton("🚀 Start Magic", this);
@@ -242,9 +258,11 @@ void WizardMode::onSeparationFinished(const QString& instrumentalPath, const QSt
         
         tThread->start();
         
+        QString whisperModel = m_config ? m_config->get<QString>("ai.whisper_model", "medium") : "medium";
+        
         QMetaObject::invokeMethod(tWorker, "startTranscription", Qt::QueuedConnection,
                                   Q_ARG(QString, vocalsPath),
-                                  Q_ARG(QString, "base"),
+                                  Q_ARG(QString, whisperModel),
                                   Q_ARG(QString, langCode));
     } else {
         emit projectReady(m_project);

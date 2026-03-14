@@ -9,6 +9,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QFileDialog>
+#include <QCoreApplication>
 
 namespace ncktv {
 
@@ -105,11 +106,37 @@ QWidget* PreferencesDialog::createAiTab() {
     form->setContentsMargins(16, 16, 16, 16);
 
     m_defaultModelCombo = new QComboBox(this);
-    m_defaultModelCombo->addItems({"base", "small", "medium", "large-v2", "large-v3"});
+    m_defaultModelCombo->addItems({"base", "small", "medium", "large-v2", "large-v3", "turbo"});
+    // Set default to medium if not set
+    QString currentWhisper = m_config ? m_config->get<QString>("ai.whisper_model", "medium") : "medium";
+    m_defaultModelCombo->setCurrentText(currentWhisper);
     form->addRow("Default Whisper Model:", m_defaultModelCombo);
+
+    m_defaultUvrModelCombo = new QComboBox(this);
+    // Scan for UVR models
+    QStringList uvrPaths = {
+        QCoreApplication::applicationDirPath() + "/models/uvr",
+        QDir::currentPath() + "/models/uvr"
+    };
+    QStringList uvrModels;
+    for (const auto& path : uvrPaths) {
+        QDir dir(path);
+        if (dir.exists()) {
+            uvrModels << dir.entryList({"*.onnx", "*.pth"}, QDir::Files);
+        }
+    }
+    uvrModels.removeDuplicates();
+    if (uvrModels.isEmpty()) uvrModels << "UVR_MDXNET_KARA_2.onnx";
+    m_defaultUvrModelCombo->addItems(uvrModels);
+    
+    QString currentUvr = m_config ? m_config->get<QString>("ai.uvr_model", "UVR_MDXNET_KARA_2.onnx") : "UVR_MDXNET_KARA_2.onnx";
+    m_defaultUvrModelCombo->setCurrentText(currentUvr);
+    form->addRow("Default UVR Model:", m_defaultUvrModelCombo);
 
     m_defaultLanguageCombo = new QComboBox(this);
     m_defaultLanguageCombo->addItems({"Auto", "en", "ms", "id", "ja", "ko", "zh"});
+    QString currentLang = m_config ? m_config->get<QString>("ai.language", "Auto") : "Auto";
+    m_defaultLanguageCombo->setCurrentText(currentLang);
     form->addRow("Default Language:", m_defaultLanguageCombo);
 
     auto* noteLabel = new QLabel("Larger models produce better results but require more RAM and processing time.", this);
@@ -178,6 +205,9 @@ void PreferencesDialog::browseModelPath() {
 void PreferencesDialog::onAccepted() {
     if (m_config) {
         m_config->set<QString>("gui.start_mode", m_startModeCombo->currentText().toLower());
+        m_config->set<QString>("ai.whisper_model", m_defaultModelCombo->currentText());
+        m_config->set<QString>("ai.uvr_model", m_defaultUvrModelCombo->currentText());
+        m_config->set<QString>("ai.language", m_defaultLanguageCombo->currentText());
         m_config->save();
     }
     accept();

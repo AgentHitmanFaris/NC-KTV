@@ -95,4 +95,77 @@ QString AssGenerator::generate(const LyricsData& lyrics, const AssStyle& style,
     return output.join('\n');
 }
 
+QString AssGenerator::generate(const core::LyricsData& lyrics, const AssStyle& style,
+                                int videoWidth, int videoHeight)
+{
+    QStringList output;
+
+    // Header
+    output << "[Script Info]";
+    output << "ScriptType: v4.00+";
+    
+    // Look for title in metadata or default
+    QString title = "NC-KTV Karaoke";
+    if (lyrics.metadata.find("title") != lyrics.metadata.end()) {
+        try {
+            title = QString::fromStdString(std::any_cast<std::string>(lyrics.metadata.at("title")));
+        } catch(...) {}
+    }
+    
+    output << "Title: " + title;
+    output << QStringLiteral("PlayResX: %1").arg(videoWidth);
+    output << QStringLiteral("PlayResY: %1").arg(videoHeight);
+    output << "WrapStyle: 0";
+    output << "";
+
+    // Styles
+    output << "[V4+ Styles]";
+    output << "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+              "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+              "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+              "Alignment, MarginL, MarginR, MarginV, Encoding";
+
+    int alignment = 2;
+    if (style.position == "top")    alignment = 8;
+    if (style.position == "middle") alignment = 5;
+
+    output << QStringLiteral(
+        "Style: Default,%1,%2,%3,%4,%5,&H00000000,0,0,0,0,"
+        "100,100,0,0,1,%6,0,%7,20,20,30,1")
+        .arg(style.fontFamily)
+        .arg(style.fontSize)
+        .arg(colorToAss(style.primaryColor))
+        .arg(colorToAss(style.highlightColor))
+        .arg(colorToAss(style.outlineColor))
+        .arg(style.outlineWidth)
+        .arg(alignment);
+    output << "";
+
+    // Events
+    output << "[Events]";
+    output << "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text";
+
+    for (const auto& line : lyrics.lines) {
+        QString start = formatAssTime(line.start_time);
+        QString end   = formatAssTime(line.end_time);
+
+        QString text;
+        if (!line.tokens.empty()) {
+            for (const auto& token : line.tokens) {
+                double duration = std::max(0.0f, token.end_time - token.start_time);
+                int durationCs = static_cast<int>(duration * 100.0);
+                text += QStringLiteral("{\\kf%1}%2").arg(durationCs).arg(QString::fromStdString(token.text));
+            }
+        } else {
+            int durationCs = static_cast<int>(line.duration() * 100.0);
+            text = QStringLiteral("{\\kf%1}%2").arg(durationCs).arg(QString::fromStdString(line.text));
+        }
+
+        output << QStringLiteral("Dialogue: 0,%1,%2,Default,,0,0,0,,%3")
+                      .arg(start, end, text);
+    }
+
+    return output.join('\n');
+}
+
 } // namespace ncktv

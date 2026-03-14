@@ -8,6 +8,7 @@
 #include <QVBoxLayout>
 #include <QCheckBox>
 #include <QComboBox>
+#include "../../core/config/config_manager.h"
 
 #include "project/project.h"
 #include "workers/vocal_separator_worker.h"
@@ -19,7 +20,7 @@ class WizardMode : public QWidget {
     Q_OBJECT
 
 public:
-    explicit WizardMode(QWidget* parent = nullptr);
+    explicit WizardMode(ConfigManager* config, QWidget* parent = nullptr);
 
 signals:
     void projectReady(Project* project);
@@ -33,6 +34,7 @@ private slots:
     void onTranscriptionError(const QString& error);
 
 private:
+    ConfigManager* m_config = nullptr;
     void setupUi();
     void createWelcomePage();
     void createProcessingPage();

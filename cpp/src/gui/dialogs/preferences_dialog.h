@@ -49,6 +49,7 @@ private:
 
     // AI
     QComboBox* m_defaultModelCombo = nullptr;
+    QComboBox* m_defaultUvrModelCombo = nullptr;
     QComboBox* m_defaultLanguageCombo = nullptr;
 
     // Paths

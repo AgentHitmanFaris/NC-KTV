@@ -9,7 +9,11 @@
 #include <QEvent>
 #include <QProgressBar>
 #include "../workers/transcription_worker.h"
+#include "../workers/export_worker.h"
 #include "../dialogs/word_editor.h"
+#include "../dialogs/export_dialog.h"
+#include "../dialogs/preferences_dialog.h"
+#include "../../core/parsers/ass_generator.h"
 
 namespace ncktv {
 
@@ -17,31 +21,55 @@ class ProcessingOverlay : public QWidget {
 public:
     QProgressBar* bar;
     QLabel* msg;
+    QLabel* iconLbl;
     ProcessingOverlay(QWidget* parent) : QWidget(parent) {
         setGeometry(parent->rect());
-        setStyleSheet("QWidget { background: rgba(0, 0, 0, 180); }");
+        setStyleSheet("ProcessingOverlay { background: rgba(0, 0, 0, 200); }");
 
         auto* layout = new QVBoxLayout(this);
         layout->setAlignment(Qt::AlignCenter);
         
         auto* popup = new QWidget(this);
-        popup->setFixedSize(400, 150);
-        popup->setStyleSheet("QWidget { background: #1e1e1e; border: 1px solid #444; border-radius: 10px; }");
+        popup->setObjectName("PopupContainer");
+        popup->setFixedSize(450, 200);
+        popup->setStyleSheet(
+            "QWidget#PopupContainer {"
+            "  background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a1b26, stop:1 #24283b);"
+            "  border: 1px solid #414868;"
+            "  border-radius: 16px;"
+            "}"
+        );
         
         auto* popupLayout = new QVBoxLayout(popup);
         popupLayout->setAlignment(Qt::AlignCenter);
-        popupLayout->setSpacing(20);
+        popupLayout->setContentsMargins(30, 25, 30, 25);
+        popupLayout->setSpacing(15);
+        
+        iconLbl = new QLabel("✨", popup);
+        iconLbl->setStyleSheet("font-size: 32px; background: transparent; border: none;");
+        iconLbl->setAlignment(Qt::AlignCenter);
+        popupLayout->addWidget(iconLbl);
 
-        msg = new QLabel("Processing AI Transcription...", popup);
-        msg->setStyleSheet("color: white; font-size: 16px; font-weight: bold; border: none; background: transparent;");
+        msg = new QLabel("Initializing AI transcription...", popup);
+        msg->setStyleSheet("color: #a9b1d6; font-size: 15px; font-weight: bold; border: none; background: transparent; font-family: 'Segoe UI', Arial;");
         msg->setAlignment(Qt::AlignCenter);
         popupLayout->addWidget(msg);
         
         bar = new QProgressBar(popup);
-        bar->setRange(0, 100);
-        bar->setFixedHeight(16);
+        bar->setRange(0, 0); // Modern indeterminate animation
+        bar->setFixedHeight(10);
         bar->setTextVisible(false);
-        bar->setStyleSheet("QProgressBar { border: 1px solid #555; border-radius: 4px; background: #222; } QProgressBar::chunk { background-color: #4f46e5; border-radius: 2px; }");
+        bar->setStyleSheet(
+            "QProgressBar {"
+            "  border: none;"
+            "  border-radius: 5px;"
+            "  background: #16161e;"
+            "}"
+            "QProgressBar::chunk {"
+            "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7aa2f7, stop:1 #bb9af7);"
+            "  border-radius: 5px;"
+            "}"
+        );
         popupLayout->addWidget(bar);
         
         layout->addWidget(popup);
@@ -54,9 +82,11 @@ public:
     void mousePressEvent(QMouseEvent*) override {} // consume clicks
 };
 
-EditorMode::EditorMode(std::shared_ptr<core::Project> project, QWidget* parent)
+
+EditorMode::EditorMode(std::shared_ptr<core::Project> project, ConfigManager* config, QWidget* parent)
     : QWidget(parent)
     , m_project(std::move(project))
+    , m_config(config)
 {
     m_undoManager = new UndoManager(this);
     m_timingHandler = new TimingOffsetHandler(this);
@@ -117,6 +147,13 @@ void EditorMode::setupUi() {
     m_langCombo->addItems({"Auto", "en", "ms", "id", "ja", "ko", "zh"});
     m_langCombo->setStyleSheet("padding:2px 4px; font-size:11px; background:#333; color:#ccc; border:1px solid #555; border-radius:3px;");
     m_langCombo->setToolTip("Language for AI Transcription");
+    
+    if (m_config) {
+        QString defLang = m_config->get<QString>("ai.language", "Auto");
+        int langIdx = m_langCombo->findText(defLang);
+        if (langIdx != -1) m_langCombo->setCurrentIndex(langIdx);
+    }
+    
     headerLayout->addWidget(m_langCombo);
     
     m_whisperBtn = new QPushButton("🎙 AI", headerWidget);
@@ -231,6 +268,10 @@ void EditorMode::setupToolBar() {
     m_toolBar->addSeparator();
     m_toolBar->addWidget(m_lyricalProBtn);
     connect(m_lyricalProBtn, &QPushButton::clicked, this, &EditorMode::toggleLyricalPro);
+
+    m_toolBar->addSeparator();
+    m_toolBar->addAction("Export...", this, &EditorMode::onExportClicked);
+    m_toolBar->addAction("Settings", this, &EditorMode::onExportSettingsClicked);
 }
 
 void EditorMode::setupConnections() {
@@ -683,7 +724,8 @@ void EditorMode::onAutoWhisperClicked() {
     });
     
     QString langCode = m_langCombo->currentText();
-    tWorker->startTranscription(targetAudio, "base", langCode);
+    QString whisperModel = m_config ? m_config->get<QString>("ai.whisper_model", "medium") : "medium";
+    tWorker->startTranscription(targetAudio, whisperModel, langCode);
 }
 
 void EditorMode::onImportSubtitleClicked() {
@@ -796,6 +838,76 @@ void EditorMode::syncLyricalProState() {
     bool isPlaying = m_audioPlayer &&
                      m_audioPlayer->player()->playbackState() == QMediaPlayer::PlayingState;
     m_lyricalPro->setPlaying(isPlaying);
+}
+
+void EditorMode::onExportClicked() {
+    if (!m_project) return;
+
+    ExportDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        QString outPath = dialog.outputPath();
+        QString format = dialog.format();
+        bool burnSubs = dialog.burnSubtitles();
+
+        if (burnSubs) {
+            // 1. Generate ASS file
+            AssStyle style;
+            // Map dialog settings to AssStyle if needed
+            QString assContent = AssGenerator::generate(m_project->lyrics, style, dialog.videoWidth(), dialog.videoHeight());
+            
+            QString assPath = QFileInfo(outPath).absolutePath() + "/temp_subs.ass";
+            QFile assFile(assPath);
+            if (assFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                assFile.write(assContent.toUtf8());
+                assFile.close();
+            }
+        }
+
+        // 2. Start Export Worker
+        auto* worker = new ExportWorker(this);
+        auto* overlay = new ProcessingOverlay(this);
+        overlay->msg->setText("Exporting video...");
+        overlay->show();
+
+        connect(worker, &ExportWorker::progress, this, [overlay](int p, const QString& msg) {
+            overlay->bar->setValue(p);
+            overlay->msg->setText(msg);
+        });
+
+        connect(worker, &ExportWorker::exportComplete, this, [this, overlay, outPath](const QString& path) {
+            overlay->deleteLater();
+            QMessageBox::information(this, "Export Complete", "Project exported successfully to:\n" + path);
+            
+            // Cleanup temp ass
+            QFile::remove(QFileInfo(path).absolutePath() + "/temp_subs.ass");
+        });
+
+        connect(worker, &ExportWorker::error, this, [this, overlay](const QString& err) {
+            overlay->deleteLater();
+            QMessageBox::critical(this, "Export Failed", err);
+        });
+
+        QString inputPath = m_project->source_file.has_value() ? 
+                           QString::fromStdString(m_project->source_file.value().string()) : "";
+        
+        // If we are using instrumental, we should probably use that as audio input
+        // For now, consistent with existing worker which takes projectPath (source video)
+        worker->startExport(inputPath, outPath, format);
+    }
+}
+
+void EditorMode::onExportSettingsClicked() {
+    if (m_config) {
+        PreferencesDialog dialog(m_config, this);
+        dialog.exec();
+        
+        // Refresh settings if needed (like default language)
+        QString defLang = m_config->get<QString>("ai.language", "Auto");
+        int langIdx = m_langCombo->findText(defLang);
+        if (langIdx != -1) m_langCombo->setCurrentIndex(langIdx);
+    } else {
+        QMessageBox::information(this, "Settings", "Config manager not available.");
+    }
 }
 
 } // namespace ncktv

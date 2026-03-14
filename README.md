@@ -37,9 +37,9 @@ NC-KTV automates the entire karaoke video creation workflow:
 ## Core Features
 
 ### AI Vocal Separation
-- **High-Performance Inference**: Re-implemented with native ONNX Runtime for drastically reduced latency on MSVC builds, and a lightweight Python subprocess bridge for MinGW.
-- **Hardware Acceleration**: Automatic target detection for CUDA (NVIDIA), DirectML (Windows), and CoreML (Apple Silicon).
-- **Supported Models**: Native integration with MDX-Net and Ultimate Vocal Remover (UVR) ecosystems.
+- **High-Performance Bridge**: Driven by the authentic `audio-separator` Python library for 100% matching UVR quality.
+- **Hardware Acceleration**: Automatic target detection for CUDA (NVIDIA) via PyTorch.
+- **Full Model Support**: Supports all UVR models including MDX-Net, VR Architecture, and Roformer (`.onnx` and `.pth`).
 
 ### Hardware-Accelerated Studio Editor
 - **Native Qt6 UI**: Butter-smooth 60fps+ rendering of complex timeline data via `QPainter` and Hardware Accel, featuring smart render-debouncing.
@@ -49,8 +49,9 @@ NC-KTV automates the entire karaoke video creation workflow:
 - **Live Karaoke Preview**: Configurable zero-latency ASS subtitle rendering overlaid onto the active video track.
 
 ### Intelligent Transcription and Sync
-- **Format Agnostic**: Blazing-fast C++ parsers for SRT, LRC, VTT, TTML, ASS, SSA, and raw Whisper JSON imports directly from the Universal Importer.
-- **Targeted AI Control**: Choose specific ISO codes (en, id, ms, ja, ko) inside the UI to hard-force the Whisper engine into specific phonetic bounds.
+- **Whisper Powered**: Uses OpenAI's Whisper via Python subprocess for robust, high-speed transcription.
+- **Word-Level Precision**: Automatic word-timestamp generation for perfect syllable alignment.
+- **Targeted AI Control**: Select Whisper models (base, small, medium, large, turbo) and specific ISO codes (en, id, ms, ja, ko) inside the UI to balance speed vs. accuracy and hard-force specific phonetic bounds.
 - **Tap-to-Sync Engine**: Rebuilt event-driven synchronization for perfect rhythm matching.
 - **Auto-Romanization**: Lightning-fast transliteration of global scripts (Korean/Japanese to Latin).
 

@@ -150,230 +150,137 @@ static dsp::MdxParams loadMdxParams(const QString& modelPath) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Helper to find Python interpreter
+static QString findPython() {
+    QString appDir = QCoreApplication::applicationDirPath();
+    // 1. Bundled portable (PRIORITY)
+    QString p = QDir::cleanPath(appDir + "/python_embed/python.exe");
+    if (QFile::exists(p)) return p;
+    
+    // 2. Local dev path
+    p = QDir::cleanPath(QDir::currentPath() + "/python_embed/python.exe");
+    if (QFile::exists(p)) return p;
+
+    // 3. User specified D: drive path
+    p = "D:/Program Files/Python/python.exe";
+    if (QFile::exists(p)) return p;
+    
+    // 4. Local venv
+    p = QDir::cleanPath(QDir::currentPath() + "/venv/Scripts/python.exe");
+    if (QFile::exists(p)) return p;
+    // 5. System
+    return "python";
+}
+
 void VocalSeparatorWorker::startSeparation(const QString& audioPath,
                                            const QString& modelName,
                                            const QString& outputDir)
 {
-#if NCKTV_HAS_ONNX
-    // ── 1. Resolve model path ─────────────────────────────────────────────────
-    QString appDir = QCoreApplication::applicationDirPath();
-    QString localModelsDir   = appDir + "/models/uvr";
-    QString cwdModelsDir     = QDir::currentPath() + "/models/uvr";
-    QString appDataModelsDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models/uvr";
+    emit progress(5, "Initializing Python bridge for separation...");
 
-    QString actualModelName = modelName;
-
-    // PyTorch .pth files are VR-arch models — they require the Python UVR stack
-    // and cannot be loaded by ONNX Runtime. Emit a clear error instead of
-    // silently renaming to .onnx (which would just fail with a cryptic message).
-    if (actualModelName.endsWith(".pth", Qt::CaseInsensitive)) {
-        emit error(
-            "\"" + actualModelName + "\" is a PyTorch VR-arch model (.pth).\n"
-            "The native ONNX pipeline only supports MDX-Net ONNX models.\n\n"
-            "Please select one of the ONNX models instead:\n"
-            "  • UVR_MDXNET_KARA_2.onnx\n"
-            "  • UVR-MDX-NET-Inst_HQ_3.onnx"
-        );
-        return;
+    QString pythonPath = findPython();
+    QString bridgePath = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/python_bridge.py");
+    // Fallback to current dir if not in app dir (for dev)
+    if (!QFile::exists(bridgePath)) {
+        bridgePath = QDir::current().filePath("python_bridge.py");
     }
+    QProcess* proc = new QProcess(this);
 
-    if (!actualModelName.endsWith(".onnx", Qt::CaseInsensitive))
-        actualModelName += ".onnx";
-
-    // Search in: app dir → cwd → AppData
-    QString modelPath = localModelsDir + "/" + actualModelName;
-    if (!QFile::exists(modelPath))
-        modelPath = cwdModelsDir + "/" + actualModelName;
-    if (!QFile::exists(modelPath))
-        modelPath = appDataModelsDir + "/" + actualModelName;
-
-    if (!QFile::exists(modelPath)) {
-        emit error("ONNX Model not found: " + actualModelName +
-                   "\nSearched in:\n  " + localModelsDir +
-                   "\n  " + cwdModelsDir +
-                   "\n  " + appDataModelsDir +
-                   "\n\nPlease place the .onnx UVR model in the models/uvr folder.");
-        return;
-    }
-
-    // ── 2. Load MDX model parameters ─────────────────────────────────────────
-    dsp::MdxParams mdxP = loadMdxParams(modelPath);
-    mdxP.channels    = 2;
-    mdxP.sample_rate = 44100;
-
+    // Ensure output directory exists
     QDir().mkpath(outputDir);
-    QString baseName = QFileInfo(audioPath).completeBaseName();
-    QString instrumentalPath = QDir(outputDir).absoluteFilePath(baseName + "_(Instrumental).wav");
-    QString vocalsPath       = QDir(outputDir).absoluteFilePath(baseName + "_(Vocals).wav");
 
-    // ── 3. ONNX session ───────────────────────────────────────────────────────
-    emit progress(5, "Initializing ONNX Runtime...");
-    std::unique_ptr<ncktv::ai::VocalSeparator> separator;
-    try {
-        separator = std::make_unique<ncktv::ai::VocalSeparator>(modelPath.toStdString());
-    } catch (const std::exception& e) {
-        emit error(QString("Failed to initialize ONNX model: %1").arg(e.what()));
-        return;
-    }
+    // Accumulate stdout/stderr for the final checks
+    QString* fullStdOut = new QString();
+    QString* fullStdErr = new QString();
 
-    // ── 4. Decode Audio ───────────────────────────────────────────────────────
-    emit progress(10, "Decoding audio (FFmpeg)...");
-    qDebug() << "VocalSeparator: starting audio decode of" << audioPath;
-    int sampleRate = 0, channels = 0, numSamples = 0;
-    auto progressFn = [this](const QString& msg){ emit progress(12, msg); };
-    std::vector<float> audio = decodeAudioToFloat(audioPath, sampleRate, channels, numSamples, progressFn);
+    // Read stderr incrementally to show live progress (e.g. downloading models, GPU status)
+    connect(proc, &QProcess::readyReadStandardError, this, [this, proc, fullStdErr]() {
+        QByteArray chunk = proc->readAllStandardError();
+        fullStdErr->append(QString::fromUtf8(chunk));
+        
+        QString line = QString::fromUtf8(chunk).trimmed();
+        if (!line.isEmpty()) {
+            QString lastLine = line.split('\n').last().trimmed();
+            emit progress(50, "Python: " + lastLine);
+        }
+    });
 
-    if (audio.empty()) {
-        emit error("Failed to decode audio file.\nMake sure ffmpeg is available.");
-        return;
-    }
+    // Also read stdout incrementally just in case
+    connect(proc, &QProcess::readyReadStandardOutput, this, [this, proc, fullStdOut]() {
+        QByteArray chunk = proc->readAllStandardOutput();
+        fullStdOut->append(QString::fromUtf8(chunk));
 
-    // ── 5. STFT ───────────────────────────────────────────────────────────────
-    emit progress(20, QString("Computing STFT (n_fft=%1)...").arg(mdxP.n_fft));
-    qDebug() << "VocalSeparator: computing STFT...";
-    dsp::StftResult mixStft = dsp::stft(audio, channels, mdxP);
-    qDebug() << "STFT: frames=" << mixStft.n_frames << " freq_bins=" << mixStft.freq_bins;
-
-    // ── 6. Process segments through ONNX ─────────────────────────────────────
-    // We build TWO cumulative STFT masks — one for vocals, one for instrumental.
-    dsp::StftResult vocStft = mixStft;   // will hold vocals mask result
-    dsp::StftResult instStft = mixStft;  // will hold instrumental mask result
-
-    // Zero out the data first — we'll accumulate masks
-    std::fill(vocStft.data.begin(),  vocStft.data.end(),  0.f);
-    std::fill(instStft.data.begin(), instStft.data.end(), 0.f);
-
-    int seg_size  = mdxP.segment_size();
-    int n_segs    = (mixStft.n_frames + seg_size - 1) / seg_size;
-
-    // Get input/output names from ONNX model
-    Ort::AllocatorWithDefaultOptions alloc;
-    size_t numInputs  = separator->session_->GetInputCount();
-    size_t numOutputs = separator->session_->GetOutputCount();
-
-    std::vector<std::string> inputNameStrs(numInputs), outputNameStrs(numOutputs);
-    std::vector<const char*> inputNames(numInputs), outputNames(numOutputs);
-    for (size_t i = 0; i < numInputs; ++i) {
-        inputNameStrs[i] = separator->session_->GetInputNameAllocated(i, alloc).get();
-        inputNames[i] = inputNameStrs[i].c_str();
-    }
-    for (size_t i = 0; i < numOutputs; ++i) {
-        outputNameStrs[i] = separator->session_->GetOutputNameAllocated(i, alloc).get();
-        outputNames[i] = outputNameStrs[i].c_str();
-    }
-
-    // Input shape: [1, ch, dim_f, seg_size, 2] or [1, ch*2, dim_f, seg_size]
-    // MDX-Net C++ expects [1, 4, dim_f, seg_size] (ch*2 for real+imag)
-    int dim_f    = mdxP.dim_f;
-    std::vector<int64_t> inputShape  = {1, (int64_t)channels * 2, (int64_t)dim_f, (int64_t)seg_size};
-    std::vector<int64_t> outputShape = {1, (int64_t)channels * 2, (int64_t)dim_f, (int64_t)seg_size};
-
-    for (int seg = 0; seg < n_segs; ++seg) {
-        int pct = 20 + (int)((float)seg / n_segs * 60.f);
-        emit progress(pct, QString("ONNX inference: segment %1/%2...").arg(seg+1).arg(n_segs));
-
-        int frameStart = seg * seg_size;
-
-        // Build [ch, dim_f, seg_size, 2] => reshape to [1, ch*2, dim_f, seg_size]
-        // We build interleaved layout for the model: channels grouped as [R_L, I_L, R_R, I_R, ...]
-        std::vector<float> inputData(channels * 2 * dim_f * seg_size, 0.f);
-
-        for (int c = 0; c < channels; ++c) {
-            for (int f = 0; f < dim_f; ++f) {
-                for (int t = 0; t < seg_size; ++t) {
-                    int frame = frameStart + t;
-                    float r = 0.f, im = 0.f;
-                    if (frame < mixStft.n_frames && f < mixStft.freq_bins) {
-                        const float* src = mixStft.data.data() +
-                                           ((size_t)c * mixStft.n_frames + frame) * mixStft.freq_bins * 2;
-                        r  = src[f * 2];
-                        im = src[f * 2 + 1];
-                    }
-                    // Layout: [1, c*2+0, f, t] = real, [1, c*2+1, f, t] = imag
-                    inputData[((size_t)(c * 2 + 0) * dim_f + f) * seg_size + t] = r;
-                    inputData[((size_t)(c * 2 + 1) * dim_f + f) * seg_size + t] = im;
-                }
+        QString line = QString::fromUtf8(chunk).trimmed();
+        if (!line.isEmpty()) {
+            QString lastLine = line.split('\n').last().trimmed();
+            if (!lastLine.startsWith("{") && !lastLine.startsWith("}")) { // Ignore JSON
+                emit progress(50, lastLine);
             }
         }
+    });
 
-        auto memInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-        Ort::Value inputTensor = Ort::Value::CreateTensor<float>(
-            memInfo, inputData.data(), inputData.size(),
-            inputShape.data(), inputShape.size()
-        );
+    connect(proc, &QProcess::finished, this, [this, proc, audioPath, outputDir, fullStdOut, fullStdErr](int exitCode) {
+        if (exitCode == 0) {
+            QString out = *fullStdOut;
+            qDebug() << "VocalSeparatorWorker: Python output:" << out;
+            
+            QString instrumentalPath;
+            QString vocalsPath;
 
-        auto outputs = separator->session_->Run(
-            Ort::RunOptions{nullptr},
-            inputNames.data(), &inputTensor, 1,
-            outputNames.data(), (size_t)numOutputs
-        );
-
-        // Output: [1, ch*2, dim_f, seg_size]
-        // MDX-Net outputs the predicted PRIMARY stem spectrogram directly
-        // (real+imag, same layout as input). Secondary stem = mix - primary.
-        const float* outPtr = outputs[0].GetTensorMutableData<float>();
-
-        // Determine which StftResult is primary vs secondary based on model metadata
-        const bool primaryIsVocals = (mdxP.primary_stem == "Vocals");
-
-        for (int c = 0; c < channels; ++c) {
-            for (int f = 0; f < dim_f && f < mixStft.freq_bins; ++f) {
-                for (int t = 0; t < seg_size; ++t) {
-                    int frame = frameStart + t;
-                    if (frame >= mixStft.n_frames) break;
-
-                    const float* mixSrc = mixStft.data.data() +
-                                          ((size_t)c * mixStft.n_frames + frame) * mixStft.freq_bins * 2;
-
-                    float mixR = mixSrc[f * 2];
-                    float mixI = mixSrc[f * 2 + 1];
-
-                    // Primary stem: model output scaled by compensate
-                    float primR = outPtr[((size_t)(c * 2 + 0) * dim_f + f) * seg_size + t] * mdxP.compensate;
-                    float primI = outPtr[((size_t)(c * 2 + 1) * dim_f + f) * seg_size + t] * mdxP.compensate;
-
-                    // Secondary stem: residual (mix - primary)
-                    float secR = mixR - primR;
-                    float secI = mixI - primI;
-
-                    // Assign to correct Stft buffers
-                    float* vocDst  = vocStft.data.data()  + ((size_t)c * vocStft.n_frames  + frame) * vocStft.freq_bins  * 2;
-                    float* instDst = instStft.data.data() + ((size_t)c * instStft.n_frames + frame) * instStft.freq_bins * 2;
-
-                    if (primaryIsVocals) {
-                        vocDst[f * 2]      = primR;  vocDst[f * 2 + 1]  = primI;
-                        instDst[f * 2]     = secR;   instDst[f * 2 + 1] = secI;
-                    } else {
-                        // Model outputs instrumental as primary stem
-                        instDst[f * 2]     = primR;  instDst[f * 2 + 1] = primI;
-                        vocDst[f * 2]      = secR;   vocDst[f * 2 + 1]  = secI;
+            try {
+                // Parse the JSON output: {"files": ["file1.wav", "file2.wav"]}
+                auto j = nlohmann::json::parse(out.toStdString());
+                if (j.contains("files") && j["files"].is_array()) {
+                    for (const auto& f : j["files"]) {
+                        QString fileName = QString::fromStdString(f.get<std::string>());
+                        QString fullPath = QDir(outputDir).absoluteFilePath(fileName);
+                        
+                        // audio-separator outputs something like OriginalName_(Vocals)_ModelName.wav
+                        if (fileName.contains("(Vocals)", Qt::CaseInsensitive) || fileName.contains("vocals", Qt::CaseInsensitive)) {
+                            vocalsPath = fullPath;
+                        } else if (fileName.contains("(Instrumental)", Qt::CaseInsensitive) || fileName.contains("instrumental", Qt::CaseInsensitive)) {
+                            instrumentalPath = fullPath;
+                        }
                     }
                 }
+            } catch (const std::exception& e) {
+                qDebug() << "VocalSeparatorWorker: Failed to parse Python JSON output:" << e.what();
             }
+
+            // Verify files exist
+            if (!instrumentalPath.isEmpty() && !vocalsPath.isEmpty() && 
+                QFile::exists(instrumentalPath) && QFile::exists(vocalsPath)) {
+                emit progress(100, "Separation complete!");
+                emit separationComplete(instrumentalPath, vocalsPath);
+            } else {
+                emit error("Separation seemed to succeed but output files were not found.\nCheck " + outputDir);
+            }
+        } else {
+            QString err = *fullStdErr;
+            if (err.isEmpty()) err = "Process crashed or 'audio-separator' not found in Python environment.";
+            emit error(QString("Separation failed (Exit %1):\n%2").arg(exitCode).arg(err));
         }
+        delete fullStdOut;
+        delete fullStdErr;
+        proc->deleteLater();
+    });
+
+    // Arguments: python_bridge.py separate <file> <model> <outdir>
+    QStringList args = {bridgePath, "separate", audioPath, modelName, outputDir};
+
+    qDebug() << "VocalSeparatorWorker: launching" << pythonPath << args.join(" ");
+    
+    // Add bundled FFmpeg to PATH so audio-separator can find it
+    auto env = QProcessEnvironment::systemEnvironment();
+    QString ff = findFFmpeg();
+    if (QFile::exists(ff)) {
+        QString ffDir = QFileInfo(ff).absolutePath();
+        QString path = env.value("PATH");
+        env.insert("PATH", QDir::toNativeSeparators(ffDir) + ";" + path);
     }
-
-    // ── 7. ISTFT → WAV ────────────────────────────────────────────────────────
-    emit progress(82, "Performing ISTFT for vocals...");
-    auto vocAudio  = dsp::istft(vocStft,  mdxP, numSamples);
-
-    emit progress(88, "Performing ISTFT for instrumental...");
-    auto instAudio = dsp::istft(instStft, mdxP, numSamples);
-
-    emit progress(93, "Writing output WAV files...");
-    bool vocOk  = dsp::writeWav(vocalsPath.toStdString(),  vocAudio,  channels, sampleRate);
-    bool instOk = dsp::writeWav(instrumentalPath.toStdString(), instAudio, channels, sampleRate);
-
-    if (vocOk && instOk) {
-        emit progress(100, "Separation complete!");
-        emit separationComplete(instrumentalPath, vocalsPath);
-    } else {
-        emit error("Failed to write output WAV files.\nCheck disk space and output path.");
-    }
-
-#else
-    emit error("Vocal Separation requires ONNX Runtime support.\nPlease use a Windows build (MSVC or MinGW) with NCKTV_HAS_ONNX=1.");
-#endif
+    proc->setProcessEnvironment(env);
+    
+    proc->start(pythonPath, args);
 }
 
 } // namespace ncktv

@@ -10,7 +10,7 @@
 #include <QDir>
 #include <QDebug>
 
-#include "parsers/ass_generator.h"
+#include "../../core/parsers/ass_generator.h"
 
 namespace ncktv {
 
