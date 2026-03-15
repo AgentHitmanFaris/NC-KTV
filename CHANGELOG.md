@@ -7,9 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.0-rc4] - 2026-03-15
+## [1.0.0] - 2026-03-15
 
 ### Added
+- **C++ Native Engine**: Complete engine rewrite from Python to C++17 for immense performance gains.
+- **Hardware-Accelerated Timeline**: Rebuilt the Editor mode completely. Features ultra-smooth 60fps playhead tracking, down-sampled waveform rendering, and drag-and-drop subtitle chunks. 
+- **Lyrical Pro Mode**: A brand-new vertical teleprompter UI, providing a focused environment identical to *Karaoke Builder Studio*. Syllables stack alongside a frozen waveform, enabling millisecond-accurate editing via a unified word map and isolated segment playback.
+- **Native GUI-to-Core Bridge**: Implemented a dual-state `LyricsData` architecture allowing high-performance standard library operations (`std::string`/`std::vector`) inside the audio/DSP routines, while the Editor seamlessly updates via Qt-based structures (`QString`).
+- **Universal Subtitle Importer**: Drag and configure `.srt`, `.lrc`, `.txt`, and Whisper `.json` payloads flawlessly aligning against the core timeline.
+- **AssGenerator Overload**: Native support for `core::LyricsData` in `AssGenerator::generate`, allowing direct export from high-performance C++ core structures without extra serialization steps.
+- **Whisper & LRCLib Integration**: Built a flexible subprocess Python bridge for AI auto-transcription (`--model turbo` resolving to `large-v3-turbo`) and connected LRCLib APIs for instantaneous cloud lyric fetching.
+- **Model Manager**: Custom settings dialog to effortlessly manage UVR separation arrays and designate transcription languages.
+
+### Fixed
+- **Timeline/GUI Conflict**: Resolved severe architecture mismatch where the `SubtitleParser` passed GUI-level Qt objects directly into the `core::Project` struct. Standardized the ingest process bridging `QString` arrays to standard string arrays dynamically inside `EditorMode`.
+- **ConfigManager Template**: Fixed C++ template syntax error in `ConfigManager::get` by adding the `template` keyword for dependent names, resolving MinGW/GCC compilation failures.
+- **Vocal Separator Stability**: Transitioned the power-of-2 restricted FFT with a Mixed-Radix FFT implementation in DSP core, removing high-pitched distortion anomalies on isolated stems. Also resolved a crash transitioning from Wizard to Separator. 
+- **Video Playback Parsing**: Corrected URL mappings for YouTube dependencies, ensuring `video` and `youtubeUrl` JSON keys properly feed the FFmpeg extraction endpoints.
+- **MOP4/MP4 Export Error**: Verified FFmpeg parameter matches in `export_worker.cpp` establishing clear mapping for `.ass` subtitle burn-in.
+
+### Changed
+- **Portable Release Environment**: Perfected `build_portable_release.ps1` to actively stage `onnxruntime`, `ffmpeg`, custom FFmpeg libraries, and translation `.qm` bundles guaranteeing a zero-install C++ executable state.
+- **Transcription Worker**: Migrated local operations back to an encapsulated Python executable state for Whisper CLI, avoiding `ggml.c` mingw linkage faults while maintaining native C++ UX.
 - **AssGenerator Overload**: Added native support for `core::LyricsData` in `AssGenerator::generate`, allowing direct export from high-performance C++ core structures.
 - **Whisper Configuration**: Added Whisper model selection to Preferences with settings persistence in `config.ini`.
 
