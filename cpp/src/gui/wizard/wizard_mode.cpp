@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QHBoxLayout>
 #include "workers/vocal_separator_worker.h"
+#include "dialogs/lyrics_search_dialog.h"
 #include <QFileInfo>
 #include <QDir>
 #include <QCoreApplication>
@@ -54,8 +55,28 @@ void WizardMode::createWelcomePage() {
     browseBtn->setStyleSheet("padding: 10px 20px; background-color: #f1f5f9; border-radius: 5px; color: black;");
     connect(browseBtn, &QPushButton::clicked, this, &WizardMode::onBrowseFile);
 
+    QPushButton* searchBtn = new QPushButton("🔍 Search Lyrics", this);
+    searchBtn->setStyleSheet("padding: 10px 20px; background-color: #e0e7ff; border-radius: 5px; color: #4338ca; font-weight: bold;");
+    connect(searchBtn, &QPushButton::clicked, this, [this](){
+        LyricsSearchDialog dialog(this);
+        if (!m_filePathEdit->text().isEmpty()) {
+            QFileInfo fi(m_filePathEdit->text());
+            dialog.setInitialSearch(fi.baseName());
+        }
+        if (dialog.exec() == QDialog::Accepted) {
+             m_onlineLyrics = dialog.syncedLyrics();
+             if (m_onlineLyrics.isEmpty()) m_onlineLyrics = dialog.plainLyrics();
+             
+             if (!m_onlineLyrics.isEmpty()) {
+                 QMessageBox::information(this, "Lyrics Found", "Synced lyrics found online! These will be used instead of AI transcription.");
+                 m_transcribeCheck->setChecked(false);
+             }
+        }
+    });
+
     fileLayout->addWidget(m_filePathEdit);
     fileLayout->addWidget(browseBtn);
+    fileLayout->addWidget(searchBtn);
     layout->addLayout(fileLayout);
 
     auto* transcribeLayout = new QHBoxLayout();
@@ -159,6 +180,7 @@ void WizardMode::onBrowseFile() {
     if (!path.isEmpty()) {
         m_filePathEdit->setText(path);
         m_selectedFile = path;
+        m_onlineLyrics.clear();
         m_startBtn->setEnabled(true);
     }
 }
@@ -227,7 +249,10 @@ void WizardMode::onSeparationFinished(const QString& instrumentalPath, const QSt
 
     qDebug() << "Separation Finished! Inst:" << instrumentalPath << "Vocals:" << vocalsPath << "Duration:" << duration;
     
-    if (m_transcribeCheck->isChecked() && !vocalsPath.isEmpty()) {
+    if (!m_onlineLyrics.isEmpty()) {
+        m_project->lyrics.importFromLrc(m_onlineLyrics);
+        emit projectReady(m_project);
+    } else if (m_transcribeCheck->isChecked() && !vocalsPath.isEmpty()) {
         m_progressBar->setValue(0);
         m_statusLabel->setText("Transcribing vocals (this may take a minute)...");
         

@@ -28,6 +28,9 @@ public:
 
 private slots:
     void onActionNewProject();
+    void onActionSaveProject();
+    void onActionSaveProjectAs();
+    void onActionOpenProject();
     void onWorkerProgress(int percent, const QString& message);
     void onWorkerError(const QString& errorMsg);
     void onVocalSeparationFinished(const QString& instPath, const QString& vocPath);
@@ -37,6 +40,7 @@ private slots:
 private:
     void setupApplicationUI();
     void setupWorkers();
+    void saveProject(const QString& fileName);
 
     QStackedWidget* mainStack_ = nullptr;
     WizardMode* wizardMode_ = nullptr;

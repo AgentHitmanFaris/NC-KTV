@@ -37,6 +37,8 @@ public:
     void   setLatency(const QString& source, double latency);
     double getLatency(const QString& source) const;
 
+    [[nodiscard]] const QMap<QString, double>& getLatencies() const { return m_latencyCorrections; }
+
     // ── Diagnostics ──────────────────────────────────────────────────────
     [[nodiscard]] double getDriftAtTime(double seconds) const;
 

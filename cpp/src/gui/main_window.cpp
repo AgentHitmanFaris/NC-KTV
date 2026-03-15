@@ -87,6 +87,15 @@ void MainWindow::setupApplicationUI() {
     QAction* newAction = fileMenu->addAction("New Project (Native)...", this, &MainWindow::onActionNewProject);
     newAction->setShortcut(QKeySequence::New);
 
+    QAction* openAction = fileMenu->addAction("Open Project...", this, &MainWindow::onActionOpenProject);
+    openAction->setShortcut(QKeySequence::Open);
+
+    QAction* saveAction = fileMenu->addAction("Save Project", this, &MainWindow::onActionSaveProject);
+    saveAction->setShortcut(QKeySequence::Save);
+
+    QAction* saveAsAction = fileMenu->addAction("Save Project As...", this, &MainWindow::onActionSaveProjectAs);
+    saveAsAction->setShortcut(QKeySequence::SaveAs);
+
     fileMenu->addSeparator();
     fileMenu->addAction("Preferences...", this, [this]() {
         PreferencesDialog dialog(m_config, this);
@@ -145,6 +154,127 @@ void MainWindow::onActionNewProject() {
                               Q_ARG(QString, outDir));
 }
 
+void MainWindow::onActionSaveProject() {
+    if (!activeProject_) return;
+
+    if (activeProject_->project_file.has_value() && !activeProject_->project_file->empty()) {
+        saveProject(QString::fromStdString(activeProject_->project_file->string()));
+    } else {
+        onActionSaveProjectAs();
+    }
+}
+
+void MainWindow::onActionSaveProjectAs() {
+    if (!activeProject_) return;
+
+    QString fileName = QFileDialog::getSaveFileName(this, "Save Project As", "", "NC-KTV Project (*.nctv)");
+    if (!fileName.isEmpty()) {
+        saveProject(fileName);
+    }
+}
+
+void MainWindow::saveProject(const QString& fileName) {
+    if (!activeProject_) return;
+
+    // Convert activeProject_ (core::Project) to legacy Project
+    Project legacy;
+    legacy.setProjectName(QString::fromStdString(activeProject_->project_name));
+    
+    if (activeProject_->source_file.has_value())
+        legacy.sourceFile = QString::fromStdString(activeProject_->source_file->string());
+    
+    if (activeProject_->audio_file.has_value())
+        legacy.originalAudioPath = QString::fromStdString(activeProject_->audio_file->string());
+        
+    if (activeProject_->instrumental_file.has_value())
+        legacy.instrumentalPath = QString::fromStdString(activeProject_->instrumental_file->string());
+        
+    if (activeProject_->vocals_file.has_value())
+        legacy.vocalsPath = QString::fromStdString(activeProject_->vocals_file->string());
+
+    // Sync Settings
+    legacy.settings.uvrModel = QString::fromStdString(activeProject_->settings.uvr_model);
+    legacy.settings.useGpu = activeProject_->settings.use_gpu;
+    legacy.settings.sampleRate = activeProject_->settings.sample_rate;
+    legacy.settings.karaokeStyle = QString::fromStdString(activeProject_->settings.karaoke_style);
+    legacy.settings.outputFormat = QString::fromStdString(activeProject_->settings.output_format);
+
+    // Sync Audio Clock
+    legacy.audioClock.setSampleRate(activeProject_->audio_clock.get_sample_rate());
+    legacy.audioClock.setMasterOffset(activeProject_->audio_clock.get_master_offset());
+    for (const auto& [source, latency] : activeProject_->audio_clock.get_latencies()) {
+        legacy.audioClock.setLatency(QString::fromStdString(source), latency);
+    }
+
+    // Sync Lyrics
+    legacy.lyrics.clear();
+    for (const auto& coreLine : activeProject_->lyrics.lines) {
+        LyricLine line;
+        line.text = QString::fromStdString(coreLine.text);
+        line.startTime = coreLine.start_time;
+        line.endTime = coreLine.end_time;
+        
+        for (const auto& token : coreLine.tokens) {
+            line.addWord(QString::fromStdString(token.text), token.start_time, token.end_time);
+        }
+        legacy.lyrics.addLine(line);
+    }
+
+    // Sync Timeline
+    legacy.timeline.tracks.clear();
+    for (const auto& coreTrack : activeProject_->timeline.tracks) {
+        Track legacyTrack;
+        legacyTrack.trackId = QString::fromStdString(coreTrack.track_id);
+        legacyTrack.name = QString::fromStdString(coreTrack.name);
+        legacyTrack.isMuted = coreTrack.is_muted;
+        legacyTrack.isSolo = coreTrack.is_solo;
+        legacyTrack.isLocked = coreTrack.is_locked;
+        
+        // Track Type
+        if (coreTrack.track_type == core::TrackType::AUDIO) legacyTrack.trackType = TrackType::Audio;
+        else if (coreTrack.track_type == core::TrackType::VIDEO) legacyTrack.trackType = TrackType::Video;
+        else if (coreTrack.track_type == core::TrackType::EFFECTS) legacyTrack.trackType = TrackType::Effects;
+        else if (coreTrack.track_type == core::TrackType::LYRICS) legacyTrack.trackType = TrackType::Lyrics;
+
+        for (const auto& coreClip : coreTrack.clips) {
+            Clip legacyClip;
+            legacyClip.clipId = QString::fromStdString(coreClip.clip_id);
+            legacyClip.trackId = legacyTrack.trackId;
+            legacyClip.startTime = coreClip.start_time;
+            legacyClip.duration = coreClip.duration;
+            if (coreClip.source_file.has_value())
+                legacyClip.sourceFile = QString::fromStdString(*coreClip.source_file);
+            legacyClip.sourceStart = coreClip.source_start;
+            if (coreClip.source_end.has_value())
+                legacyClip.sourceEnd = coreClip.source_end.value();
+            
+            legacyTrack.addClip(legacyClip);
+        }
+        legacy.timeline.tracks.push_back(legacyTrack);
+    }
+
+    try {
+        legacy.save(fileName);
+        activeProject_->project_file = fileName.toStdString();
+        statusBar()->showMessage("Project saved: " + fileName, 3000);
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Save Failed", "Error saving project:\n" + QString::fromStdString(e.what()));
+    }
+}
+
+void MainWindow::onActionOpenProject() {
+    QString fileName = QFileDialog::getOpenFileName(this, "Open Project", "", "NC-KTV Project (*.nctv)");
+    if (fileName.isEmpty()) return;
+
+    try {
+        Project legacy = Project::load(fileName);
+        onProjectReady(&legacy);
+        statusBar()->showMessage("Project loaded: " + fileName, 3000);
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Open Failed", "Error opening project:\n" + QString::fromStdString(e.what()));
+    }
+}
+
 void MainWindow::onWorkerProgress(int percent, const QString& message) {
     statusBar()->showMessage(QString("[%1%] %2").arg(percent).arg(message));
 }
@@ -199,6 +329,23 @@ void MainWindow::onProjectReady(Project* project) {
         
     if (project->originalAudioPath.has_value())
         activeProject_->audio_file = project->originalAudioPath->toStdString();
+    
+    if (project->projectFilePath.has_value())
+        activeProject_->project_file = project->projectFilePath->toStdString();
+
+    // 1.5 Sync Settings and Audio Clock
+    activeProject_->settings.uvr_model = project->settings.uvrModel.toStdString();
+    activeProject_->settings.use_gpu = project->settings.useGpu;
+    activeProject_->settings.sample_rate = project->settings.sampleRate;
+    activeProject_->settings.karaoke_style = project->settings.karaokeStyle.toStdString();
+    activeProject_->settings.output_format = project->settings.outputFormat.toStdString();
+
+    activeProject_->audio_clock.set_sample_rate(project->audioClock.sampleRate());
+    activeProject_->audio_clock.set_master_offset(project->audioClock.masterOffset());
+    const auto& latencies = project->audioClock.getLatencies();
+    for (auto it = latencies.begin(); it != latencies.end(); ++it) {
+        activeProject_->audio_clock.set_latency(it.key().toStdString(), it.value());
+    }
 
     // 2. Convert Lyrics from ncktv::LyricsData (Qt/QString) to ncktv::core::LyricsData (std::string)
     activeProject_->lyrics.clear();
@@ -219,6 +366,39 @@ void MainWindow::onProjectReady(Project* project) {
         activeProject_->lyrics.lines.push_back(std::move(coreLine));
     }
 
+    // 2.5 Sync Timeline
+    activeProject_->timeline.clear();
+    for (const auto& legacyTrack : project->timeline.tracks) {
+        core::Track coreTrack;
+        coreTrack.track_id = legacyTrack.trackId.toStdString();
+        coreTrack.name = legacyTrack.name.toStdString();
+        coreTrack.is_muted = legacyTrack.isMuted;
+        coreTrack.is_solo = legacyTrack.isSolo;
+        coreTrack.is_locked = legacyTrack.isLocked;
+
+        // Track Type
+        if (legacyTrack.trackType == TrackType::Audio) coreTrack.track_type = core::TrackType::AUDIO;
+        else if (legacyTrack.trackType == TrackType::Video) coreTrack.track_type = core::TrackType::VIDEO;
+        else if (legacyTrack.trackType == TrackType::Effects) coreTrack.track_type = core::TrackType::EFFECTS;
+        else if (legacyTrack.trackType == TrackType::Lyrics) coreTrack.track_type = core::TrackType::LYRICS;
+
+        for (const auto& legacyClip : legacyTrack.clips) {
+            core::Clip coreClip;
+            coreClip.clip_id = legacyClip.clipId.toStdString();
+            coreClip.track_id = coreTrack.track_id;
+            coreClip.start_time = static_cast<float>(legacyClip.startTime);
+            coreClip.duration = static_cast<float>(legacyClip.duration);
+            if (legacyClip.sourceFile.has_value())
+                coreClip.source_file = legacyClip.sourceFile->toStdString();
+            coreClip.source_start = static_cast<float>(legacyClip.sourceStart);
+            if (legacyClip.sourceEnd.has_value())
+                coreClip.source_end = static_cast<float>(legacyClip.sourceEnd.value());
+            
+            coreTrack.add_clip(std::move(coreClip));
+        }
+        activeProject_->timeline.add_track(std::move(coreTrack));
+    }
+
     // 3. Launch Editor
     if (editorMode_) {
         mainStack_->removeWidget(editorMode_);
@@ -226,6 +406,8 @@ void MainWindow::onProjectReady(Project* project) {
     }
     
     editorMode_ = new EditorMode(activeProject_, m_config, this);
+    connect(editorMode_, &EditorMode::requestSave, this, &MainWindow::onActionSaveProject);
+    
     mainStack_->addWidget(editorMode_);
     mainStack_->setCurrentWidget(editorMode_);
 }

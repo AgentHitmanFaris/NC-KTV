@@ -3,6 +3,7 @@
  */
 
 #include "import_dialog.h"
+#include "lyrics_search_dialog.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -49,8 +50,13 @@ void ImportDialog::setupUi() {
     m_pathEdit->setReadOnly(true);
     m_browseBtn = new QPushButton("Browse...", this);
     m_browseBtn->setFixedWidth(90);
+    m_searchBtn = new QPushButton("🔍 Search Online", this);
+    m_searchBtn->setFixedWidth(120);
+    m_searchBtn->setStyleSheet("background: #1e293b; color: #94a3b8; font-weight: bold; border-color: #334155;");
+    
     browseLayout->addWidget(m_pathEdit, 1);
     browseLayout->addWidget(m_browseBtn);
+    browseLayout->addWidget(m_searchBtn);
     fileLayout->addLayout(browseLayout);
 
     auto* infoLayout = new QHBoxLayout();
@@ -94,6 +100,7 @@ void ImportDialog::setupUi() {
 
     // ── Connections ──────────────────────────────────────────────────────
     connect(m_browseBtn, &QPushButton::clicked, this, &ImportDialog::browseFile);
+    connect(m_searchBtn, &QPushButton::clicked, this, &ImportDialog::searchOnline);
     connect(m_importBtn, &QPushButton::clicked, this, &ImportDialog::onAccepted);
     connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 }
@@ -117,6 +124,35 @@ void ImportDialog::browseFile() {
     QString path = QFileDialog::getOpenFileName(this, "Select Subtitle File", "", filter);
     if (!path.isEmpty()) {
         onFileSelected(path);
+    }
+}
+
+void ImportDialog::searchOnline() {
+    LyricsSearchDialog dialog(this);
+    
+    // If we have a filename already, try to use it as initial search
+    if (!m_pathEdit->text().isEmpty()) {
+        QFileInfo fi(m_pathEdit->text());
+        dialog.setInitialSearch(fi.baseName());
+    }
+
+    if (dialog.exec() == QDialog::Accepted) {
+        QString content = dialog.syncedLyrics();
+        if (content.isEmpty()) content = dialog.plainLyrics();
+
+        if (content.isEmpty()) return;
+
+        // Save to temporary file
+        QString tempPath = QDir::tempPath() + "/ncktv_online_lyrics.lrc";
+        QFile file(tempPath);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            file.write(content.toUtf8());
+            file.close();
+            onFileSelected(tempPath);
+            
+            // Mark it as online
+            m_formatLabel->setText("Format: LRC (Online via LRCLIB)");
+        }
     }
 }
 

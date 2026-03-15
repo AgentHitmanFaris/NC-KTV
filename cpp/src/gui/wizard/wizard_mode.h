@@ -53,6 +53,7 @@ private:
     QProgressBar* m_progressBar;
 
     QString m_selectedFile;
+    QString m_onlineLyrics;
     Project* m_project = nullptr;
 };
 

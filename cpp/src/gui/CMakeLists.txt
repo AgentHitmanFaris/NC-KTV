@@ -39,6 +39,7 @@ set(GUI_SOURCES
     dialogs/video_options_dialog.cpp
     dialogs/export_credits_dialog.cpp
     dialogs/word_editor.cpp
+    dialogs/lyrics_search_dialog.cpp
 
     # Workers
     workers/transcription_worker.cpp
@@ -80,6 +81,7 @@ set(GUI_HEADERS
     dialogs/video_options_dialog.h
     dialogs/export_credits_dialog.h
     dialogs/word_editor.h
+    dialogs/lyrics_search_dialog.h
     workers/transcription_worker.h
     workers/vocal_separator_worker.h
     workers/processing_worker.h

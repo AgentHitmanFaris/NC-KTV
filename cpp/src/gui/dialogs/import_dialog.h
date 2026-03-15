@@ -25,6 +25,7 @@ public:
 
 private slots:
     void browseFile();
+    void searchOnline();
     void onFileSelected(const QString& path);
     void onAccepted();
 
@@ -35,6 +36,7 @@ private:
 
     QLineEdit*   m_pathEdit = nullptr;
     QPushButton* m_browseBtn = nullptr;
+    QPushButton* m_searchBtn = nullptr;
     QLabel*      m_formatLabel = nullptr;
     QLabel*      m_lineCountLabel = nullptr;
     QTextEdit*   m_previewText = nullptr;

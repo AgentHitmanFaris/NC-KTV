@@ -1,4 +1,6 @@
 #include "editor_mode.h"
+#include "../../core/parsers/subtitle_parser.h"
+#include "../../core/lyrics/lyrics_data.h"
 #include <QDebug>
 #include <QShortcut>
 #include <QLabel>
@@ -13,7 +15,9 @@
 #include "../dialogs/word_editor.h"
 #include "../dialogs/export_dialog.h"
 #include "../dialogs/preferences_dialog.h"
+#include "../dialogs/import_dialog.h"
 #include "../../core/parsers/ass_generator.h"
+#include "../../core/parsers/subtitle_parser.h"
 
 namespace ncktv {
 
@@ -730,12 +734,18 @@ void EditorMode::onAutoWhisperClicked() {
 
 void EditorMode::onImportSubtitleClicked() {
     if (!m_project) return;
-    QString filter = "Subtitle Files (*.lrc *.srt *.txt *.json);;Lyric (*.lrc);;SubRip (*.srt);;Text (*.txt);;Whisper JSON (*.json);;All Files (*)";
-    QString path = QFileDialog::getOpenFileName(this, "Import Subtitles", "", filter);
+    
+    ImportDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    QString path = dialog.filePath();
     if (path.isEmpty()) return;
 
-    if (QMessageBox::question(this, "Import?", "This will replace your current subtitles with the exact contents of the selected file.\nContinue?") != QMessageBox::Yes) {
-        return;
+    if (!m_project->lyrics.lines.empty()) {
+        if (QMessageBox::question(this, "Replace Subtitles?", 
+            "This will replace all current subtitles. Continue?") != QMessageBox::Yes) {
+            return;
+        }
     }
 
     QFile file(path);
@@ -747,19 +757,41 @@ void EditorMode::onImportSubtitleClicked() {
     QString ext = QFileInfo(path).suffix().toLower();
     QString contents = QString::fromUtf8(file.readAll());
     
-    // We will parse standard .lrc format manually or implement importFrom... on LyricsData in Phase 6
-    if (ext == "lrc") {
-        // m_project->lyrics.importFromLrc(contents);
-    } else if (ext == "srt") {
-        // m_project->lyrics.importFromSrt(contents);
-    } else if (ext == "json") {
-        // m_project->lyrics.importFromWhisperJson(contents);
+    m_project->lyrics.clear();
+
+    if (ext == "json") {
+        m_project->lyrics.importFromWhisperJson(contents.toStdString());
     } else {
-        // m_project->lyrics.importFromText(contents);
+        ncktv::LyricsData legacyLyrics;
+        if (ext == "lrc") {
+            legacyLyrics = ncktv::SubtitleParser::parseLrc(contents);
+        } else if (ext == "srt") {
+            legacyLyrics = ncktv::SubtitleParser::parseSrt(contents);
+        } else {
+            legacyLyrics = ncktv::SubtitleParser::parsePlainText(contents);
+        }
+
+        for (const auto& legacyLine : legacyLyrics.lines) {
+            core::LyricsLine coreLine;
+            coreLine.text = legacyLine.text.toStdString();
+            coreLine.start_time = static_cast<float>(legacyLine.startTime);
+            coreLine.end_time = static_cast<float>(legacyLine.endTime);
+            
+            for (const auto& legacyWord : legacyLine.words) {
+                coreLine.tokens.emplace_back(
+                    legacyWord.word.toStdString(),
+                    static_cast<float>(legacyWord.startTime),
+                    static_cast<float>(legacyWord.endTime)
+                );
+            }
+            
+            m_project->lyrics.lines.push_back(std::move(coreLine));
+        }
     }
     
     updateSubtitleList();
     m_previewWidget->loadLyrics(&m_project->lyrics);
+    m_timelineWidget->loadLyrics(&m_project->lyrics);
     emit unsavedChangesChanged(true);
 }
 
@@ -849,18 +881,27 @@ void EditorMode::onExportClicked() {
         QString format = dialog.format();
         bool burnSubs = dialog.burnSubtitles();
 
-        if (burnSubs) {
+        bool isSubOnly = format.contains("Subtitles");
+        if (burnSubs || isSubOnly) {
             // 1. Generate ASS file
             AssStyle style;
-            // Map dialog settings to AssStyle if needed
+            // Map dialog settings to AssStyle if needed (Phase 6)
             QString assContent = AssGenerator::generate(m_project->lyrics, style, dialog.videoWidth(), dialog.videoHeight());
             
-            QString assPath = QFileInfo(outPath).absolutePath() + "/temp_subs.ass";
-            QFile assFile(assPath);
+            QString savePath = isSubOnly ? outPath : QFileInfo(outPath).absolutePath() + "/temp_subs.ass";
+            QFile assFile(savePath);
             if (assFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
                 assFile.write(assContent.toUtf8());
                 assFile.close();
+            } else if (isSubOnly) {
+                QMessageBox::critical(this, "Export Failed", "Could not write subtitle file:\n" + savePath);
+                return;
             }
+        }
+
+        if (isSubOnly) {
+             QMessageBox::information(this, "Export Complete", "Subtitles exported successfully to:\n" + outPath);
+             return;
         }
 
         // 2. Start Export Worker
@@ -890,9 +931,17 @@ void EditorMode::onExportClicked() {
         QString inputPath = m_project->source_file.has_value() ? 
                            QString::fromStdString(m_project->source_file.value().string()) : "";
         
-        // If we are using instrumental, we should probably use that as audio input
-        // For now, consistent with existing worker which takes projectPath (source video)
-        worker->startExport(inputPath, outPath, format);
+        QString videoPath = inputPath;
+        QString audioPath = inputPath;
+        QString audioSrc = dialog.audioSource();
+
+        if (audioSrc == "Instrumental" && m_project->instrumental_file.has_value()) {
+            audioPath = QString::fromStdString(m_project->instrumental_file.value().string());
+        } else if (audioSrc == "Vocals Only" && m_project->vocals_file.has_value()) {
+            audioPath = QString::fromStdString(m_project->vocals_file.value().string());
+        }
+
+        worker->startExport(videoPath, audioPath, outPath, format, burnSubs);
     }
 }
 
