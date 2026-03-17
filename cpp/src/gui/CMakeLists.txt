@@ -48,6 +48,7 @@ set(GUI_SOURCES
     workers/export_worker.cpp
     workers/online_search_worker.cpp
     workers/progress_reporter.cpp
+    workers/waveform_worker.cpp
 
     # Resources
     resources/resources.qrc
@@ -88,10 +89,11 @@ set(GUI_HEADERS
     workers/export_worker.h
     workers/online_search_worker.h
     workers/progress_reporter.h
+    workers/waveform_worker.h
 )
 
-# Win32 app (no console window in Release) - TEMPORARILY DISABLED for debugging
-add_executable(ncktv ${GUI_SOURCES} ${GUI_HEADERS})
+# Win32 app (no console window in Release)
+add_executable(ncktv WIN32 ${GUI_SOURCES} ${GUI_HEADERS})
 
 target_include_directories(ncktv PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 

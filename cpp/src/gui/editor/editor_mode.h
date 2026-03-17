@@ -10,10 +10,10 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
-#include <QListWidget>
-#include <QMediaPlayer>
-#include <QAudioOutput>
+#include <QTableWidget>
+#include <QHeaderView>
 #include <QProgressBar>
+#include <QPlainTextEdit>
 
 #include "../core/project/ncktv_project.hpp"
 #include "undo_manager.h"
@@ -42,6 +42,11 @@ public:
 
 signals:
     void requestSave();
+    void requestSaveAs();
+    void requestOpen();
+    void requestNew();
+    void requestPreferences();
+    void requestExport();
     void unsavedChangesChanged(bool hasUnsavedChanges);
 
 private slots:
@@ -55,15 +60,13 @@ private slots:
     void onTrackSelectionChanged(int index);
     void onAddSubtitleClicked();
     void updateSubtitleList();
+    void onWaveformReady(const QVector<float>& minData, const QVector<float>& maxData, double sampleRate, int samplesPerPixel);
     
     // Auto/Import slots
     void onAutoWhisperClicked();
     void onImportSubtitleClicked();
 
-    // Lyrical Pro Mode
-    void toggleLyricalPro();
-    void exitLyricalPro();
-
+public slots:
     void onExportClicked();
     void onExportSettingsClicked();
 
@@ -72,14 +75,14 @@ private:
     void setupToolBar();
     void setupConnections();
     void applyTheme();
-    void syncLyricalProState();
+    void requestWaveform(const QString& path);
 
     std::shared_ptr<core::Project> m_project;
     double m_currentTime = 0.0;
     
     // Components
     KaraokePreview*      m_previewWidget = nullptr;
-    QListWidget*         m_subtitleList = nullptr;   // replaces SyllableEditor
+    QTableWidget*        m_syncTable = nullptr;   // replaces m_subtitleList
     TimelineWidget*      m_timelineWidget = nullptr;
     WaveformWidget*      m_waveformWidget = nullptr;
     AudioPlayer*         m_audioPlayer = nullptr;
@@ -88,22 +91,47 @@ private:
     UndoManager*         m_undoManager = nullptr;
     TimingOffsetHandler* m_timingHandler = nullptr;
 
-    // Layout — root stack (page 0 = normal editor, page 1 = Lyrical Pro)
-    QStackedWidget* m_rootStack   = nullptr;
-    QWidget*        m_editorPage  = nullptr;   // page 0
-    LyricalProWidget* m_lyricalPro = nullptr;  // page 1
-
-    QToolBar*  m_toolBar = nullptr;
-    QSplitter* m_mainSplitter = nullptr;
-    QSplitter* m_lowerSplitter = nullptr;
-    QSplitter* m_topSplitter = nullptr;
+    // Layout — root layout
+    QHBoxLayout* m_mainHLayout = nullptr;
     
+    // Left Sidebar
+    QWidget* m_sidebar = nullptr;
+    QPushButton* m_modeLyricsBtn = nullptr;
+    QPushButton* m_modeTimingBtn = nullptr;
+    QPushButton* m_modeRenderBtn = nullptr;
+    QPushButton* m_saveProjectBtn = nullptr;
+
+    // Right Workspace
+    QVBoxLayout* m_workspaceLayout = nullptr;
+    QStackedWidget* m_viewStack = nullptr; // 0: Lyrics, 1: Timing, 2: Render
+    
+    // Lyrics Editor View (Page 0)
+    QWidget* m_lyricsView = nullptr;
+    
+    // Timing Sync View (Page 1)
+    QWidget* m_timingView = nullptr;
+
+    // Video Render View (Page 2)
+    QWidget* m_renderView = nullptr;
+    
+    // Lyrics Sub-Views
+    QStackedWidget* m_lyricsSubStack = nullptr;
+    QPlainTextEdit* m_sourceLyricsEdit = nullptr;
+    QPushButton* m_lyrSourceBtn = nullptr;
+    QPushButton* m_lyrGridBtn = nullptr;
+    QPushButton* m_lyrHistoryBtn = nullptr;
+    
+    // Transport Bar (Global across views)
+    QWidget* m_transportBar = nullptr;
+
+    QToolBar*  m_toolBar = nullptr; // Leftover if needed, but we'll build custom
+
     QComboBox*   m_trackSelector = nullptr;
     QLineEdit*   m_subtitleInput = nullptr;
     QPushButton* m_addSubtitleBtn = nullptr;
     QPushButton* m_whisperBtn = nullptr;
     QPushButton* m_precisionBtn = nullptr;
-    QPushButton* m_lyricalProBtn = nullptr;   // toolbar button
+    QPushButton* m_splitTokensBtn = nullptr;
     QComboBox*   m_langCombo = nullptr;
     QPushButton* m_importBtn = nullptr;
     QLabel*      m_statusLabel = nullptr;

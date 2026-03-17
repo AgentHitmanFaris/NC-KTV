@@ -13,6 +13,7 @@
 #include <QMenuBar>
 #include <QStatusBar>
 #include <QVBoxLayout>
+#include <QFile>
 
 // Include our Phase 1 & 3 Core Headers
 #include "../core/project/ncktv_project.hpp"
@@ -58,8 +59,8 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::setupApplicationUI() {
-    this->setWindowTitle("NC-KTV Developer Console (100% C++ Mode)");
-    this->resize(1280, 720);
+    this->setWindowTitle("NC-KTV Pro Studio");
+    this->resize(1400, 820);
 
     // Main layout
     QWidget* centralWidget = new QWidget(this);
@@ -79,11 +80,21 @@ void MainWindow::setupApplicationUI() {
 
     // Connect signals
     connect(wizardMode_, &WizardMode::projectReady, this, &MainWindow::onProjectReady);
+    connect(wizardMode_, &WizardMode::requestOpen, this, &MainWindow::onActionOpenProject);
+    connect(wizardMode_, &WizardMode::requestNew, this, &MainWindow::onActionNewProject);
+    connect(wizardMode_, &WizardMode::requestPreferences, this, [this]() {
+        PreferencesDialog dialog(m_config, this);
+        dialog.exec();
+    });
 
     this->setCentralWidget(centralWidget);
 
-    // Setup Menus
-    QMenu* fileMenu = menuBar()->addMenu("&File");
+    // Hide default menu bar for custom UI
+    menuBar()->hide();
+    statusBar()->hide();
+    
+    // Setup Menus entries for custom UI usage (if needed later)
+    QMenu* fileMenu = new QMenu("&File", this);
     QAction* newAction = fileMenu->addAction("New Project (Native)...", this, &MainWindow::onActionNewProject);
     newAction->setShortcut(QKeySequence::New);
 
@@ -102,7 +113,18 @@ void MainWindow::setupApplicationUI() {
         dialog.exec();
     });
 
-    statusBar()->showMessage("Native C++ Core initialized. Zero Python Runtime detected.");
+    // Load Pro Theme
+    QFile qssFile(":/styles/dark_theme.qss");
+    if (!qssFile.exists()) {
+        // Try relative path fallback
+        qssFile.setFileName(QCoreApplication::applicationDirPath() + "/styles/dark_theme.qss");
+    }
+    if (qssFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        this->setStyleSheet(qssFile.readAll());
+        qssFile.close();
+    }
+
+    statusBar()->showMessage("NC-KTV Pro • Native C++ Engine Ready");
 }
 
 void MainWindow::setupWorkers() {
@@ -315,6 +337,12 @@ void MainWindow::onTranscriptionFinished(const QString& resultJson) {
 void MainWindow::onProjectReady(Project* project) {
     if (!project) return;
     
+    QString pName = project->projectName();
+    if (pName.isEmpty() && project->sourceFile.has_value()) {
+        pName = QFileInfo(*project->sourceFile).baseName();
+    }
+    this->setWindowTitle(pName + " - NC-KTV Pro Studio");
+
     statusBar()->showMessage("Project ready. Syncing data and launching Editor...");
     
     // 1. Sync Paths
@@ -407,6 +435,14 @@ void MainWindow::onProjectReady(Project* project) {
     
     editorMode_ = new EditorMode(activeProject_, m_config, this);
     connect(editorMode_, &EditorMode::requestSave, this, &MainWindow::onActionSaveProject);
+    connect(editorMode_, &EditorMode::requestSaveAs, this, &MainWindow::onActionSaveProjectAs);
+    connect(editorMode_, &EditorMode::requestOpen, this, &MainWindow::onActionOpenProject);
+    connect(editorMode_, &EditorMode::requestNew, this, &MainWindow::onActionNewProject);
+    connect(editorMode_, &EditorMode::requestPreferences, this, [this]() {
+        PreferencesDialog dialog(m_config, this);
+        dialog.exec();
+    });
+    connect(editorMode_, &EditorMode::requestExport, editorMode_, &EditorMode::onExportClicked);
     
     mainStack_->addWidget(editorMode_);
     mainStack_->setCurrentWidget(editorMode_);

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-03-17
+
+### Added
+- **Native Waveform Generation**: Replaced passive waveform display with a dedicated `WaveformWorker` that uses bundled FFmpeg to fast-decode and generate audio peaks in the background.
+- **Dynamic Waveform Sync**: Waveform now automatically updates when switching between Original, Instrumental, and Vocal tracks in the editor.
+- **Wizard Mode Header Menus**: Integrated "File", "Edit", and "Project" menus directly into the Wizard Mode splash screen for consistent project management from launch.
+- **Console Access**: Connected the "Console" button to instantly open the `debug.log` file via system default editor.
+- **Advanced Build Pipeline**: Integrated Nuitka compilation into `build_portable_release.ps1` for professional Python-to-C++ obfuscation of the AI bridge, effectively hiding the source code within a standalone executable.
+
+### Fixed
+- **"No Waveform" Issue**: Resolved the critical bug where the waveform display remained empty by implementing a native C++ background worker for audio peak calculation.
+- **AI Model Obfuscation**: Updated the Python bridge to correctly resolve `.dat` model extensions, allowing PyTorch models to be renamed and secured in portable builds.
+- **Build Stalling**: Enhanced the portable build script with verbose logging (`--verbose`, `--show-progress`) and non-interactive flags (`--assume-yes-for-downloads`) to prevent silent stalls during complex compilation phases.
+- **Path Resolution**: Fixed build script failures by using absolute path resolution for Python interpreters and source files.
+
+### Changed
+- **Nuitka Environment**: Build script now prioritizes the bundled `python_embed` environment for Nuitka compilation to ensure dependency consistency across different development machines.
+- **Project Structure Signals**: Added `requestOpen`, `requestNew`, and `requestPreferences` signals to `WizardMode` to unify project handling between the splash screen and main application.
+
+---
+
 ## [1.0.0] - 2026-03-15
 
 ### Added

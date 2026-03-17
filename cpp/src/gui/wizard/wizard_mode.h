@@ -24,6 +24,9 @@ public:
 
 signals:
     void projectReady(Project* project);
+    void requestOpen();
+    void requestNew();
+    void requestPreferences();
 
 private slots:
     void onBrowseFile();
@@ -41,16 +44,24 @@ private:
 
     QStackedWidget* m_pages;
     
-    // Page 1: Welcome / Selection
+    // Page 1: Welcome / Selection (Pro Dashboard)
     QLineEdit* m_filePathEdit;
     QPushButton* m_startBtn;
     QCheckBox* m_transcribeCheck;
     QComboBox* m_langCombo;
-    QComboBox* m_modelCombo = nullptr;   // UVR model selector
+    QComboBox* m_modelCombo = nullptr;
 
-    // Page 2: Processing
+    // Pro Dashboard widgets
+    QLabel* m_heroTitle;
+    QWidget* m_dropZone;
+    QLabel* m_dropTitle;
+    QLabel* m_dropSubtitle;
+
+    // Page 2: Processing (Pro Processor)
     QLabel* m_statusLabel;
     QProgressBar* m_progressBar;
+    QLabel* m_percentLabel;
+    QLabel* m_taskStatusLabel;
 
     QString m_selectedFile;
     QString m_onlineLyrics;

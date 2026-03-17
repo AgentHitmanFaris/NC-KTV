@@ -34,10 +34,10 @@ def run_transcription(audio_file, model_name="small", language=None):
     for d in possible_dirs:
         if not d.exists(): continue
         
-        # Check for model name directly or known alias
-        look_for = [f"{model_name}.pt"]
+        # Check for model name directly or known alias, including obfuscated .dat extension
+        look_for = [f"{model_name}.pt", f"{model_name}.dat"]
         if model_name == "turbo":
-            look_for.append("large-v3-turbo.pt")
+            look_for.extend(["large-v3-turbo.pt", "large-v3-turbo.dat"])
             
         for name in look_for:
             test_path = d / name
