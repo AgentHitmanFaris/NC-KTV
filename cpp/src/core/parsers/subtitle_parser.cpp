@@ -32,17 +32,27 @@ LyricsData SubtitleParser::parseFile(const QString& filePath) {
         return {};
 
     QString content = QTextStream(&file).readAll();
+    if (content.trimmed().isEmpty()) return {};
+
     Format fmt = detectFormat(filePath);
+    LyricsData data;
 
     switch (fmt) {
-    case Format::SRT:       return parseSrt(content);
-    case Format::LRC:       return parseLrc(content);
-    case Format::VTT:       return parseVtt(content);
-    case Format::ASS:       return parseAss(content);
-    case Format::TTML:      return parseTtml(content);
-    case Format::PlainText: return parsePlainText(content);
-    default:                return parsePlainText(content);
+    case Format::SRT:       data = parseSrt(content); break;
+    case Format::LRC:       data = parseLrc(content); break;
+    case Format::VTT:       data = parseVtt(content); break;
+    case Format::ASS:       data = parseAss(content); break;
+    case Format::TTML:      data = parseTtml(content); break;
+    case Format::PlainText: data = parsePlainText(content); break;
+    default:                data = parsePlainText(content); break;
     }
+
+    // Fallback: If specialized parser failed but we have text, import as plain text
+    if (data.lines.isEmpty() && !content.trimmed().isEmpty()) {
+        data.importFromText(content);
+    }
+
+    return data;
 }
 
 // ─── Timestamp Parsers ───────────────────────────────────────────────────────
@@ -62,15 +72,19 @@ double SubtitleParser::parseSrtTimestamp(const QString& ts) {
 }
 
 double SubtitleParser::parseLrcTimestamp(const QString& ts) {
-    // "[MM:SS.xx]"
-    static QRegularExpression re(R"(\[?(\d+):(\d+(?:\.\d+)?)\]?)");
-    auto m = re.match(ts.trimmed());
-    if (!m.hasMatch()) return 0.0;
-
-    int min    = m.captured(1).toInt();
-    double sec = m.captured(2).toDouble();
-
-    return min * 60.0 + sec;
+    QString clean = ts.trimmed();
+    if (clean.startsWith('[')) clean.remove(0, 1);
+    if (clean.endsWith(']')) clean.remove(clean.length() - 1, 1);
+    
+    QStringList parts = clean.split(':');
+    if (parts.size() == 3) { // HH:MM:SS.xx
+        return parts[0].toInt() * 3600.0 + parts[1].toInt() * 60.0 + parts[2].replace(',', '.').toDouble();
+    } else if (parts.size() == 2) { // MM:SS.xx
+        return parts[0].toInt() * 60.0 + parts[1].replace(',', '.').toDouble();
+    } else if (parts.size() == 1) { // SS.xx
+        return parts[0].replace(',', '.').toDouble();
+    }
+    return 0.0;
 }
 
 double SubtitleParser::parseAssTimestamp(const QString& ts) {
@@ -91,42 +105,59 @@ double SubtitleParser::parseAssTimestamp(const QString& ts) {
 
 LyricsData SubtitleParser::parseSrt(const QString& content) {
     LyricsData data;
-    static QRegularExpression timingRe(
-        R"((\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+))");
+    static QRegularExpression timingRe(R"((\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+))");
+    
+    QStringList lines = content.split('\n');
+    QString currentText;
+    double currentStart = -1.0;
+    double currentEnd = -1.0;
 
-    QStringList blocks = content.split(QRegularExpression(R"(\n\s*\n)"),
-                                        Qt::SkipEmptyParts);
+    for (const auto& line : lines) {
+        QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) {
+            if (currentStart >= 0.0 && !currentText.isEmpty()) {
+                LyricLine ll;
+                ll.text = currentText.trimmed();
+                ll.startTime = currentStart;
+                ll.endTime = currentEnd;
+                data.addLine(ll);
+                currentStart = -1.0;
+                currentText = "";
+            }
+            continue;
+        }
 
-    for (const auto& block : blocks) {
-        QStringList lines = block.trimmed().split('\n');
-        if (lines.size() < 2) continue;
-
-        // Find the timing line
-        for (int i = 0; i < lines.size() - 1; ++i) {
-            auto m = timingRe.match(lines[i]);
-            if (m.hasMatch()) {
-                double start = parseSrtTimestamp(m.captured(1));
-                double end   = parseSrtTimestamp(m.captured(2));
-
-                // Join remaining lines as text
-                QStringList textLines;
-                for (int j = i + 1; j < lines.size(); ++j)
-                    textLines << lines[j].trimmed();
-                QString text = textLines.join(" ");
-
-                // Strip HTML tags
-                text.remove(QRegularExpression("<[^>]*>"));
-
-                if (!text.isEmpty()) {
-                    LyricLine line;
-                    line.text      = text;
-                    line.startTime = start;
-                    line.endTime   = end;
-                    data.addLine(line);
-                }
-                break;
+        auto m = timingRe.match(trimmed);
+        if (m.hasMatch()) {
+            // If we found a timing line but had a pending block, save it
+            if (currentStart >= 0.0 && !currentText.isEmpty()) {
+                LyricLine ll;
+                ll.text = currentText.trimmed();
+                ll.startTime = currentStart;
+                ll.endTime = currentEnd;
+                data.addLine(ll);
+            }
+            currentStart = parseSrtTimestamp(m.captured(1));
+            currentEnd = parseSrtTimestamp(m.captured(2));
+            currentText = "";
+        } else if (currentStart >= 0.0) {
+            // Check if it's just the numeric sequence line
+            bool isIndex;
+            trimmed.toInt(&isIndex);
+            if (!isIndex) {
+                if (!currentText.isEmpty()) currentText += " ";
+                currentText += trimmed;
             }
         }
+    }
+
+    // Final block
+    if (currentStart >= 0.0 && !currentText.isEmpty()) {
+        LyricLine ll;
+        ll.text = currentText.trimmed();
+        ll.startTime = currentStart;
+        ll.endTime = currentEnd;
+        data.addLine(ll);
     }
 
     return data;
@@ -136,8 +167,9 @@ LyricsData SubtitleParser::parseSrt(const QString& content) {
 
 LyricsData SubtitleParser::parseLrc(const QString& content) {
     LyricsData data;
-    static QRegularExpression lineRe(R"(\[(\d+:\d+(?:\.\d+)?)\](.*))");
-    static QRegularExpression metaRe(R"(\[(\w+):(.*)\])");
+    static QRegularExpression metaRe(R"(\[\s*(\w+)\s*:\s*(.*)\s*\])");
+    static QRegularExpression rangeRe(R"(\[\s*(\d+:[\d\.\:]+)\s*[-\u2013\u2014]\s*(\d+:[\d\.\:]+)\s*\]\s*(.*))");
+    static QRegularExpression lineRe(R"(\[\s*(\d+:[\d\.\:]+)\s*\]\s*(.*))");
 
     for (const auto& rawLine : content.split('\n')) {
         QString trimmed = rawLine.trimmed();
@@ -145,11 +177,29 @@ LyricsData SubtitleParser::parseLrc(const QString& content) {
 
         // Check metadata
         auto metaMatch = metaRe.match(trimmed);
-        if (metaMatch.hasMatch() && !lineRe.match(trimmed).hasMatch()) {
+        if (metaMatch.hasMatch() && !lineRe.match(trimmed).hasMatch() && !rangeRe.match(trimmed).hasMatch()) {
             QString key = metaMatch.captured(1).toLower();
             QString val = metaMatch.captured(2).trimmed();
             if (key == "ti") data.title  = val;
             if (key == "ar") data.artist = val;
+            continue;
+        }
+
+        // Try range format first: [MM:SS.xx - MM:SS.xx]
+        auto rangeMatch = rangeRe.match(trimmed);
+        if (rangeMatch.hasMatch()) {
+            double start = parseLrcTimestamp(rangeMatch.captured(1));
+            double end = parseLrcTimestamp(rangeMatch.captured(2));
+            QString text = rangeMatch.captured(3).trimmed();
+
+            if (!text.isEmpty()) {
+                LyricLine line;
+                line.text      = text;
+                line.startTime = start;
+                line.endTime   = end;
+                line.addWord(text, start, end, 1.0);
+                data.addLine(line);
+            }
             continue;
         }
 
@@ -169,9 +219,11 @@ LyricsData SubtitleParser::parseLrc(const QString& content) {
         }
     }
 
-    // Post-process: set end times to next line's start time
+    // Post-process: set end times to next line's start time if they weren't explicitly set by range format
     for (int i = 0; i < data.lines.size() - 1; ++i) {
-        data.lines[i].endTime = data.lines[i + 1].startTime;
+        if (data.lines[i].endTime <= data.lines[i].startTime) {
+            data.lines[i].endTime = data.lines[i + 1].startTime;
+        }
     }
     if (!data.lines.isEmpty()) {
         auto& last = data.lines.last();
@@ -256,9 +308,17 @@ LyricsData SubtitleParser::parseTtml(const QString& content) {
     return data;
 }
 
-// ─── Plain Text ──────────────────────────────────────────────────────────────
-
 LyricsData SubtitleParser::parsePlainText(const QString& content) {
+    // If it contains timestamp brackets like [00:00.00, treat it as timed format
+    if (content.contains(QRegularExpression(R"(\[\s*(?:\d+:)?\d+:[\d\.\:]+\s*\])"))) {
+        return parseLrc(content);
+    }
+    
+    // Check for Range pattern directly [00:00 - 00:05]
+    if (content.contains(QRegularExpression(R"(\[\s*(?:\d+:)?\d+:[\d\.\:]+\s*[-\u2013\u2014])"))) {
+        return parseLrc(content);
+    }
+
     LyricsData data;
     data.importFromText(content);
     return data;

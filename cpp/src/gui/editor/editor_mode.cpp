@@ -12,6 +12,8 @@
 #include <QProgressBar>
 #include <QTimer>
 #include <QHBoxLayout>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QStackedWidget>
 #include <QTableWidget>
@@ -478,13 +480,23 @@ void EditorMode::setupUi() {
     m_transportBar->setFixedHeight(80);
     m_transportBar->setStyleSheet("background: #0b101b; border-top: 1px solid rgba(255,255,255,0.05);");
     auto* tLay = new QHBoxLayout(m_transportBar); tLay->setContentsMargins(30, 8, 30, 8); tLay->setSpacing(24);
+    
     auto* playBtn = new QPushButton("▶", m_transportBar);
     playBtn->setFixedSize(48, 48);
-    playBtn->setStyleSheet("background: white; color: black; border-radius: 24px; font-size: 18px; border: none;");
+    playBtn->setStyleSheet("background: white; color: black; border-radius: 24px; font-size: 18px; border: none; font-family: 'Segoe UI Emoji', sans-serif;");
     tLay->addWidget(playBtn);
+
+    // Track Selector in Transport Bar
+    m_trackSelector = new QComboBox(m_transportBar);
+    m_trackSelector->addItems({"Original Mix", "Instrumental", "Vocals Only"});
+    m_trackSelector->setFixedWidth(140);
+    m_trackSelector->setStyleSheet("QComboBox { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 10px; color: #94a3b8; font-weight: 600; font-size: 11px; } QComboBox::drop-down { border: none; }");
+    tLay->addWidget(m_trackSelector);
+
     m_waveformWidget = new WaveformWidget(m_transportBar);
     m_waveformWidget->setFixedHeight(60);
     tLay->addWidget(m_waveformWidget, 1);
+    
     m_workspaceLayout->addWidget(m_transportBar);
     m_mainHLayout->addWidget(rightContainer, 1);
     
@@ -497,7 +509,7 @@ void EditorMode::setupUi() {
     m_subtitleInput = new QLineEdit(this); m_subtitleInput->hide();
     m_timelineWidget = new TimelineWidget(this); m_timelineWidget->hide();
     m_audioPlayer = new AudioPlayer(this); m_audioPlayer->hide();
-    m_trackSelector = new QComboBox(this); m_trackSelector->hide();
+    // m_trackSelector is now visible in transport bar
 
     // Setup basic connections for new UI
     connect(btnFile, &QPushButton::clicked, this, [this]{ emit requestOpen(); });
@@ -505,17 +517,27 @@ void EditorMode::setupUi() {
     connect(btnProj, &QPushButton::clicked, this, [this]{ emit requestSave(); });
     connect(btnExpo, &QPushButton::clicked, this, [this]{ emit requestExport(); });
     
-    connect(m_modeLyricsBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_viewStack->setCurrentIndex(0); m_modeTimingBtn->setChecked(false); m_modeRenderBtn->setChecked(false); syncGridParent(0, m_lyricsSubStack->currentIndex()); });
-    connect(m_modeTimingBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_viewStack->setCurrentIndex(1); m_modeLyricsBtn->setChecked(false); m_modeRenderBtn->setChecked(false); syncGridParent(1); });
+    connect(m_consoleBtn, &QPushButton::clicked, this, []() {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QDir::currentPath() + "/debug.log"));
+    });
+    
     connect(m_modeRenderBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_viewStack->setCurrentIndex(2); m_modeLyricsBtn->setChecked(false); m_modeTimingBtn->setChecked(false); syncGridParent(2); });
+    
+    // Connect track selector
+    connect(m_trackSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &EditorMode::onTrackSelectionChanged);
 
     connect(m_lyrSourceBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_lyricsSubStack->setCurrentIndex(0); syncGridParent(0, 0); });
     connect(m_lyrGridBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_lyricsSubStack->setCurrentIndex(1); syncGridParent(0, 1); });
     connect(m_lyrHistoryBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_lyricsSubStack->setCurrentIndex(2); syncGridParent(0, 2); });
     
     connect(playBtn, &QPushButton::clicked, this, [this]{
-        if (m_audioPlayer->player()->playbackState() == QMediaPlayer::PlayingState) m_audioPlayer->player()->pause();
-        else m_audioPlayer->player()->play();
+        if (m_audioPlayer->player()->playbackState() == QMediaPlayer::PlayingState) {
+            m_audioPlayer->player()->pause();
+            if (m_videoPlayer) m_videoPlayer->pause();
+        } else {
+            m_audioPlayer->player()->play();
+            if (m_videoPlayer) m_videoPlayer->play();
+        }
     });
 
     // Update play button state automatically
@@ -530,10 +552,6 @@ void EditorMode::setupToolBar() {
     m_toolBar->addAction("Undo", m_undoManager, &UndoManager::undo);
     m_toolBar->addAction("Redo", m_undoManager, &UndoManager::redo);
     m_toolBar->addSeparator();
-    m_trackSelector = new QComboBox(this);
-    m_trackSelector->addItems({"Original", "Instrumental", "Vocals Only"});
-    m_toolBar->addWidget(m_trackSelector);
-    connect(m_trackSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &EditorMode::onTrackSelectionChanged);
     m_toolBar->addSeparator();
     m_toolBar->addAction("Export...", this, &EditorMode::onExportClicked);
     m_toolBar->addAction("Settings", this, &EditorMode::onExportSettingsClicked);
@@ -605,10 +623,12 @@ void EditorMode::syncViewState() {
         QString path = QString::fromStdString(m_project->instrumental_file.value().string());
         m_audioPlayer->loadSource(path);
         requestWaveform(path);
+        if (m_trackSelector) { m_trackSelector->blockSignals(true); m_trackSelector->setCurrentIndex(1); m_trackSelector->blockSignals(false); }
     } else if (m_project->audio_file.has_value() && !m_project->audio_file.value().empty()) {
         QString path = QString::fromStdString(m_project->audio_file.value().string());
         m_audioPlayer->loadSource(path);
         requestWaveform(path);
+        if (m_trackSelector) { m_trackSelector->blockSignals(true); m_trackSelector->setCurrentIndex(0); m_trackSelector->blockSignals(false); }
     }
     updateSubtitleList();
 }
@@ -698,10 +718,23 @@ void EditorMode::updateSubtitleList() {
 }
 void EditorMode::onTrackSelectionChanged(int index) {
     if (!m_project) return;
-    QString src; if (index == 0 && m_project->audio_file) src = QString::fromStdString(m_project->audio_file->string()); else if (index == 1 && m_project->instrumental_file) src = QString::fromStdString(m_project->instrumental_file->string()); else if (index == 2 && m_project->vocals_file) src = QString::fromStdString(m_project->vocals_file->string());
-    if (!src.isEmpty()) {
+    QString src; 
+    if (index == 0) {
+        if (m_project->audio_file) src = QString::fromStdString(m_project->audio_file->string());
+        else if (m_project->source_file) src = QString::fromStdString(m_project->source_file->string());
+    } else if (index == 1 && m_project->instrumental_file) {
+        src = QString::fromStdString(m_project->instrumental_file->string());
+    } else if (index == 2 && m_project->vocals_file) {
+        src = QString::fromStdString(m_project->vocals_file->string());
+    }
+    
+    qDebug() << "Switching track to index" << index << "path:" << src;
+    
+    if (!src.isEmpty() && QFile::exists(src)) {
         m_audioPlayer->loadSource(src);
         requestWaveform(src);
+    } else {
+        qDebug() << "Track source NOT FOUND or empty for index" << index << "path:" << src;
     }
 }
 void EditorMode::onAddSubtitleClicked() {
@@ -718,10 +751,50 @@ void EditorMode::onAutoWhisperClicked() {
     worker->startTranscription(target, "medium", "Auto");
 }
 void EditorMode::onImportSubtitleClicked() {
-    ImportDialog d(this); if (d.exec() != QDialog::Accepted) return;
-    QFile f(d.filePath()); if (!f.open(QIODevice::ReadOnly)) return;
-    QString c = QString::fromUtf8(f.readAll()); m_project->lyrics.clear(); if (d.filePath().endsWith(".json")) m_project->lyrics.importFromWhisperJson(c.toStdString());
-    updateSubtitleList(); emit unsavedChangesChanged(true);
+    ImportDialog d(this); 
+    if (d.exec() != QDialog::Accepted) return;
+    
+    QString path = d.filePath();
+    if (path.isEmpty()) return;
+
+    if (path.endsWith(".json", Qt::CaseInsensitive)) {
+        QFile f(path);
+        if (f.open(QIODevice::ReadOnly)) {
+            QString c = QString::fromUtf8(f.readAll());
+            m_project->lyrics.importFromWhisperJson(c.toStdString());
+        }
+    } else {
+        // Use Unified Subtitle Parser for LRC, SRT, ASS, etc.
+        ncktv::LyricsData uiLyrics = SubtitleParser::parseFile(path);
+        if (!uiLyrics.lines.empty()) {
+            m_project->lyrics.clear();
+            for (const auto& line : uiLyrics.lines) {
+                ncktv::core::LyricsLine coreLine;
+                coreLine.text = line.text.toStdString();
+                coreLine.start_time = static_cast<float>(line.startTime);
+                coreLine.end_time = static_cast<float>(line.endTime);
+                
+                for (const auto& word : line.words) {
+                    ncktv::core::LyricsToken token;
+                    token.text = word.word.toStdString();
+                    token.start_time = static_cast<float>(word.startTime);
+                    token.end_time = static_cast<float>(word.endTime);
+                    coreLine.tokens.push_back(std::move(token));
+                }
+                
+                if (coreLine.tokens.empty()) {
+                    coreLine.splitIntoWords();
+                }
+                
+                m_project->lyrics.lines.push_back(std::move(coreLine));
+            }
+        } else {
+            QMessageBox::warning(this, "Import Error", "Failed to parse subtitle file or file is empty.");
+        }
+    }
+
+    updateSubtitleList(); 
+    emit unsavedChangesChanged(true);
 }
 void EditorMode::onExportClicked() {
     if (!m_project) return;

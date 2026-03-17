@@ -39,6 +39,7 @@ private:
     QTabWidget*    m_tabs = nullptr;
 
     // General
+    QComboBox* m_graphicsApiCombo = nullptr;
     QComboBox* m_startModeCombo = nullptr;
     QCheckBox* m_autoSaveCheck = nullptr;
     QSpinBox*  m_autoSaveInterval = nullptr;

@@ -90,13 +90,16 @@ void KaraokePreview::paintEvent(QPaintEvent* /*event*/) {
 void KaraokePreview::drawSubtitles(QPainter& painter) {
     if (m_data->lines.empty()) return;
 
-    // Find active or upcoming line
+    // Find first line that hasn't finished yet
     int activeIdx = -1;
     for (int i = 0; i < m_data->lines.size(); ++i) {
         const auto& line = m_data->lines[i];
-        if (m_currentTime >= line.start_time - 2.0 && m_currentTime <= line.end_time + 1.0) {
-            activeIdx = i;
-            break;
+        if (m_currentTime < line.end_time) {
+            // Found it. But only show it if we are within a 5-second lead time.
+            if (m_currentTime >= line.start_time - 5.0) {
+                activeIdx = i;
+                break;
+            }
         }
     }
 
@@ -121,7 +124,7 @@ void KaraokePreview::drawSubtitles(QPainter& painter) {
     for (int i = activeIdx; i < m_data->lines.size() && drawnLines < linesToDraw; ++i) {
         const auto& line = m_data->lines[i];
         
-        bool isCurrentLine = (m_currentTime >= line.start_time && m_currentTime <= line.end_time);
+        bool isCurrentLine = (m_currentTime >= line.start_time && m_currentTime < line.end_time);
         
         // Calculate total width to center the line
         int totalWidth = 0;

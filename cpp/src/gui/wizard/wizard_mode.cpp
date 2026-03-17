@@ -23,6 +23,16 @@ WizardMode::WizardMode(ConfigManager* config, QWidget* parent)
 {
     setupUi();
 }
+void WizardMode::reset() {
+    m_pages->setCurrentIndex(0);
+    m_selectedFile.clear();
+    m_onlineLyrics.clear();
+    if (m_filePathEdit) m_filePathEdit->clear();
+    if (m_startBtn) m_startBtn->setEnabled(false);
+    if (m_dropTitle) m_dropTitle->setText("Upload Source");
+    if (m_dropSubtitle) m_dropSubtitle->setText("Drag and drop MKV, MP4, or WAV files to begin rendering");
+    if (m_dropZone) m_dropZone->setStyleSheet("border: 2px dashed rgba(255, 255, 255, 0.1); border-radius: 12px; background: rgba(255, 255, 255, 0.02);");
+}
 
 void WizardMode::setupUi() {
     auto* mainLayout = new QVBoxLayout(this);

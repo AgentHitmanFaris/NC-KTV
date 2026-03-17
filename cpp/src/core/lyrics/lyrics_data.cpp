@@ -99,12 +99,18 @@ void LyricsData::clear()
 void LyricsData::importFromText(const QString& text)
 {
     lines.clear();
+    static QRegularExpression timeStripRe(R"(^(\[[\d\.\:\-\s]+\]\s*))");
     const auto rawLines = text.split('\n');
     for (const auto& raw : rawLines) {
-        QString trimmed = raw.trimmed();
-        if (!trimmed.isEmpty()) {
+        QString lineText = raw.trimmed();
+        if (lineText.isEmpty()) continue;
+        
+        // Strip leading timestamps like [00:15.65 - 00:19.14] or [00:15.65]
+        lineText.remove(timeStripRe);
+        
+        if (!lineText.isEmpty()) {
             LyricLine line;
-            line.text      = trimmed;
+            line.text      = lineText.trimmed();
             line.startTime = 0.0;
             line.endTime   = 0.0;
             lines.append(line);

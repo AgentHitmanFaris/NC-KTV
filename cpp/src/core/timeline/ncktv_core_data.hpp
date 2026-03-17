@@ -377,6 +377,33 @@ public:
     [[nodiscard]] float duration() const {
         return std::max(0.0f, end_time - start_time);
     }
+
+    void splitIntoWords() {
+        tokens.clear();
+        std::string s = text;
+        std::vector<std::string> words;
+        size_t pos = 0;
+        while ((pos = s.find(' ')) != std::string::npos) {
+            words.push_back(s.substr(0, pos));
+            s.erase(0, pos + 1);
+        }
+        words.push_back(s);
+
+        if (words.empty()) return;
+
+        float dur = duration();
+        float t_acc = start_time;
+        size_t total_chars = 0;
+        for (const auto& w : words) total_chars += w.length();
+        if (total_chars == 0) total_chars = words.size();
+
+        for (const auto& w : words) {
+            float w_dur = (dur * w.length()) / total_chars;
+            if (total_chars == words.size()) w_dur = dur / words.size();
+            tokens.emplace_back(w, t_acc, t_acc + w_dur);
+            t_acc += w_dur;
+        }
+    }
 };
 
 class LyricsData {

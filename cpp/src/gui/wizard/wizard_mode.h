@@ -21,6 +21,7 @@ class WizardMode : public QWidget {
 
 public:
     explicit WizardMode(ConfigManager* config, QWidget* parent = nullptr);
+    void reset();
 
 signals:
     void projectReady(Project* project);

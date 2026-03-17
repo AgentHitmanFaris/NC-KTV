@@ -156,24 +156,10 @@ void MainWindow::setupWorkers() {
 }
 
 void MainWindow::onActionNewProject() {
-    QString videoFile = QFileDialog::getOpenFileName(this, "Select Media File", "", "Media Files (*.mp4 *.mkv *.wav)");
-    if (videoFile.isEmpty()) return;
-
-    // Utilize Phase 1 structures natively
-    activeProject_->source_file = videoFile.toStdString();
-    activeProject_->project_name = QFileInfo(videoFile).baseName().toStdString();
-
-    statusBar()->showMessage("Commencing Neural Separation...");
-
-    // Trigger Phase 3 Native ONNX via Thread-Safe Invocation
-    QString outDir = QDir::currentPath() + "/temp/project_" + QFileInfo(videoFile).baseName();
-    
-    QString selectedUvr = m_config ? m_config->get<QString>("ai.uvr_model", "UVR_MDXNET_KARA_2.onnx") : "UVR_MDXNET_KARA_2.onnx";
-
-    QMetaObject::invokeMethod(vocalWorker_, "startSeparation", Qt::QueuedConnection,
-                              Q_ARG(QString, videoFile),
-                              Q_ARG(QString, selectedUvr),
-                              Q_ARG(QString, outDir));
+    // Reset wizard and switch to it
+    wizardMode_->reset();
+    mainStack_->setCurrentWidget(wizardMode_);
+    statusBar()->showMessage("New Project Initialization...");
 }
 
 void MainWindow::onActionSaveProject() {

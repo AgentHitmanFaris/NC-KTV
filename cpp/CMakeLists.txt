@@ -19,6 +19,16 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia MultimediaWidge
 # OpenSSL (optional - enables encrypted project files)
 find_package(OpenSSL QUIET)
 
+# Vulkan (High-Performance Graphics API)
+find_package(Vulkan QUIET)
+if(Vulkan_FOUND)
+    message(STATUS "Vulkan SDK found: ${Vulkan_LIBRARY}")
+    add_compile_definitions(NCKTV_HAS_VULKAN=1)
+else()
+    message(WARNING "Vulkan SDK not found. Vulkan rendering backend may be unavailable at runtime.")
+    add_compile_definitions(NCKTV_HAS_VULKAN=0)
+endif()
+
 # ─── Fetch Content (AI & Data Libraries) ─────────────────────────────────────
 include(FetchContent)
 
@@ -117,6 +127,27 @@ if(WIN32)
 else()
     set(NCKTV_HAS_ONNX OFF)
 endif()
+
+# 4. zstd (Fast Data Compression)
+FetchContent_Declare(zstd
+    URL "https://github.com/facebook/zstd/archive/refs/tags/v1.5.5.tar.gz"
+    SOURCE_SUBDIR "build/cmake"
+)
+set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(ZSTD_LEGACY_SUPPORT OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(zstd)
+
+# 5. LibreSSL (OpenSSL-compatible Crypto Engineering)
+FetchContent_Declare(libressl
+    URL "https://github.com/libressl-portable/portable/releases/download/v3.9.1/libressl-3.9.1.tar.gz"
+)
+set(LIBRESSL_APPS OFF CACHE BOOL "" FORCE)
+set(LIBRESSL_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(libressl)
 
 # ─── Enable Qt auto-tools (AFTER third-party FetchContent) ───────────────────
 # Now our own add_subdirectory targets see AUTOMOC ON.

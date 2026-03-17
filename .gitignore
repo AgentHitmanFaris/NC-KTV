@@ -121,3 +121,10 @@ cpp/*.txt
 *.ncktv_run_sep.py
 fix_precision.py
 cpp/src/gui/dialogs/replace_words*.py
+
+# Build Tools
+build_pyinstaller/
+build_pyinstaller_work/
+ui_pro_prototype/
+*.lnk
+debug.log

@@ -100,6 +100,7 @@ private:
     QPushButton* m_modeTimingBtn = nullptr;
     QPushButton* m_modeRenderBtn = nullptr;
     QPushButton* m_saveProjectBtn = nullptr;
+    QPushButton* m_consoleBtn = nullptr;
 
     // Right Workspace
     QVBoxLayout* m_workspaceLayout = nullptr;

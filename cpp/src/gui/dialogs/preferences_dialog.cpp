@@ -68,6 +68,16 @@ QWidget* PreferencesDialog::createGeneralTab() {
     m_startModeCombo->addItems({"Wizard", "Editor"});
     form->addRow("Start Mode:", m_startModeCombo);
 
+    m_graphicsApiCombo = new QComboBox(this);
+    m_graphicsApiCombo->addItems({"Default", "Vulkan (High Perf)", "DirectX 11", "OpenGL", "Software"});
+    QString currentApi = m_config ? m_config->get<QString>("gui.graphics_api", "Default") : "Default";
+    m_graphicsApiCombo->setCurrentText(currentApi);
+    form->addRow("Graphics Engine:", m_graphicsApiCombo);
+    
+    auto* graphicsNote = new QLabel("Note: Changing the graphics engine requires an application restart.", this);
+    graphicsNote->setStyleSheet("color:#8a8a8a; font-size:10px; font-style:italic; border:none;");
+    form->addRow("", graphicsNote);
+
     m_autoSaveCheck = new QCheckBox("Enable auto-save", this);
     m_autoSaveCheck->setChecked(true);
     form->addRow("", m_autoSaveCheck);
@@ -205,6 +215,7 @@ void PreferencesDialog::browseModelPath() {
 void PreferencesDialog::onAccepted() {
     if (m_config) {
         m_config->set<QString>("gui.start_mode", m_startModeCombo->currentText().toLower());
+        m_config->set<QString>("gui.graphics_api", m_graphicsApiCombo->currentText());
         m_config->set<QString>("ai.whisper_model", m_defaultModelCombo->currentText());
         m_config->set<QString>("ai.uvr_model", m_defaultUvrModelCombo->currentText());
         m_config->set<QString>("ai.language", m_defaultLanguageCombo->currentText());

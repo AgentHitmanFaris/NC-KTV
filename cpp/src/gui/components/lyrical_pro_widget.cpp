@@ -49,8 +49,9 @@ void TeleprompterView::updateTime(double timeSecs) {
 
     if (newActive != m_activeIndex) {
         m_activeIndex = newActive;
-        update();
     }
+    // Always update to catch color changes (active vs dimmed)
+    update();
 }
 
 void TeleprompterView::resizeEvent(QResizeEvent* event) {
@@ -96,8 +97,18 @@ void TeleprompterView::paintEvent(QPaintEvent*) {
     p.drawRoundedRect(boxRect, 12, 12);
 
     p.setFont(activeFont);
-    p.setPen(m_activeText);
-    QString activeText = QString::fromStdString(m_lyrics->lines[activeIdx].text);
+    
+    // Dim the text if the line hasn't actually started yet
+    const auto& ln = m_lyrics->lines[activeIdx];
+    bool isActuallyActive = (m_currentTime >= ln.start_time && m_currentTime < ln.end_time);
+    
+    QColor textColor = m_activeText;
+    if (!isActuallyActive) {
+        textColor.setAlpha(120); // Dim it
+    }
+    
+    p.setPen(textColor);
+    QString activeText = QString::fromStdString(ln.text);
     p.drawText(boxRect.toRect(), Qt::AlignCenter, activeText);
 
     // ── Lines above (previous) ────────────────────────────────────────────────
