@@ -11,7 +11,7 @@
 #include <QDebug>
 #include <QCoreApplication>
 
-#include "../../core/parsers/ass_generator.h"
+#include "../../core/system/gpu_detector.h"
 
 namespace ncktv {
 
@@ -41,7 +41,8 @@ static QString getFFmpegExecutable() {
 }
 
 void ExportWorker::startExport(const QString& videoPath, const QString& audioPath,
-                               const QString& outputPath, const QString& format, bool burnSubs)
+                               const QString& outputPath, const QString& format, bool burnSubs,
+                               int width, int height)
 {
     emit progress(0, "Preparing export...");
 
@@ -49,6 +50,46 @@ void ExportWorker::startExport(const QString& videoPath, const QString& audioPat
     if (format.contains("Subtitles") || format.contains("ASS") || format.contains("SRT")) {
         emit progress(100, "Subtitle file exported.");
         emit exportComplete(outputPath);
+        return;
+    }
+
+    // ── Handle MP3 audio-only export ──────────────────────────────────────
+    if (format.contains("mp3", Qt::CaseInsensitive) || format.contains("MP3")) {
+        QString src = audioPath.isEmpty() ? videoPath : audioPath;
+        if (src.isEmpty()) {
+            emit error("No audio source specified for MP3 export.");
+            return;
+        }
+        QStringList args;
+        args << "-y" << "-i" << src
+             << "-vn"                     // no video
+             << "-c:a" << "libmp3lame"
+             << "-q:a" << "2"             // VBR quality 2 (~190 kbps)
+             << outputPath;
+        auto* process = new QProcess(this);
+        QString ffmpegExe = getFFmpegExecutable();
+        connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, [this, process, outputPath](int exitCode, QProcess::ExitStatus) {
+            if (exitCode == 0) {
+                emit progress(100, "MP3 export complete!");
+                emit exportComplete(outputPath);
+            } else {
+                QString err = process->readAllStandardError();
+                if (err.isEmpty()) err = "FFmpeg failed with exit code " + QString::number(exitCode);
+                emit error(err);
+            }
+            process->deleteLater();
+        });
+        connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError) {
+            emit error("Failed to launch FFmpeg: " + process->errorString());
+            process->deleteLater();
+        });
+        connect(process, &QProcess::readyReadStandardError, this, [this, process]() {
+            QString out = process->readAllStandardError();
+            if (out.contains("time=")) emit progress(50, "Encoding MP3...");
+        });
+        qDebug() << "ExportWorker (MP3): Executing" << ffmpegExe << args.join(" ");
+        process->start(ffmpegExe, args);
         return;
     }
 
@@ -73,26 +114,52 @@ void ExportWorker::startExport(const QString& videoPath, const QString& audioPat
         ffmpegArgs << "-i" << audioPath;
     }
 
-    // ── Subtitle Filter ──────────────────────────────────────────────────
+    // ── Subtitle & Scaling Filter ─────────────────────────────────────────
+    QStringList filters;
+    if (width > 0 && height > 0) {
+        filters << QString("scale=%1:%2").arg(width).arg(height);
+    }
     if (burnSubs) {
         QString assPath = QFileInfo(outputPath).absolutePath() + "/temp_subs.ass";
         if (QFile::exists(assPath)) {
             // FFmpeg's 'ass' filter on Windows needs careful path escaping.
-            // Forward slashes are generally safer, and colons must be escaped.
             QString escapedPath = QDir::fromNativeSeparators(assPath);
             escapedPath.replace(":", "\\:");
-            ffmpegArgs << "-vf" << QString("ass='%1'").arg(escapedPath);
+            filters << QString("ass='%1'").arg(escapedPath);
         }
+    }
+    if (!filters.isEmpty()) {
+        ffmpegArgs << "-vf" << filters.join(",");
     }
 
     // ── Encoding Parameters ──────────────────────────────────────────────
+    QString videoCodec = "libx264";
     if (format.contains("H.265") || format.contains("MKV")) {
-        ffmpegArgs << "-c:v" << "libx265" << "-crf" << "23" << "-c:a" << "aac" << "-b:a" << "192k";
+        videoCodec = "libx265";
+        if (GPUDetector::isEncoderAvailable("hevc_nvenc")) {
+            ffmpegArgs << "-c:v" << "hevc_nvenc" << "-preset" << "p4" << "-rc" << "vbr" << "-cq" << "28";
+        } else if (GPUDetector::isEncoderAvailable("hevc_qsv")) {
+            ffmpegArgs << "-c:v" << "hevc_qsv" << "-global_quality" << "25" << "-preset" << "fast";
+        } else if (GPUDetector::isEncoderAvailable("hevc_amf")) {
+            ffmpegArgs << "-c:v" << "hevc_amf" << "-quality" << "balanced";
+        } else {
+            ffmpegArgs << "-c:v" << "libx265" << "-crf" << "23" << "-preset" << "fast";
+        }
+        ffmpegArgs << "-c:a" << "aac" << "-b:a" << "192k";
     } else if (format.contains("VP9") || format.contains("WebM")) {
         ffmpegArgs << "-c:v" << "libvpx-vp9" << "-crf" << "30" << "-b:v" << "0" << "-c:a" << "libopus" << "-b:a" << "128k";
     } else {
         // Default MP4 (H.264)
-        ffmpegArgs << "-c:v" << "libx264" << "-crf" << "20" << "-preset" << "medium" << "-c:a" << "aac" << "-b:a" << "192k";
+        if (GPUDetector::isEncoderAvailable("h264_nvenc")) {
+            ffmpegArgs << "-c:v" << "h264_nvenc" << "-preset" << "p4" << "-rc" << "vbr" << "-cq" << "24";
+        } else if (GPUDetector::isEncoderAvailable("h264_qsv")) {
+            ffmpegArgs << "-c:v" << "h264_qsv" << "-global_quality" << "25" << "-preset" << "fast";
+        } else if (GPUDetector::isEncoderAvailable("h264_amf")) {
+            ffmpegArgs << "-c:v" << "h264_amf" << "-quality" << "balanced";
+        } else {
+            ffmpegArgs << "-c:v" << "libx264" << "-crf" << "20" << "-preset" << "fast";
+        }
+        ffmpegArgs << "-c:a" << "aac" << "-b:a" << "192k";
     }
 
     ffmpegArgs << outputPath;

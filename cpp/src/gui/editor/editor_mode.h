@@ -119,8 +119,8 @@ private:
     QStackedWidget* m_lyricsSubStack = nullptr;
     QPlainTextEdit* m_sourceLyricsEdit = nullptr;
     QPushButton* m_lyrSourceBtn = nullptr;
-    QPushButton* m_lyrGridBtn = nullptr;
     QPushButton* m_lyrHistoryBtn = nullptr;
+    bool m_syncingFromEdit = false; // Guard against re-entrant edit<->model sync
     
     // Transport Bar (Global across views)
     QWidget* m_transportBar = nullptr;
@@ -130,6 +130,8 @@ private:
     QComboBox*   m_trackSelector = nullptr;
     QLineEdit*   m_subtitleInput = nullptr;
     QPushButton* m_addSubtitleBtn = nullptr;
+    QPushButton* m_setStartBtn = nullptr;
+    QPushButton* m_setEndBtn = nullptr;
     QPushButton* m_whisperBtn = nullptr;
     QPushButton* m_precisionBtn = nullptr;
     QPushButton* m_splitTokensBtn = nullptr;

@@ -97,6 +97,96 @@ def run_transcription(audio_file, model_name="small", language=None):
     
     print(json.dumps(output))
 
+def run_gemini_transcription(audio_file, api_key=None, model_name="gemini-1.5-pro", language=None):
+    """Transcribe audio using the Google Gemini API with word-level timestamps."""
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        print(json.dumps({"error": "google-generativeai package not installed. Run: pip install google-generativeai"}))
+        sys.exit(1)
+
+    # Resolve API key: arg > env var
+    resolved_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    if not resolved_key:
+        print(json.dumps({"error": "No Gemini API key provided. Pass --api-key or set GEMINI_API_KEY env var."}))
+        sys.exit(1)
+
+    genai.configure(api_key=resolved_key)
+
+    audio_path = Path(audio_file)
+    if not audio_path.exists():
+        print(json.dumps({"error": f"Audio file not found: {audio_file}"}))
+        sys.exit(1)
+
+    print(f"[Gemini] Uploading audio file: {audio_path.name}", file=sys.stderr)
+
+    # Upload file using the Files API
+    file_ref = genai.upload_file(str(audio_path.absolute()), mime_type="audio/mpeg")
+    print(f"[Gemini] Upload complete. URI: {file_ref.uri}", file=sys.stderr)
+
+    # Build the prompt
+    lang_hint = f"The primary language is {language}." if language and language.lower() != "auto" else ""
+    prompt = f"""You are a precise audio transcription assistant. Transcribe the given audio file completely and return ONLY a valid JSON object (no markdown, no explanation) in the following format:
+
+{{
+  "segments": [
+    {{
+      "text": "full line text here",
+      "start": 0.0,
+      "end": 2.5,
+      "words": [
+        {{"word": "full", "start": 0.0, "end": 0.3}},
+        {{"word": "line", "start": 0.35, "end": 0.6}},
+        {{"word": "text", "start": 0.65, "end": 0.9}},
+        {{"word": "here", "start": 0.95, "end": 1.2}}
+      ]
+    }}
+  ]
+}}
+
+Rules:
+- Each segment represents one lyric line or natural phrase.
+- All timestamps are in seconds (float).
+- Each word must have its own start and end time.
+- Be as precise as possible with timestamps.
+- Do NOT include any text before or after the JSON.
+{lang_hint}"""
+
+    print(f"[Gemini] Sending transcription request (model: {model_name})...", file=sys.stderr)
+
+    gen_model = genai.GenerativeModel(model_name)
+    response = gen_model.generate_content([prompt, file_ref])
+
+    raw = response.text.strip()
+
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        lines_raw = raw.split("\n")
+        inner = []
+        in_block = False
+        for line in lines_raw:
+            if line.startswith("```") and not in_block:
+                in_block = True
+                continue
+            if line.startswith("```") and in_block:
+                break
+            if in_block:
+                inner.append(line)
+        raw = "\n".join(inner)
+
+    try:
+        result = json.loads(raw)
+        # Validate structure
+        if "segments" not in result:
+            raise ValueError("Response missing 'segments' key")
+        print(f"[Gemini] Parsed {len(result['segments'])} segments successfully.", file=sys.stderr)
+        print(json.dumps(result))
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"[Gemini] Failed to parse response as JSON: {e}", file=sys.stderr)
+        print(f"[Gemini] Raw response:\n{raw}", file=sys.stderr)
+        print(json.dumps({"error": f"JSON parse failed: {e}", "raw": raw}))
+        sys.exit(1)
+
 def run_separation(audio_file, model_name, output_dir):
     from audio_separator.separator import Separator
     
@@ -128,11 +218,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
     
-    # Transcribe command
+    # Transcribe command (Whisper)
     trans_parser = subparsers.add_parser("transcribe")
     trans_parser.add_argument("file")
     trans_parser.add_argument("--model", default="small")
     trans_parser.add_argument("--lang", default=None)
+    
+    # Gemini transcription command
+    gemini_parser = subparsers.add_parser("gemini")
+    gemini_parser.add_argument("file", help="Path to the audio file (MP3/WAV/etc.)")
+    gemini_parser.add_argument("--api-key", default=None, help="Gemini API key (or set GEMINI_API_KEY env var)")
+    gemini_parser.add_argument("--model", default="gemini-1.5-pro", help="Gemini model name")
+    gemini_parser.add_argument("--lang", default=None, help="Language hint (e.g. 'en', 'ja'). Omit for auto-detect.")
     
     # Separate command
     sep_parser = subparsers.add_parser("separate")
@@ -145,6 +242,8 @@ if __name__ == "__main__":
     try:
         if args.command == "transcribe":
             run_transcription(args.file, args.model, args.lang)
+        elif args.command == "gemini":
+            run_gemini_transcription(args.file, args.api_key, args.model, args.lang)
         elif args.command == "separate":
             run_separation(args.file, args.model, args.outdir)
         else:

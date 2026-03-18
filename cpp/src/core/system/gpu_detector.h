@@ -11,6 +11,10 @@ namespace ncktv {
 class GPUDetector {
 public:
     static bool    isCudaAvailable();
+    static bool    isEncoderAvailable(const QString& encoderName);
+    static bool    isNVENCAvailable();
+    static bool    isQSVAvailable();
+    static bool    isAMFAvailable();
     static QString getGpuName();
     static void    clearCache();
 };

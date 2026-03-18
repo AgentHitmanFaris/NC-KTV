@@ -13,7 +13,7 @@ namespace ncktv {
 
 struct AssStyle {
     QString fontFamily = "Arial";
-    int     fontSize   = 48;
+    int     fontSize   = 60;
     QColor  primaryColor   = Qt::white;
     QColor  highlightColor = QColor(255, 215, 0);  // Gold
     QColor  outlineColor   = Qt::black;

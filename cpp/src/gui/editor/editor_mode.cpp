@@ -46,6 +46,11 @@
 #include "../../core/parsers/ass_generator.h"
 
 namespace ncktv {
+static QString formatTimeMMSS(double seconds) {
+    int mins = static_cast<int>(seconds) / 60; double secs = std::fmod(seconds, 60.0);
+    return QString("%1:%2").arg(mins, 2, 10, QChar('0')).arg(secs, 5, 'f', 2, QChar('0'));
+}
+
 
 class ProcessingOverlay : public QWidget {
 public:
@@ -335,9 +340,9 @@ void EditorMode::setupUi() {
         btn->setStyleSheet("QPushButton { padding: 8px 16px; font-size: 12px; font-weight: 600; color: #94a3b8; background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0px; } QPushButton:hover { color: #e2e8f0; } QPushButton:checked { color: #3b82f6; border-bottom: 2px solid #3b82f6; }");
         return btn;
     };
-    m_lyrSourceBtn = makeTabBtn("Source Lyrics"); m_lyrGridBtn = makeTabBtn("Sync Grid"); m_lyrHistoryBtn = makeTabBtn("History");
+    m_lyrSourceBtn = makeTabBtn("Source Lyrics"); m_lyrHistoryBtn = makeTabBtn("History");
     m_lyrSourceBtn->setChecked(true);
-    lshl->addWidget(m_lyrSourceBtn); lshl->addWidget(m_lyrGridBtn); lshl->addWidget(m_lyrHistoryBtn); lshl->addStretch();
+    lshl->addWidget(m_lyrSourceBtn); lshl->addWidget(m_lyrHistoryBtn); lshl->addStretch();
     lyrl->addWidget(lyrSubH);
     m_lyricsSubStack = new QStackedWidget(m_lyricsView);
     auto* sourcePage = new QWidget();
@@ -345,21 +350,29 @@ void EditorMode::setupUi() {
 
     auto* aiToolsL = new QHBoxLayout();
     
-    auto* geminiUrlInput = new QLineEdit("https://gemini.google.com/gem/the link?usp=sharing", sourcePage);
-    geminiUrlInput->setPlaceholderText("Paste your Gemini URL here...");
-    geminiUrlInput->setStyleSheet("background: rgba(255,255,255,0.05); color: white; border-radius: 6px; padding: 10px; font-size: 13px; border: 1px solid rgba(255,255,255,0.2);");
+    auto* geminiApiInput = new QLineEdit(sourcePage);
+    geminiApiInput->setPlaceholderText("Gemini API Key (or set GEMINI_API_KEY env var)...");
+    geminiApiInput->setEchoMode(QLineEdit::Password);
+    geminiApiInput->setText(QString::fromLocal8Bit(qgetenv("GEMINI_API_KEY")));
+    geminiApiInput->setStyleSheet("background: rgba(255,255,255,0.05); color: white; border-radius: 6px; padding: 10px; font-size: 13px; border: 1px solid rgba(255,255,255,0.2);");
 
     auto* geminiBtn = new QPushButton("✨ Transcribe with Gemini", sourcePage);
     geminiBtn->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a73e8, stop:1 #4285f4); color: white; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 13px;");
     geminiBtn->setCursor(Qt::PointingHandCursor);
-    connect(geminiBtn, &QPushButton::clicked, this, [this, geminiUrlInput]() {
+    connect(geminiBtn, &QPushButton::clicked, this, [this, geminiApiInput]() {
         if (!m_project || (!m_project->audio_file.has_value() && !m_project->instrumental_file.has_value())) {
             QMessageBox::warning(this, "No Audio", "Please load an audio file first.");
             return;
         }
 
-        QString url = geminiUrlInput->text().trimmed();
-        if (url.isEmpty()) return;
+        QString apiKey = geminiApiInput->text().trimmed();
+        if (apiKey.isEmpty()) apiKey = QString::fromLocal8Bit(qgetenv("GEMINI_API_KEY"));
+        if (apiKey.isEmpty()) {
+            QMessageBox::warning(this, "No API Key",
+                "Please enter your Gemini API key.\n\nGet one at: https://aistudio.google.com/app/apikey\n"
+                "Or set the GEMINI_API_KEY environment variable.");
+            return;
+        }
 
         QString sourceAudio;
         if (m_project->audio_file.has_value() && !m_project->audio_file.value().empty()) {
@@ -368,30 +381,68 @@ void EditorMode::setupUi() {
             sourceAudio = QString::fromStdString(m_project->instrumental_file.value().string());
         }
 
+        // Step 1: Compress audio to MP3 temp file for Gemini upload
         QString outPath = QDir::tempPath() + "/gemini_upload.mp3";
+        auto* overlay = new ProcessingOverlay(this);
+        overlay->msg->setText("Compressing audio for Gemini upload...");
+        overlay->show();
         auto* exporter = new ExportWorker(this);
-        
-        QProgressDialog* pd = new QProgressDialog("Compressing audio for Gemini...", "Cancel", 0, 100, this);
-        pd->setWindowModality(Qt::WindowModal);
-        
-        connect(exporter, &ExportWorker::progress, pd, &QProgressDialog::setValue);
-        connect(exporter, &ExportWorker::exportComplete, this, [url, outPath, pd, exporter](const QString&) {
-            pd->close();
-            pd->deleteLater();
-            exporter->deleteLater();
-            
-            QProcess::startDetached("explorer.exe", {"/select,", QDir::toNativeSeparators(outPath)});
-            QDesktopServices::openUrl(QUrl(url));
-        });
-        
-        connect(exporter, &ExportWorker::error, this, [pd, exporter](const QString& err) {
-            pd->close();
-            pd->deleteLater();
-            exporter->deleteLater();
-            QMessageBox::critical(nullptr, "Export Failed", "Failed to compress audio: " + err);
-        });
 
-        pd->show();
+        connect(exporter, &ExportWorker::progress, this, [overlay](int p, const QString& m){
+            overlay->bar->setValue(p); overlay->msg->setText(m);
+        });
+        connect(exporter, &ExportWorker::exportComplete, this, [this, overlay, exporter, outPath, apiKey](const QString&) {
+            exporter->deleteLater();
+            overlay->msg->setText("Sending to Gemini API...");
+            overlay->bar->setRange(0, 0); // Indeterminate
+
+            // Step 2: Call python_bridge gemini
+            auto* proc = new QProcess(this);
+            QString appDir = QCoreApplication::applicationDirPath();
+            QString pythonPath;
+            for (const auto& p : QStringList{QDir::cleanPath(appDir+"/python_embed/python.exe"),
+                                              QDir::cleanPath(QDir::currentPath()+"/python_embed/python.exe"),
+                                              "D:/Program Files/Python/python.exe", "python"}) {
+                if (p == "python" || QFile::exists(p)) { pythonPath = p; break; }
+            }
+            QString bridgePath = QDir::cleanPath(appDir + "/python_bridge.py");
+            if (!QFile::exists(bridgePath)) bridgePath = QDir::current().filePath("python_bridge.py");
+
+            QStringList args = { bridgePath, "gemini", outPath, "--api-key", apiKey };
+            QString* accumulated = new QString();
+            connect(proc, &QProcess::readyReadStandardOutput, this, [proc, accumulated]() {
+                accumulated->append(QString::fromUtf8(proc->readAllStandardOutput()));
+            });
+            connect(proc, &QProcess::readyReadStandardError, this, [overlay, proc]() {
+                QString l = QString::fromUtf8(proc->readAllStandardError()).trimmed();
+                if (!l.isEmpty()) overlay->msg->setText(l.split('\n').last());
+            });
+            connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                    this, [this, overlay, proc, accumulated, outPath](int exitCode, QProcess::ExitStatus) {
+                overlay->deleteLater();
+                if (exitCode == 0 && !accumulated->isEmpty()) {
+                    m_project->lyrics.importFromWhisperJson(accumulated->toStdString());
+                    updateSubtitleList();
+                    emit unsavedChangesChanged(true);
+                    QMessageBox::information(this, "Gemini Done",
+                        QString("Imported %1 lines successfully.").arg(m_project->lyrics.lines.size()));
+                } else {
+                    QMessageBox::critical(this, "Gemini Error",
+                        accumulated->isEmpty() ? "Process failed (exit " + QString::number(exitCode) + ")" : *accumulated);
+                }
+                delete accumulated; proc->deleteLater(); QFile::remove(outPath);
+            });
+            connect(proc, &QProcess::errorOccurred, this, [this, overlay, proc, accumulated](QProcess::ProcessError) {
+                overlay->deleteLater();
+                QMessageBox::critical(this, "Process Error", "Failed to launch python_bridge: " + proc->errorString());
+                delete accumulated; proc->deleteLater();
+            });
+            proc->start(pythonPath, args);
+        });
+        connect(exporter, &ExportWorker::error, this, [overlay, exporter](const QString& err) {
+            overlay->deleteLater(); exporter->deleteLater();
+            QMessageBox::critical(nullptr, "Audio Compression Failed", err);
+        });
         exporter->startExport("", sourceAudio, outPath, "mp3", false);
     });
     
@@ -420,7 +471,7 @@ void EditorMode::setupUi() {
         }
     });
 
-    aiToolsL->addWidget(geminiUrlInput, 1);
+    aiToolsL->addWidget(geminiApiInput, 1);
     aiToolsL->addWidget(geminiBtn);
     aiToolsL->addWidget(pasteBtn);
     spL->addLayout(aiToolsL);
@@ -431,9 +482,6 @@ void EditorMode::setupUi() {
     m_sourceLyricsEdit->setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: white; font-size: 28px; font-weight: bold; line-height: 1.6; }");
     spL->addWidget(m_sourceLyricsEdit);
     m_lyricsSubStack->addWidget(sourcePage);
-    // Grid Page for Mode 0: We'll reparent the gridContainer here when active
-    auto* gridPlaceHolder = new QWidget();
-    m_lyricsSubStack->addWidget(gridPlaceHolder); 
     auto* histPage = new QWidget(); (new QVBoxLayout(histPage))->addWidget(new QLabel("No history available.")); m_lyricsSubStack->addWidget(histPage);
     lyrl->addWidget(m_lyricsSubStack, 1);
     m_viewStack->addWidget(m_lyricsView);
@@ -527,8 +575,6 @@ void EditorMode::setupUi() {
 
         if (outPath.isEmpty()) return;
 
-        // Implementation detail: we reuse the core onExportClicked logic but bypassing the Dialog
-        // Actually, let's just trigger it with these params
         if (burn) {
             AssStyle style; 
             QString assContent = AssGenerator::generate(m_project->lyrics, style);
@@ -563,18 +609,20 @@ void EditorMode::setupUi() {
         if (track.contains("Instrumental") && m_project->instrumental_file.has_value()) aSrc = QString::fromStdString(m_project->instrumental_file->string());
         else if (track.contains("Vocals Only") && m_project->vocals_file.has_value()) aSrc = QString::fromStdString(m_project->vocals_file->string());
         
-        worker->startExport(vSrc, aSrc, outPath, fmt, burn);
+        int width = 1920, height = 1080;
+        if (res.contains("3840")) { width = 3840; height = 2160; }
+        else if (res.contains("1280")) { width = 1280; height = 720; }
+        
+        worker->startExport(vSrc, aSrc, outPath, fmt, burn, width, height);
     });
 
     rvL->addStretch();
     m_viewStack->addWidget(m_renderView);
 
     // Show/hide docks dynamically to keep them "live" in appropriate views
-    auto updateDockVisibility = [syncDock, propDock](int mainIdx, int subIdx = -1) {
-        if (mainIdx == 0 && subIdx == 1) { // Lyrics -> Grid
-            syncDock->show();
-            propDock->hide();
-        } else if (mainIdx == 1) { // Timing Sync
+    // NOTE: Sync Grid tab removed — sync queue dock is only shown in Timing Sync view
+    auto updateDockVisibility = [syncDock, propDock](int mainIdx, int /*subIdx*/ = -1) {
+        if (mainIdx == 1) { // Timing Sync
             syncDock->show();
             propDock->show();
         } else {
@@ -593,6 +641,42 @@ void EditorMode::setupUi() {
     playBtn->setFixedSize(48, 48);
     playBtn->setStyleSheet("background: white; color: black; border-radius: 24px; font-size: 18px; border: none; font-family: 'Segoe UI Emoji', sans-serif;");
     tLay->addWidget(playBtn);
+
+    m_setStartBtn = new QPushButton("[\uf2bd Start", m_transportBar);
+    m_setStartBtn->setToolTip("Set start time of selected line to current playback position");
+    m_setStartBtn->setStyleSheet("QPushButton { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border-radius: 6px; padding: 6px 12px; font-weight: bold; border: 1px solid rgba(59, 130, 246, 0.5); } QPushButton:hover { background: rgba(59, 130, 246, 0.4); }");
+    tLay->addWidget(m_setStartBtn);
+
+    m_setEndBtn = new QPushButton("]\uf2bd End", m_transportBar);
+    m_setEndBtn->setToolTip("Set end time of selected line to current playback position");
+    m_setEndBtn->setStyleSheet("QPushButton { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-radius: 6px; padding: 6px 12px; font-weight: bold; border: 1px solid rgba(239, 68, 68, 0.5); } QPushButton:hover { background: rgba(239, 68, 68, 0.4); }");
+    tLay->addWidget(m_setEndBtn);
+
+    connect(m_setStartBtn, &QPushButton::clicked, this, [this]() {
+        if (!m_project || m_syncTable->selectedItems().isEmpty()) return;
+        int row = m_syncTable->selectedItems().first()->row();
+        if (row < 0 || row >= static_cast<int>(m_project->lyrics.lines.size())) return;
+
+        double currTime = m_audioPlayer->player()->position() / 1000.0;
+        m_project->lyrics.lines[row].start_time = currTime;
+        m_syncTable->item(row, 1)->setText(formatTimeMMSS(currTime));
+        double dur = m_project->lyrics.lines[row].end_time - currTime;
+        m_syncTable->item(row, 4)->setText(QString("%1s").arg(dur, 0, 'f', 1));
+        emit unsavedChangesChanged(true);
+    });
+
+    connect(m_setEndBtn, &QPushButton::clicked, this, [this]() {
+        if (!m_project || m_syncTable->selectedItems().isEmpty()) return;
+        int row = m_syncTable->selectedItems().first()->row();
+        if (row < 0 || row >= static_cast<int>(m_project->lyrics.lines.size())) return;
+
+        double currTime = m_audioPlayer->player()->position() / 1000.0;
+        m_project->lyrics.lines[row].end_time = currTime;
+        m_syncTable->item(row, 2)->setText(formatTimeMMSS(currTime));
+        double dur = currTime - m_project->lyrics.lines[row].start_time;
+        m_syncTable->item(row, 4)->setText(QString("%1s").arg(dur, 0, 'f', 1));
+        emit unsavedChangesChanged(true);
+    });
 
     // Track Selector in Transport Bar
     m_trackSelector = new QComboBox(m_transportBar);
@@ -652,8 +736,46 @@ void EditorMode::setupUi() {
     connect(m_trackSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &EditorMode::onTrackSelectionChanged);
 
     connect(m_lyrSourceBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{ m_lyricsSubStack->setCurrentIndex(0); updateDockVisibility(0, 0); });
-    connect(m_lyrGridBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{ m_lyricsSubStack->setCurrentIndex(1); updateDockVisibility(0, 1); });
-    connect(m_lyrHistoryBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{ m_lyricsSubStack->setCurrentIndex(2); updateDockVisibility(0, 2); });
+    connect(m_lyrHistoryBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{ m_lyricsSubStack->setCurrentIndex(1); updateDockVisibility(0, 1); });
+
+    // ── Source Lyrics inline editing: write changes back to project ──────────
+    connect(m_sourceLyricsEdit, &QPlainTextEdit::textChanged, this, [this]() {
+        if (m_syncingFromEdit || !m_project) return;
+        QString fullText = m_sourceLyricsEdit->toPlainText();
+        QStringList newLines = fullText.split('\n', Qt::KeepEmptyParts);
+        // Resize the lyrics lines if count differs
+        while ((int)m_project->lyrics.lines.size() < newLines.size()) {
+            core::LyricsLine ln;
+            ln.start_time = 0.0f; ln.end_time = 0.0f;
+            m_project->lyrics.lines.push_back(ln);
+        }
+        // Update text in place; preserve timing data
+        for (int i = 0; i < newLines.size(); ++i) {
+            m_project->lyrics.lines[i].text = newLines[i].trimmed().toStdString();
+            m_project->lyrics.lines[i].splitIntoWords();
+        }
+        // Remove extra lines that were deleted
+        if ((int)m_project->lyrics.lines.size() > newLines.size()) {
+            m_project->lyrics.lines.resize(newLines.size());
+        }
+        emit unsavedChangesChanged(true);
+        // Refresh sync table without recursing into updateSubtitleList's setText
+        m_syncingFromEdit = true;
+        m_syncTable->blockSignals(true);
+        m_syncTable->setRowCount(0);
+        const auto& lines = m_project->lyrics.lines;
+        for (int i = 0; i < (int)lines.size(); ++i) {
+            const auto& line = lines[i]; m_syncTable->insertRow(i);
+            auto* it0 = new QTableWidgetItem(QString::number(i + 1)); it0->setFlags(it0->flags() & ~Qt::ItemIsEditable); m_syncTable->setItem(i, 0, it0);
+            auto* it1 = new QTableWidgetItem(formatTimeMMSS(line.start_time)); it1->setData(Qt::UserRole, line.start_time); it1->setData(Qt::UserRole+1, i); m_syncTable->setItem(i, 1, it1);
+            auto* it2 = new QTableWidgetItem(formatTimeMMSS(line.end_time)); it2->setData(Qt::UserRole+1, i); m_syncTable->setItem(i, 2, it2);
+            auto* it3 = new QTableWidgetItem(QString::fromStdString(line.text)); it3->setData(Qt::UserRole+1, i); m_syncTable->setItem(i, 3, it3);
+            double dur = line.end_time - line.start_time;
+            auto* it4 = new QTableWidgetItem(QString("%1s").arg(dur, 0, 'f', 1)); it4->setFlags(it4->flags() & ~Qt::ItemIsEditable); m_syncTable->setItem(i, 4, it4);
+        }
+        m_syncTable->blockSignals(false);
+        m_syncingFromEdit = false;
+    });
     
     connect(playBtn, &QPushButton::clicked, this, [this]{
         if (m_audioPlayer->player()->playbackState() == QMediaPlayer::PlayingState) {
@@ -691,7 +813,9 @@ void EditorMode::setupConnections() {
     connect(m_waveformWidget, &WaveformWidget::seekRequested, m_audioPlayer, &AudioPlayer::seek);
     connect(m_timelineWidget, &TimelineWidget::seekRequested, m_audioPlayer, &AudioPlayer::seek);
     connect(m_syncTable, &QTableWidget::itemClicked, this, [this](QTableWidgetItem* item) {
-        int row = item->row(); auto* startItem = m_syncTable->item(row, 1); if (startItem) { double t = startItem->data(Qt::UserRole).toDouble(); m_audioPlayer->seek(t); }
+        if (item->column() <= 1) {
+            int row = item->row(); auto* startItem = m_syncTable->item(row, 1); if (startItem) { double t = startItem->data(Qt::UserRole).toDouble(); m_audioPlayer->seek(t); }
+        }
     });
     connect(m_syncTable, &QTableWidget::itemChanged, this, [this](QTableWidgetItem* item) {
         if (!m_project) return;
@@ -717,6 +841,21 @@ void EditorMode::setupConnections() {
         int row = item->row(); QMenu menu(this);
         menu.addAction("⏱  Precision Timing...", this, [this, row]() {
             int idx = m_syncTable->item(row, 3)->data(Qt::UserRole + 1).toInt(); WordEditor editor(&m_project->lyrics.lines[idx], this); if (editor.exec() == QDialog::Accepted && editor.wasModified()) { updateSubtitleList(); emit unsavedChangesChanged(true); }
+        });
+        // Set Start / Set End — scrub waveform to current position and stamp it
+        menu.addAction("[  Set START to Playhead", this, [this, row]() {
+            int idx = m_syncTable->item(row, 3)->data(Qt::UserRole + 1).toInt();
+            if (idx < 0 || idx >= (int)m_project->lyrics.lines.size()) return;
+            m_project->lyrics.lines[idx].start_time = static_cast<float>(m_currentTime);
+            updateSubtitleList(); emit unsavedChangesChanged(true);
+            QMessageBox::information(this, "Start Set", QString("Line %1 START set to %2s").arg(idx+1).arg(m_currentTime, 0, 'f', 3));
+        });
+        menu.addAction("]  Set END to Playhead", this, [this, row]() {
+            int idx = m_syncTable->item(row, 3)->data(Qt::UserRole + 1).toInt();
+            if (idx < 0 || idx >= (int)m_project->lyrics.lines.size()) return;
+            m_project->lyrics.lines[idx].end_time = static_cast<float>(m_currentTime);
+            updateSubtitleList(); emit unsavedChangesChanged(true);
+            QMessageBox::information(this, "End Set", QString("Line %1 END set to %2s").arg(idx+1).arg(m_currentTime, 0, 'f', 3));
         });
         menu.addSeparator();
         menu.addAction("✕  Delete", this, [this, row]() {
@@ -806,16 +945,20 @@ void EditorMode::onTimecodeChanged(double timeSeconds) {
         }
     }
 
-    if (m_videoPlayer) { qint64 vPos = m_videoPlayer->position(); qint64 aPos = static_cast<qint64>(timeSeconds * 1000.0); if (std::abs(vPos - aPos) > 300) m_videoPlayer->setPosition(aPos); }
+    if (m_videoPlayer) {
+        qint64 vPos = m_videoPlayer->position();
+        qint64 aPos = static_cast<qint64>(timeSeconds * 1000.0);
+        bool isPaused = (m_audioPlayer->player()->playbackState() != QMediaPlayer::PlayingState);
+        int driftLimit = isPaused ? 300 : 1000;
+        if (std::abs(vPos - aPos) > driftLimit) {
+            m_videoPlayer->setPosition(aPos);
+        }
+    }
 }
 void EditorMode::onLineSelected(int lineIndex) { if (m_syncTable && lineIndex >= 0 && lineIndex < m_syncTable->rowCount()) { m_syncTable->selectRow(lineIndex); m_syncTable->scrollToItem(m_syncTable->item(lineIndex, 0)); } }
 void EditorMode::onWordSelected(int, int) {}
 void EditorMode::onWordsChanged() { emit unsavedChangesChanged(true); }
 
-static QString formatTimeMMSS(double seconds) {
-    int mins = static_cast<int>(seconds) / 60; double secs = std::fmod(seconds, 60.0);
-    return QString("%1:%2").arg(mins, 2, 10, QChar('0')).arg(secs, 5, 'f', 2, QChar('0'));
-}
 
 void EditorMode::updateSubtitleList() {
     if (!m_project || !m_syncTable) return;
@@ -832,13 +975,15 @@ void EditorMode::updateSubtitleList() {
     }
     m_syncTable->blockSignals(false); 
     
-    // Update Source Lyrics View
+    // Update Source Lyrics View (guard the write so it doesn't trigger inline-edit callback)
     if (m_sourceLyricsEdit) {
         QString fullText;
         for (const auto& line : lines) {
             fullText += QString::fromStdString(line.text) + "\n";
         }
+        m_syncingFromEdit = true;
         m_sourceLyricsEdit->setPlainText(fullText.trimmed());
+        m_syncingFromEdit = false;
     }
 
     m_previewWidget->loadLyrics(&m_project->lyrics); 
@@ -872,11 +1017,64 @@ void EditorMode::onAddSubtitleClicked() {
 }
 void EditorMode::onAutoWhisperClicked() {
     if (!m_project) return;
-    QString target = m_project->vocals_file ? QString::fromStdString(m_project->vocals_file->string()) : (m_project->audio_file ? QString::fromStdString(m_project->audio_file->string()) : ""); if (target.isEmpty()) return;
-    auto* overlay = new ProcessingOverlay(this); overlay->show(); auto* worker = new TranscriptionWorker(this);
-    connect(worker, &TranscriptionWorker::transcriptionComplete, this, [this, overlay](const QString& res){ overlay->deleteLater(); m_project->lyrics.importFromWhisperJson(res.toStdString()); updateSubtitleList(); emit unsavedChangesChanged(true); });
-    connect(worker, &TranscriptionWorker::error, this, [this, overlay](const QString& e){ overlay->deleteLater(); QMessageBox::warning(this, "Error", e); });
-    worker->startTranscription(target, "medium", "Auto");
+    QString target = m_project->vocals_file ? QString::fromStdString(m_project->vocals_file->string()) : (m_project->audio_file ? QString::fromStdString(m_project->audio_file->string()) : "");
+    if (target.isEmpty()) {
+        QMessageBox::warning(this, "No Audio", "Please load an audio file first.");
+        return;
+    }
+
+    // ── Confirmation dialog: choose model + language ─────────────────────
+    auto* confirmDlg = new QDialog(this);
+    confirmDlg->setWindowTitle("AI Auto-Sync Settings");
+    confirmDlg->setModal(true);
+    confirmDlg->setFixedSize(400, 260);
+    confirmDlg->setStyleSheet("QDialog { background: #1e293b; color: #e2e8f0; } QLabel { color: #94a3b8; font-size: 12px; } QComboBox { background: #0f172a; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px; color: white; } QPushButton { background: #3b82f6; color: white; border-radius: 6px; padding: 10px 20px; font-weight: bold; border: none; } QPushButton#cancelBtn { background: rgba(255,255,255,0.05); color: #94a3b8; }");
+    auto* dlgLayout = new QVBoxLayout(confirmDlg);
+    dlgLayout->setContentsMargins(28, 24, 28, 24); dlgLayout->setSpacing(16);
+    auto* dlgTitle = new QLabel("AI Transcription — Whisper", confirmDlg);
+    dlgTitle->setStyleSheet("font-size: 16px; font-weight: bold; color: white;");
+    dlgLayout->addWidget(dlgTitle);
+
+    auto* modelLabel = new QLabel("Model:", confirmDlg); dlgLayout->addWidget(modelLabel);
+    auto* modelCombo = new QComboBox(confirmDlg);
+    modelCombo->addItems({"tiny", "base", "small", "medium", "large", "turbo"});
+    modelCombo->setCurrentText("medium");
+    dlgLayout->addWidget(modelCombo);
+
+    auto* langLabel = new QLabel("Language:", confirmDlg); dlgLayout->addWidget(langLabel);
+    auto* langCombo = new QComboBox(confirmDlg);
+    langCombo->addItems({"Auto", "en", "ja", "zh", "ko", "ms", "id", "th", "vi", "ar", "es", "fr", "de", "pt", "ru", "hi"});
+    langCombo->setCurrentText("Auto");
+    dlgLayout->addWidget(langCombo);
+
+    dlgLayout->addStretch();
+    auto* btnRow = new QHBoxLayout();
+    auto* cancelBtn = new QPushButton("Cancel", confirmDlg); cancelBtn->setObjectName("cancelBtn");
+    auto* startBtn  = new QPushButton("Start Transcription", confirmDlg);
+    btnRow->addWidget(cancelBtn); btnRow->addWidget(startBtn);
+    dlgLayout->addLayout(btnRow);
+
+    connect(cancelBtn, &QPushButton::clicked, confirmDlg, &QDialog::reject);
+    connect(startBtn, &QPushButton::clicked, confirmDlg, &QDialog::accept);
+
+    if (confirmDlg->exec() != QDialog::Accepted) return;
+
+    QString chosenModel = modelCombo->currentText();
+    QString chosenLang  = langCombo->currentText();
+
+    auto* overlay = new ProcessingOverlay(this); overlay->show();
+    auto* worker = new TranscriptionWorker(this);
+    connect(worker, &TranscriptionWorker::transcriptionComplete, this, [this, overlay](const QString& res){
+        overlay->deleteLater();
+        m_project->lyrics.importFromWhisperJson(res.toStdString());
+        updateSubtitleList();
+        emit unsavedChangesChanged(true);
+    });
+    connect(worker, &TranscriptionWorker::error, this, [this, overlay](const QString& e){
+        overlay->deleteLater();
+        QMessageBox::warning(this, "Transcription Error", e);
+    });
+    worker->startTranscription(target, chosenModel, chosenLang);
 }
 void EditorMode::onImportSubtitleClicked() {
     ImportDialog d(this); 
@@ -981,7 +1179,7 @@ void EditorMode::onExportClicked() {
             audioSrc = QString::fromStdString(m_project->vocals_file->string());
         }
 
-        worker->startExport(videoSrc, audioSrc, outPath, format, burnSubs);
+        worker->startExport(videoSrc, audioSrc, outPath, format, burnSubs, d.videoWidth(), d.videoHeight());
     }
 }
 void EditorMode::onExportSettingsClicked() { if (m_config) { PreferencesDialog d(m_config, this); d.exec(); } }

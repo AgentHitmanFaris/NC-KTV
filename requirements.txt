@@ -3,3 +3,4 @@ openai-whisper
 numpy
 torch
 torchaudio
+google-generativeai

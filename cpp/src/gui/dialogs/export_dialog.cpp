@@ -55,7 +55,7 @@ void ExportDialog::setupUi() {
     formatForm->setContentsMargins(16, 20, 16, 12);
 
     m_formatCombo = new QComboBox(this);
-    m_formatCombo->addItems({"MP4 (H.264)", "MKV (H.265)", "WebM (VP9)", "ASS Subtitles", "SRT Subtitles"});
+    m_formatCombo->addItems({"MP4 (H.264)", "MKV (H.265)", "WebM (VP9)", "MP3 (Audio Only)", "ASS Subtitles", "SRT Subtitles"});
     formatForm->addRow("Output Format:", m_formatCombo);
 
     m_resolutionCombo = new QComboBox(this);
@@ -146,10 +146,12 @@ void ExportDialog::applyTheme() {
 }
 
 void ExportDialog::browseOutput() {
-    QString ext = m_formatCombo->currentText().contains("ASS") ? "ass"
-                : m_formatCombo->currentText().contains("SRT") ? "srt"
-                : m_formatCombo->currentText().contains("MKV") ? "mkv"
-                : m_formatCombo->currentText().contains("WebM") ? "webm"
+    QString fmt = m_formatCombo->currentText();
+    QString ext = fmt.contains("ASS")  ? "ass"
+                : fmt.contains("SRT")  ? "srt"
+                : fmt.contains("MKV")  ? "mkv"
+                : fmt.contains("WebM") ? "webm"
+                : fmt.contains("MP3")  ? "mp3"
                 : "mp4";
 
     QString filter = QString("Output File (*.%1);;All Files (*)").arg(ext);
@@ -162,14 +164,17 @@ void ExportDialog::browseOutput() {
 void ExportDialog::onPresetChanged(int index) {
     // Adjust available options based on preset
     bool isVideoExport = (index <= 1);
-    bool isSubOnly = (index == 3);
+    bool isSubOnly     = (index == 3);
+    bool isAudioOnly   = (index == 2); // "Karaoke Audio Only"
 
     m_resolutionCombo->setEnabled(isVideoExport);
     m_burnSubsCheck->setEnabled(isVideoExport);
     m_audioSourceCombo->setEnabled(!isSubOnly);
 
     if (isSubOnly) {
-        m_formatCombo->setCurrentIndex(3); // ASS
+        m_formatCombo->setCurrentText("ASS Subtitles");
+    } else if (isAudioOnly) {
+        m_formatCombo->setCurrentText("MP3 (Audio Only)");
     }
 }
 

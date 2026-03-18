@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-03-18
+
+### Added
+- **Hardware-Accelerated Export**: Integrated GPU encoding support for NVIDIA (NVENC), Intel (QSV), and AMD (AMF) via `GpuDetector`. Automatically selects the best available hardware encoder for significantly faster video rendering.
+- **Export Resolution Scaling**: Added a resolution selector to the Export dialog, allowing users to downscale videos (1080p, 720p, 480p, 360p) for smaller file sizes.
+- **Precision Timing Buttons**: Added "Set Start" and "Set End" buttons to the transport bar. These allow users to instantly stamp the current playhead position as the start or end time for the selected lyric line.
+
+### Fixed
+- **ASS Render Scaling**: Fixed a discrepancy where rendered ASS subtitles appeared smaller than the live preview by standardizing the default font size (60px).
+- **Inline Edit Audio Jump**: Prevented the audio player from reset-seeking to 0:00 when double-clicking the "Text" column in the synchronization table.
+- **Preview Stutter & Flickering**: Optimized the A/V synchronization frequency during playback to prevent aggressive decoder flushing, resulting in much smoother video previews.
+
+---
+
 ## [1.2.0] - 2026-03-18
 
 ### Added
