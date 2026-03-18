@@ -31,20 +31,50 @@ void TeleprompterView::updateTime(double timeSecs) {
     int newActive = -1;
     if (m_lyrics) {
         const int n = static_cast<int>(m_lyrics->lines.size());
-        for (int i = 0; i < n; ++i) {
-            const auto& ln = m_lyrics->lines[i];
-            if (timeSecs >= ln.start_time && timeSecs < ln.end_time) {
-                newActive = i;
-                break;
-            }
-            // Next upcoming line that hasn't started yet
-            if (timeSecs < ln.start_time) {
-                newActive = i;
-                break;
+
+        // Binary search: find the last line whose start_time <= timeSecs
+        int lo = 0, hi = n - 1, candidate = -1;
+        while (lo <= hi) {
+            int mid = lo + (hi - lo) / 2;
+            if (m_lyrics->lines[mid].start_time <= timeSecs) {
+                candidate = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
             }
         }
-        // If we passed every line, stick on the last one
-        if (newActive < 0 && n > 0) newActive = n - 1;
+
+        if (candidate >= 0) {
+            const auto& ln = m_lyrics->lines[candidate];
+            if (timeSecs < ln.end_time) {
+                // We're inside this line — it's the active one
+                newActive = candidate;
+            } else {
+                // We've passed this line's end. Check if the next line
+                // is within a 2-second lead-in window.
+                int next = candidate + 1;
+                if (next < n) {
+                    double gap = m_lyrics->lines[next].start_time - timeSecs;
+                    if (gap <= 0.8) {
+                        // Close enough — show the upcoming line (dimmed via paintEvent)
+                        newActive = next;
+                    } else {
+                        // Large gap — hold on the most recently finished line
+                        newActive = candidate;
+                    }
+                } else {
+                    // Past the last line — stick on it
+                    newActive = candidate;
+                }
+            }
+        } else if (n > 0) {
+            // Before the first line: show it only if within 0.8s lead-in
+            double gap = m_lyrics->lines[0].start_time - timeSecs;
+            if (gap <= 0.8) {
+                newActive = 0;
+            }
+            // else: leave newActive = -1, nothing to show yet
+        }
     }
 
     if (newActive != m_activeIndex) {

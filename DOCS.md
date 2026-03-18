@@ -1,6 +1,6 @@
 # NC-KTV Technical Documentation (C++ Architecture)
 
-**Version:** 1.0.0 (C++ Core Rebirth)
+**Version:** 1.2.0 (Lyrics Editor Refactor + Gemini Integration)
 **Last Updated:** March 2026
 
 Comprehensive technical documentation covering the internal architecture, memory models, and hardware-accelerated rendering logic used in the NC-KTV C++ suite.

@@ -38,22 +38,28 @@ NC-KTV automates the entire karaoke video creation workflow:
 
 ### AI Vocal Separation
 - **High-Performance Bridge**: Driven by the authentic `audio-separator` Python library for 100% matching UVR quality.
-- **Hardware Acceleration**: Automatic target detection for CUDA (NVIDIA) via PyTorch.
+- **Hardware Acceleration**: Automatic target detection for CUDA (NVIDIA) via PyTorch. Local GPU libraries in `models/whisper/cudn12/` are auto-bundled into the portable build.
 - **Full Model Support**: Supports all UVR models including MDX-Net, VR Architecture, and Roformer (`.onnx` and `.pth`).
 
 ### Hardware-Accelerated Studio Editor
 - **Native Qt6 UI**: Butter-smooth 60fps+ rendering of complex timeline data via `QPainter` and Hardware Accel, featuring smart render-debouncing.
 - **Interactive Waveforms**: Zoom, scrub, and manipulate gigabytes of audio data instantaneously using pixel-bucketing compression without UI blocking.
 - **Precision Karaoke Builder Studio Mode**: Brand-new fully vertical syllable tracking interface. Features cascading blocks locked to a Y-axis left-waveform display, a dedicated instant-update Lyrics Map sidebar for transcription tuning, fully-synchronized auto-scrolling, and millisecond-accurate "Play Segment" vocal isolation capabilities.
+- **Dockable Workspace Panels**: The Synchronization Queue and Properties panels are full `QDockWidget` instances — tear off, float, and re-dock them anywhere for a completely custom workspace layout.
 - **In-Editor AI Support**: Kick off Whisper transcripts dynamically directly from the editor mode, complete with language override parameters and dimming modal overlays.
-- **Live Karaoke Preview**: Configurable zero-latency ASS subtitle rendering overlaid onto the active video track.
+- **Live Karaoke Preview**: Configurable zero-latency ASS subtitle rendering overlaid onto the active video track with a smooth **horizontal linear wipe** effect per word.
 
 ### Intelligent Transcription and Sync
 - **Whisper Powered**: Uses OpenAI's Whisper via Python subprocess for robust, high-speed transcription.
 - **Word-Level Precision**: Automatic word-timestamp generation for perfect syllable alignment.
-- **Targeted AI Control**: Select Whisper models (base, small, medium, large, turbo) and specific ISO codes (en, id, ms, ja, ko) inside the UI to balance speed vs. accuracy and hard-force specific phonetic bounds.
+- **Targeted AI Control**: Select Whisper models (base, small, medium, large, turbo) and specific ISO codes (en, id, ms, ja, ko) inside the UI to balance speed vs. accuracy.
 - **Tap-to-Sync Engine**: Rebuilt event-driven synchronization for perfect rhythm matching.
 - **Auto-Romanization**: Lightning-fast transliteration of global scripts (Korean/Japanese to Latin).
+
+### Gemini AI Integration
+- **Transcribe with Gemini**: One-click button in the Source Lyrics tab that compresses the active audio to a small MP3 file and opens your custom Gemini Gems link in the browser. Simply upload the MP3, copy Gemini's output, and click **Paste & Sync** in the app.
+- **Smart Paste & Sync**: Parses Gemini/AI transcription text (plain or LRC format with range timestamps like `[00:15.15 - 00:19.30]`) and directly loads it into the Synchronization Queue.
+- **Configurable URL**: Paste your own Gemini Gem link directly in the UI so the app always opens the right transcription tool.
 
 ---
 

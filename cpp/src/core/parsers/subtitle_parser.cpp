@@ -168,7 +168,7 @@ LyricsData SubtitleParser::parseSrt(const QString& content) {
 LyricsData SubtitleParser::parseLrc(const QString& content) {
     LyricsData data;
     static QRegularExpression metaRe(R"(\[\s*(\w+)\s*:\s*(.*)\s*\])");
-    static QRegularExpression rangeRe(R"(\[\s*(\d+:[\d\.\:]+)\s*[-\u2013\u2014]\s*(\d+:[\d\.\:]+)\s*\]\s*(.*))");
+    static QRegularExpression rangeRe(R"(\[\s*(\d+:[\d\.\:]+)\s*(?:-|–|—)\s*(\d+:[\d\.\:]+)\s*\]\s*(.*))");
     static QRegularExpression lineRe(R"(\[\s*(\d+:[\d\.\:]+)\s*\]\s*(.*))");
 
     for (const auto& rawLine : content.split('\n')) {
@@ -315,7 +315,7 @@ LyricsData SubtitleParser::parsePlainText(const QString& content) {
     }
     
     // Check for Range pattern directly [00:00 - 00:05]
-    if (content.contains(QRegularExpression(R"(\[\s*(?:\d+:)?\d+:[\d\.\:]+\s*[-\u2013\u2014])"))) {
+    if (content.contains(QRegularExpression(R"(\[\s*(?:\d+:)?\d+:[\d\.\:]+\s*(?:-|–|—))"))) {
         return parseLrc(content);
     }
 

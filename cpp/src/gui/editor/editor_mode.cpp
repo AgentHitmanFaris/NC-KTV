@@ -17,6 +17,9 @@
 #include <QVBoxLayout>
 #include <QStackedWidget>
 #include <QTableWidget>
+#include <QMainWindow>
+#include <QDockWidget>
+#include <QTableWidget>
 #include <QHeaderView>
 #include <QMenu>
 #include <QLineEdit>
@@ -35,6 +38,11 @@
 #include "../dialogs/export_dialog.h"
 #include "../dialogs/preferences_dialog.h"
 #include "../dialogs/import_dialog.h"
+#include <QClipboard>
+#include <QApplication>
+#include <QProgressDialog>
+#include <QProcess>
+#include <QDir>
 #include "../../core/parsers/ass_generator.h"
 
 namespace ncktv {
@@ -177,6 +185,11 @@ void EditorMode::setupUi() {
     modesLayout->addWidget(m_modeRenderBtn);
     sidebarLayout->addLayout(modesLayout);
     sidebarLayout->addStretch(1);
+
+    // Console/Debug button
+    m_consoleBtn = new QPushButton("🐞  Debug Log", m_sidebar);
+    m_consoleBtn->setStyleSheet("QPushButton { text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600; color: #64748b; background: transparent; border: none; border-radius: 8px; } QPushButton:hover { background: rgba(255,255,255,0.03); color: #94a3b8; }");
+    sidebarLayout->addWidget(m_consoleBtn);
     
     m_saveProjectBtn = new QPushButton("💾 Save Project", m_sidebar);
     m_saveProjectBtn->setStyleSheet("QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #8b5cf6, stop:1 #6d28d9); color: white; border-radius: 8px; padding: 12px; font-size: 13px; font-weight: bold; border: none; } QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a78bfa, stop:1 #7c3aed); }");
@@ -184,15 +197,20 @@ void EditorMode::setupUi() {
     m_mainHLayout->addWidget(m_sidebar);
     
     // ------------------------------------------
-    // 2. RIGHT WORKSPACE
+    // 2. RIGHT WORKSPACE (Now dockable via QMainWindow)
     // ------------------------------------------
-    auto* rightContainer = new QWidget(this);
-    rightContainer->setStyleSheet("background: #0f172a;");
-    m_workspaceLayout = new QVBoxLayout(rightContainer);
+    auto* rightContainer = new QMainWindow(this);
+    rightContainer->setWindowFlags(Qt::Widget);
+    rightContainer->setStyleSheet("QMainWindow { background: #0f172a; } QDockWidget { color: white; background: #0f172a; border: 1px solid rgba(255,255,255,0.05); } QDockWidget::title { background: #1e293b; padding: 6px; font-weight: bold; }");
+    rightContainer->setDockOptions(QMainWindow::AllowNestedDocks | QMainWindow::AllowTabbedDocks | QMainWindow::AnimatedDocks);
+
+    auto* centralWidget = new QWidget(rightContainer);
+    m_workspaceLayout = new QVBoxLayout(centralWidget);
     m_workspaceLayout->setContentsMargins(0, 0, 0, 0); m_workspaceLayout->setSpacing(0);
+    rightContainer->setCentralWidget(centralWidget);
     
     // Header Bar
-    auto* appHeader = new QWidget(rightContainer);
+    auto* appHeader = new QWidget(centralWidget);
     appHeader->setFixedHeight(64);
     appHeader->setStyleSheet("background: rgba(11, 16, 27, 0.5); border-bottom: 1px solid rgba(255,255,255,0.05);");
     auto* headerLayout = new QHBoxLayout(appHeader);
@@ -299,6 +317,12 @@ void EditorMode::setupUi() {
     gcl->addWidget(gridHeader);
     gcl->addWidget(m_syncTable, 1);
 
+    auto* syncDock = new QDockWidget("Synchronization Queue", rightContainer);
+    syncDock->setWidget(gridContainer);
+    syncDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    syncDock->setObjectName("syncDock");
+    rightContainer->addDockWidget(Qt::BottomDockWidgetArea, syncDock);
+
     // - VIEW 0: LYRICS EDITOR
     m_lyricsView = new QWidget(m_viewStack);
     auto* lyrl = new QVBoxLayout(m_lyricsView); lyrl->setContentsMargins(0,0,0,0); lyrl->setSpacing(0);
@@ -318,9 +342,92 @@ void EditorMode::setupUi() {
     m_lyricsSubStack = new QStackedWidget(m_lyricsView);
     auto* sourcePage = new QWidget();
     auto* spL = new QVBoxLayout(sourcePage); spL->setContentsMargins(40,40,40,40);
+
+    auto* aiToolsL = new QHBoxLayout();
+    
+    auto* geminiUrlInput = new QLineEdit("https://gemini.google.com/gem/the link?usp=sharing", sourcePage);
+    geminiUrlInput->setPlaceholderText("Paste your Gemini URL here...");
+    geminiUrlInput->setStyleSheet("background: rgba(255,255,255,0.05); color: white; border-radius: 6px; padding: 10px; font-size: 13px; border: 1px solid rgba(255,255,255,0.2);");
+
+    auto* geminiBtn = new QPushButton("✨ Transcribe with Gemini", sourcePage);
+    geminiBtn->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a73e8, stop:1 #4285f4); color: white; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 13px;");
+    geminiBtn->setCursor(Qt::PointingHandCursor);
+    connect(geminiBtn, &QPushButton::clicked, this, [this, geminiUrlInput]() {
+        if (!m_project || (!m_project->audio_file.has_value() && !m_project->instrumental_file.has_value())) {
+            QMessageBox::warning(this, "No Audio", "Please load an audio file first.");
+            return;
+        }
+
+        QString url = geminiUrlInput->text().trimmed();
+        if (url.isEmpty()) return;
+
+        QString sourceAudio;
+        if (m_project->audio_file.has_value() && !m_project->audio_file.value().empty()) {
+            sourceAudio = QString::fromStdString(m_project->audio_file.value().string());
+        } else {
+            sourceAudio = QString::fromStdString(m_project->instrumental_file.value().string());
+        }
+
+        QString outPath = QDir::tempPath() + "/gemini_upload.mp3";
+        auto* exporter = new ExportWorker(this);
+        
+        QProgressDialog* pd = new QProgressDialog("Compressing audio for Gemini...", "Cancel", 0, 100, this);
+        pd->setWindowModality(Qt::WindowModal);
+        
+        connect(exporter, &ExportWorker::progress, pd, &QProgressDialog::setValue);
+        connect(exporter, &ExportWorker::exportComplete, this, [url, outPath, pd, exporter](const QString&) {
+            pd->close();
+            pd->deleteLater();
+            exporter->deleteLater();
+            
+            QProcess::startDetached("explorer.exe", {"/select,", QDir::toNativeSeparators(outPath)});
+            QDesktopServices::openUrl(QUrl(url));
+        });
+        
+        connect(exporter, &ExportWorker::error, this, [pd, exporter](const QString& err) {
+            pd->close();
+            pd->deleteLater();
+            exporter->deleteLater();
+            QMessageBox::critical(nullptr, "Export Failed", "Failed to compress audio: " + err);
+        });
+
+        pd->show();
+        exporter->startExport("", sourceAudio, outPath, "mp3", false);
+    });
+    
+    auto* pasteBtn = new QPushButton("📋 Paste & Sync", sourcePage);
+    pasteBtn->setStyleSheet("background: rgba(255,255,255,0.1); color: white; border-radius: 6px; padding: 10px 20px; font-weight: bold; font-size: 13px; border: 1px solid rgba(255,255,255,0.2);");
+    pasteBtn->setCursor(Qt::PointingHandCursor);
+    connect(pasteBtn, &QPushButton::clicked, this, [this]() {
+        QString text = QApplication::clipboard()->text();
+        if (text.isEmpty()) {
+            QMessageBox::warning(this, "Empty Clipboard", "Clipboard is empty.");
+            return;
+        }
+        if (m_project) {
+            ncktv::LyricsData parsed = SubtitleParser::parsePlainText(text);
+            m_project->lyrics.clear();
+            for (const auto& line : parsed.lines) {
+                std::vector<core::LyricsToken> coreTokens;
+                for (const auto& w : line.words) {
+                    coreTokens.emplace_back(w.word.toStdString(), static_cast<float>(w.startTime), static_cast<float>(w.endTime));
+                }
+                m_project->lyrics.add_line(line.text.toStdString(), static_cast<float>(line.startTime), static_cast<float>(line.endTime), coreTokens);
+            }
+            m_sourceLyricsEdit->setPlainText(text);
+            updateSubtitleList();
+            QMessageBox::information(this, "Import Complete", "AI transcription imported successfully!");
+        }
+    });
+
+    aiToolsL->addWidget(geminiUrlInput, 1);
+    aiToolsL->addWidget(geminiBtn);
+    aiToolsL->addWidget(pasteBtn);
+    spL->addLayout(aiToolsL);
+
     m_sourceLyricsEdit = new QPlainTextEdit(sourcePage);
-    m_sourceLyricsEdit->setReadOnly(true);
-    m_sourceLyricsEdit->setPlaceholderText("No lyrics available...");
+    m_sourceLyricsEdit->setReadOnly(false);
+    m_sourceLyricsEdit->setPlaceholderText("No lyrics available... Paste AI transcription here or click Paste & Sync.");
     m_sourceLyricsEdit->setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: white; font-size: 28px; font-weight: bold; line-height: 1.6; }");
     spL->addWidget(m_sourceLyricsEdit);
     m_lyricsSubStack->addWidget(sourcePage);
@@ -340,15 +447,21 @@ void EditorMode::setupUi() {
     m_previewWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_previewWidget->setStyleSheet("background: #000;");
     stageL->addWidget(m_previewWidget, 3);
-    auto* propPanel = new QWidget(stageArea); propPanel->setFixedWidth(300); propPanel->setStyleSheet("background: #1e293b; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);");
+    auto* propPanel = new QWidget(); 
+    propPanel->setFixedWidth(300); 
+    propPanel->setStyleSheet("background: #1e293b; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);");
     auto* ppl = new QVBoxLayout(propPanel);
-    auto* ppTitle = new QLabel("PROPERTIES", propPanel); ppTitle->setStyleSheet("font-size: 10px; font-weight: 800; color: #94a3b8; letter-spacing: 1.5px; margin-bottom: 20px;");
+    auto* ppTitle = new QLabel("PROPERTIES", propPanel); 
+    ppTitle->setStyleSheet("font-size: 10px; font-weight: 800; color: #94a3b8; letter-spacing: 1.5px; margin-bottom: 20px;");
     ppl->addWidget(ppTitle); ppl->addStretch();
-    stageL->addWidget(propPanel, 1);
+    
+    auto* propDock = new QDockWidget("Properties", rightContainer);
+    propDock->setWidget(propPanel);
+    propDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    propDock->setObjectName("propDock");
+    rightContainer->addDockWidget(Qt::RightDockWidgetArea, propDock);
+
     timingL->addWidget(stageArea, 3);
-    // Placeholder 2 for gridContainer
-    auto* timingGridPlaceHolder = new QWidget();
-    timingL->addWidget(timingGridPlaceHolder, 2);
     m_viewStack->addWidget(m_timingView);
 
     // - VIEW 2: VIDEO RENDER
@@ -456,22 +569,17 @@ void EditorMode::setupUi() {
     rvL->addStretch();
     m_viewStack->addWidget(m_renderView);
 
-    // Switch table parent dynamically to keep it "live" in all active views
-    auto syncGridParent = [this, gridContainer, timingGridPlaceHolder](int mainIdx, int subIdx = -1) {
+    // Show/hide docks dynamically to keep them "live" in appropriate views
+    auto updateDockVisibility = [syncDock, propDock](int mainIdx, int subIdx = -1) {
         if (mainIdx == 0 && subIdx == 1) { // Lyrics -> Grid
-            gridContainer->setParent(m_lyricsSubStack->widget(1));
-            auto* lay = m_lyricsSubStack->widget(1)->layout();
-            if (!lay) lay = new QVBoxLayout(m_lyricsSubStack->widget(1));
-            lay->setContentsMargins(0,0,0,0); lay->addWidget(gridContainer);
-            gridContainer->show();
+            syncDock->show();
+            propDock->hide();
         } else if (mainIdx == 1) { // Timing Sync
-            gridContainer->setParent(timingGridPlaceHolder);
-            auto* lay = timingGridPlaceHolder->layout();
-            if (!lay) lay = new QVBoxLayout(timingGridPlaceHolder);
-            lay->setContentsMargins(0,0,0,0); lay->addWidget(gridContainer);
-            gridContainer->show();
+            syncDock->show();
+            propDock->show();
         } else {
-            gridContainer->hide();
+            syncDock->hide();
+            propDock->hide();
         }
     };
     
@@ -521,14 +629,31 @@ void EditorMode::setupUi() {
         QDesktopServices::openUrl(QUrl::fromLocalFile(QDir::currentPath() + "/debug.log"));
     });
     
-    connect(m_modeRenderBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_viewStack->setCurrentIndex(2); m_modeLyricsBtn->setChecked(false); m_modeTimingBtn->setChecked(false); syncGridParent(2); });
+    connect(m_modeLyricsBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{
+        m_viewStack->setCurrentIndex(0);
+        m_modeTimingBtn->setChecked(false);
+        m_modeRenderBtn->setChecked(false);
+        updateDockVisibility(0, m_lyricsSubStack->currentIndex());
+    });
+    connect(m_modeTimingBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{
+        m_viewStack->setCurrentIndex(1);
+        m_modeLyricsBtn->setChecked(false);
+        m_modeRenderBtn->setChecked(false);
+        updateDockVisibility(1);
+    });
+    connect(m_modeRenderBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{
+        m_viewStack->setCurrentIndex(2);
+        m_modeLyricsBtn->setChecked(false);
+        m_modeTimingBtn->setChecked(false);
+        updateDockVisibility(2);
+    });
     
     // Connect track selector
     connect(m_trackSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &EditorMode::onTrackSelectionChanged);
 
-    connect(m_lyrSourceBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_lyricsSubStack->setCurrentIndex(0); syncGridParent(0, 0); });
-    connect(m_lyrGridBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_lyricsSubStack->setCurrentIndex(1); syncGridParent(0, 1); });
-    connect(m_lyrHistoryBtn, &QPushButton::clicked, this, [this, syncGridParent]{ m_lyricsSubStack->setCurrentIndex(2); syncGridParent(0, 2); });
+    connect(m_lyrSourceBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{ m_lyricsSubStack->setCurrentIndex(0); updateDockVisibility(0, 0); });
+    connect(m_lyrGridBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{ m_lyricsSubStack->setCurrentIndex(1); updateDockVisibility(0, 1); });
+    connect(m_lyrHistoryBtn, &QPushButton::clicked, this, [this, updateDockVisibility]{ m_lyricsSubStack->setCurrentIndex(2); updateDockVisibility(0, 2); });
     
     connect(playBtn, &QPushButton::clicked, this, [this]{
         if (m_audioPlayer->player()->playbackState() == QMediaPlayer::PlayingState) {
@@ -544,6 +669,9 @@ void EditorMode::setupUi() {
     connect(m_audioPlayer->player(), &QMediaPlayer::playbackStateChanged, this, [playBtn](QMediaPlayer::PlaybackState state){
         playBtn->setText(state == QMediaPlayer::PlayingState ? "⏸" : "▶");
     });
+
+    // Initial visibility state
+    updateDockVisibility(0, 0);
 }
 
 void EditorMode::setupToolBar() {

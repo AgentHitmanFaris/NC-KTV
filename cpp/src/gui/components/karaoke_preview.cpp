@@ -1,6 +1,8 @@
 #include "karaoke_preview.h"
 #include <QVariant>
+#include <QLinearGradient>
 #include <cmath>
+#include <algorithm>
 
 namespace ncktv {
 
@@ -92,10 +94,9 @@ void KaraokePreview::drawSubtitles(QPainter& painter) {
 
     // Find first line that hasn't finished yet
     int activeIdx = -1;
-    for (int i = 0; i < m_data->lines.size(); ++i) {
+    for (int i = 0; i < (int)m_data->lines.size(); ++i) {
         const auto& line = m_data->lines[i];
         if (m_currentTime < line.end_time) {
-            // Found it. But only show it if we are within a 5-second lead time.
             if (m_currentTime >= line.start_time - 5.0) {
                 activeIdx = i;
                 break;
@@ -105,14 +106,13 @@ void KaraokePreview::drawSubtitles(QPainter& painter) {
 
     if (activeIdx == -1) return;
 
-    // Draw up to 2 lines
     const int linesToDraw = 2;
     int drawnLines = 0;
-    
-    // Bottom third anchoring
+
+    // Bottom-third anchoring
     int baseY = static_cast<int>(m_targetHeight * 0.7);
-    int lineSpacing = 120; // Logical pixel spacing
-    
+    int lineSpacing = 120;
+
     QFont font = painter.font();
     font.setFamily("Arial");
     font.setPointSize(60);
@@ -121,46 +121,89 @@ void KaraokePreview::drawSubtitles(QPainter& painter) {
 
     QFontMetrics fm(font);
 
-    for (int i = activeIdx; i < m_data->lines.size() && drawnLines < linesToDraw; ++i) {
+    // Karaoke wipe colors
+    const QColor unsungColor(Qt::white);
+    const QColor sungColorStart("#00d4ff");   // Cyan
+    const QColor sungColorEnd("#0066ff");     // Deep blue
+    const QColor shadowColor(0, 0, 0, 180);
+
+    for (int i = activeIdx; i < (int)m_data->lines.size() && drawnLines < linesToDraw; ++i) {
         const auto& line = m_data->lines[i];
-        
+
         bool isCurrentLine = (m_currentTime >= line.start_time && m_currentTime < line.end_time);
-        
-        // Calculate total width to center the line
+        bool isPastLine    = (m_currentTime >= line.end_time);
+
+        // Measure total width for centering
         int totalWidth = 0;
         for (const auto& w : line.tokens) {
-            totalWidth += fm.horizontalAdvance(QString::fromStdString(w.text)) + 5; // 5px padding
+            totalWidth += fm.horizontalAdvance(QString::fromStdString(w.text)) + 5;
         }
-        
+
         int currentX = (m_targetWidth - totalWidth) / 2;
         int currentY = baseY + (drawnLines * lineSpacing);
-        
+        int textAscent = fm.ascent();
+
         for (const auto& w : line.tokens) {
             QString wordText = QString::fromStdString(w.text);
             int wWidth = fm.horizontalAdvance(wordText);
-            
-            // Text Outline/Shadow
-            painter.setPen(QPen(QColor(0, 0, 0, 150), 4));
-            painter.drawText(currentX + 4, currentY + 4, wordText);
-            
-            // Fill
-            QColor fillColor = Qt::white;
-            if (isCurrentLine && m_currentTime >= w.start_time) {
-                if (m_currentTime >= w.end_time) {
-                    // Fully sung
-                    fillColor = QColor("#00a2ff"); // Blue sung color
-                } else {
-                    // Currently singing (could do partial filling here with clip rects)
-                    fillColor = QColor("#00a2ff");
+            int wordHeight = fm.height();
+
+            // ── Shadow / outline layer ────────────────────────────────
+            painter.setPen(QPen(shadowColor, 5));
+            painter.drawText(currentX + 3, currentY + 3, wordText);
+
+            // ── Compute wipe progress for this word ──────────────────
+            double progress = 0.0; // 0 = unsung, 1 = fully sung
+            if (isPastLine || (isCurrentLine && m_currentTime >= w.end_time)) {
+                progress = 1.0;
+            } else if (isCurrentLine && m_currentTime >= w.start_time) {
+                double wordDur = w.end_time - w.start_time;
+                if (wordDur > 0.0) {
+                    progress = std::clamp((m_currentTime - w.start_time) / wordDur, 0.0, 1.0);
                 }
             }
-            
-            painter.setPen(fillColor);
+
+            int wipeX = static_cast<int>(wWidth * progress);
+
+            // ── Layer 1: Draw full word in unsung color ──────────────
+            painter.setPen(unsungColor);
             painter.drawText(currentX, currentY, wordText);
-            
+
+            // ── Layer 2: Draw sung portion with gradient via clip rect ─
+            if (progress > 0.0) {
+                painter.save();
+
+                // Clip to the sung portion of this word
+                QRect clipRect(currentX, currentY - textAscent, wipeX, wordHeight + 4);
+                painter.setClipRect(clipRect);
+
+                // Gradient fill across the word width
+                QLinearGradient grad(currentX, 0, currentX + wWidth, 0);
+                grad.setColorAt(0.0, sungColorStart);
+                grad.setColorAt(1.0, sungColorEnd);
+
+                QPen gradPen;
+                gradPen.setBrush(QBrush(grad));
+                gradPen.setWidth(0);
+                painter.setPen(gradPen);
+                painter.drawText(currentX, currentY, wordText);
+
+                // ── Glow effect for fully-sung words ─────────────────
+                if (progress >= 1.0) {
+                    painter.setClipping(false);
+                    QColor glow = sungColorStart;
+                    glow.setAlpha(40);
+                    painter.setPen(QPen(glow, 2));
+                    painter.drawText(currentX - 1, currentY - 1, wordText);
+                    painter.drawText(currentX + 1, currentY + 1, wordText);
+                }
+
+                painter.restore();
+            }
+
             currentX += wWidth + 5;
         }
-        
+
         drawnLines++;
     }
 }

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-03-18
+
+### Added
+- **Gemini AI Web Integration**: New "Transcribe with Gemini" button in the Source Lyrics tab. Automatically compresses the active audio track to a compact MP3 file (via ExportWorker/ffmpeg) and opens the Gemini browser at the configured URL. A companion Explorer window highlights the output file for easy drag-and-drop upload.
+- **Customizable Gemini URL**: A persistent text field allows the user to change their Gemini Gem link at any time without a rebuild.
+- **Paste & Sync Button**: A dedicated clipboard-import button parses Gemini transcription output (supports range-format LRC: `[00:15.15 - 00:19.30]`) and directly populates the Synchronization Queue.
+- **Dockable Panels**: The Synchronization Queue and Properties panels are now full `QDockWidget` instances. Users can tear them off, float them, and re-dock them anywhere on screen for a fully customized workspace.
+- **GPU Acceleration Bundling**: `build_portable_release.ps1` now auto-detects CUDA/cuDNN DLLs in `models/whisper/cudn12/bin/` and bundles them into the portable package via PyInstaller's `--add-binary` flag. This enables GPU-accelerated Whisper inference (ONNXRuntime CUDA provider) without a system-wide CUDA installation.
+- **Editable Source Lyrics**: The Source Lyrics view is now a fully editable `QPlainTextEdit` that highlights the currently playing line in real-time.
+
+### Fixed
+- **Lyrics Too Fast / Laggy Sync**: `TeleprompterView::updateTime()` replaced a linear scan with a **binary search** (`O(log n)`). The teleprompter now holds on the last finished line during inter-line gaps, and only previews the next line within a **0.8-second** lead-in (down from 2 seconds).
+- **LRC Timestamp Parsing Failure**: `SubtitleParser` regex `[-\u2013\u2014]` was replaced with `(?:-|–|—)` to fix range-format detection across all dash variants.
+- **Timing Sync button did nothing**: Wired up `connect()` handlers for `m_modeLyricsBtn` and `m_modeTimingBtn` — switching modes now correctly updates `m_viewStack`.
+- **`m_consoleBtn` null crash**: The Debug Log button was declared but never initialized. Fixed by constructing and adding it to the sidebar layout.
+- **`syncGridParent` stale lambda captures**: Renamed all captures to `updateDockVisibility`, matching the actual function name, preventing linker errors.
+- **`durationChanged` malformed lambda**: Extracted the initial `updateDockVisibility(0, 0)` call from inside the lambda into the proper `setupUi()` scope end.
+- **Namespace mismatch in Paste & Sync**: `ncktv::LyricsData` returned by `SubtitleParser` was being directly assigned to `m_project->lyrics` (type `core::LyricsData`). Fixed with explicit field-by-field conversion loop.
+
+### Changed
+- **Karaoke Preview Wipe Effect**: Upgraded from a binary color swap to a smooth **horizontal linear wipe** per word using QPainter clip rects and a cyan→blue gradient overlay.
+- **Build Script**: Portable build now reports `>>> Bundling local CUDA/cuDNN DLLs for GPU Acceleration...` when GPU libraries are detected.
+
+---
+
 ## [1.1.0] - 2026-03-17
 
 ### Added

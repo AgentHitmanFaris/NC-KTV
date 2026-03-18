@@ -40,6 +40,12 @@ $pyinstallerArgs = @(
     $BridgeFile
 )
 
+if (Test-Path ".\models\whisper\cudn12\bin") {
+    Write-Host ">>> Bundling local CUDA/cuDNN DLLs for GPU Acceleration..." -ForegroundColor Cyan
+    $pyinstallerArgs += "--add-binary"
+    $pyinstallerArgs += ".\models\whisper\cudn12\bin\*.dll;."
+}
+
 & "$PythonExe" $pyinstallerArgs
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 
