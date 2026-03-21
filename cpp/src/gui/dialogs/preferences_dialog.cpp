@@ -115,15 +115,35 @@ QWidget* PreferencesDialog::createAiTab() {
     form->setSpacing(12);
     form->setContentsMargins(16, 16, 16, 16);
 
+    // ── Transcription Engine ────────────────────────────────────────────
+    m_transcriptionEngineCombo = new QComboBox(this);
+    m_transcriptionEngineCombo->addItems({"WhisperX (Recommended)", "Whisper (Legacy)"});
+    QString currentEngine = m_config ? m_config->get<QString>("ai.transcription_engine", "whisperx") : "whisperx";
+    if (currentEngine == "whisper") {
+        m_transcriptionEngineCombo->setCurrentIndex(1);
+    } else {
+        m_transcriptionEngineCombo->setCurrentIndex(0);
+    }
+    form->addRow("Transcription Engine:", m_transcriptionEngineCombo);
+
+    auto* engineNote = new QLabel(
+        "<b>WhisperX</b>: Uses Wav2Vec2 forced alignment for ±30ms word precision. "
+        "Ideal for karaoke wipe effects.<br>"
+        "<b>Whisper</b>: Legacy mode with attention-based timestamps (~±500ms).",
+        this);
+    engineNote->setWordWrap(true);
+    engineNote->setStyleSheet("color:#64748b; font-size:10px; border:none; margin-bottom:6px;");
+    form->addRow("", engineNote);
+
+    // ── Whisper Model ───────────────────────────────────────────────────
     m_defaultModelCombo = new QComboBox(this);
     m_defaultModelCombo->addItems({"base", "small", "medium", "large-v2", "large-v3", "turbo"});
-    // Set default to medium if not set
     QString currentWhisper = m_config ? m_config->get<QString>("ai.whisper_model", "medium") : "medium";
     m_defaultModelCombo->setCurrentText(currentWhisper);
     form->addRow("Default Whisper Model:", m_defaultModelCombo);
 
+    // ── UVR Model ───────────────────────────────────────────────────────
     m_defaultUvrModelCombo = new QComboBox(this);
-    // Scan for UVR models
     QStringList uvrPaths = {
         QCoreApplication::applicationDirPath() + "/models/uvr",
         QDir::currentPath() + "/models/uvr"
@@ -143,6 +163,7 @@ QWidget* PreferencesDialog::createAiTab() {
     m_defaultUvrModelCombo->setCurrentText(currentUvr);
     form->addRow("Default UVR Model:", m_defaultUvrModelCombo);
 
+    // ── Language ────────────────────────────────────────────────────────
     m_defaultLanguageCombo = new QComboBox(this);
     m_defaultLanguageCombo->addItems({"Auto", "en", "ms", "id", "ja", "ko", "zh"});
     QString currentLang = m_config ? m_config->get<QString>("ai.language", "Auto") : "Auto";
@@ -216,6 +237,9 @@ void PreferencesDialog::onAccepted() {
     if (m_config) {
         m_config->set<QString>("gui.start_mode", m_startModeCombo->currentText().toLower());
         m_config->set<QString>("gui.graphics_api", m_graphicsApiCombo->currentText());
+        // Transcription engine: index 0 = whisperx, index 1 = whisper
+        m_config->set<QString>("ai.transcription_engine",
+            m_transcriptionEngineCombo->currentIndex() == 0 ? "whisperx" : "whisper");
         m_config->set<QString>("ai.whisper_model", m_defaultModelCombo->currentText());
         m_config->set<QString>("ai.uvr_model", m_defaultUvrModelCombo->currentText());
         m_config->set<QString>("ai.language", m_defaultLanguageCombo->currentText());

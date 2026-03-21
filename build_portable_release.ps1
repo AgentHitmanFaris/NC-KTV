@@ -2,11 +2,11 @@ $ErrorActionPreference = "Stop"
 
 # Configuration
 $ProcCount = $env:NUMBER_OF_PROCESSORS
-$QtBin = "D:\ProgramData\Qt\6.10.2\mingw_64\bin"
-$CMake = "D:\ProgramData\Qt\Tools\CMake_64\bin\cmake.exe"
+$QtBin = (Resolve-Path ".\qt\6.8.2\mingw_64\bin").Path
+$CMake = (Resolve-Path ".\bin\cmake.exe").Path
 $PythonExe = (Resolve-Path ".\python_embed\python.exe").Path
 $BridgeFile = (Resolve-Path ".\python_bridge.py").Path
-$TargetDir = ".\NC-KTV-Portable"
+$TargetDir = "."
 
 # ==============================================================================
 # 1. C++ INCREMENTAL BUILD
@@ -54,7 +54,7 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 # ==============================================================================
 Write-Host ">>> Assembling Portable Directory..." -ForegroundColor Cyan
 
-if (-Not (Test-Path $TargetDir)) {
+if ($TargetDir -ne "." -and -Not (Test-Path $TargetDir)) {
     New-Item -ItemType Directory -Path $TargetDir | Out-Null
 }
 
@@ -73,19 +73,21 @@ if (Test-Path $OrtLib) {
     Get-ChildItem -Path $OrtLib -Filter "*.dll" | Copy-Item -Destination $TargetDir -Force
 }
 
-@("assets", "ffmpeg", "plugins", "themes") | ForEach-Object {
-    if (Test-Path ".\$_") { Copy-Item -Recurse -Force ".\$_" -Destination "$TargetDir\" }
-}
-
-if (Test-Path ".\models") {
-    $ModelTarget = New-Item -ItemType Directory -Path "$TargetDir\models" -Force
-    Get-ChildItem ".\models" | ForEach-Object {
-        $ext = if ($_.Extension -match "pth") { ".dat" } else { $_.Extension }
-        Copy-Item $_.FullName -Destination "$ModelTarget\$($_.BaseName)$ext" -Force
+if ($TargetDir -ne ".") {
+    @("assets", "ffmpeg", "plugins", "themes") | ForEach-Object {
+        if (Test-Path ".\$_") { Copy-Item -Recurse -Force ".\$_" -Destination "$TargetDir\" }
     }
-}
 
-if (Test-Path ".\config.yaml") { Copy-Item ".\config.yaml" -Destination $TargetDir -Force }
+    if (Test-Path ".\models") {
+        $ModelTarget = New-Item -ItemType Directory -Path "$TargetDir\models" -Force
+        Get-ChildItem ".\models" | ForEach-Object {
+            $ext = if ($_.Extension -match "pth") { ".dat" } else { $_.Extension }
+            Copy-Item $_.FullName -Destination "$ModelTarget\$($_.BaseName)$ext" -Force
+        }
+    }
+
+    if (Test-Path ".\config.yaml") { Copy-Item ".\config.yaml" -Destination $TargetDir -Force }
+}
 
 Write-Host ">>> Copying Compiled Python Bridge Folder..." -ForegroundColor Cyan
 # Copy the entire generated folder into the portable directory

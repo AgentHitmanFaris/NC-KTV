@@ -176,7 +176,29 @@ void VocalSeparatorWorker::startSeparation(const QString& audioPath,
                                            const QString& modelName,
                                            const QString& outputDir)
 {
-    emit progress(5, "Initializing Python bridge for separation...");
+    QString inputPath = audioPath;
+    bool isTemporaryInput = false;
+
+    // FFmpeg sanity check: If it's a video file or a format Python might choke on,
+    // pre-decode it to a clean WAV using the C++ bundled FFmpeg.
+    QString ext = QFileInfo(audioPath).suffix().toLower();
+    if (ext == "mp4" || ext == "mkv" || ext == "avi" || ext == "mov" || ext == "flv") {
+        emit progress(5, "Pre-decoding video to audio...");
+        QString tempWav = QDir(outputDir).absoluteFilePath("temp_input_for_separation.wav");
+        
+        QProcess ffmpegProc;
+        ffmpegProc.setProgram(findFFmpeg());
+        ffmpegProc.setArguments({"-y", "-i", audioPath, "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", tempWav});
+        ffmpegProc.start();
+        if (ffmpegProc.waitForFinished(30000) && QFile::exists(tempWav)) {
+            inputPath = tempWav;
+            isTemporaryInput = true;
+        } else {
+            qDebug() << "VocalSeparatorWorker: FFmpeg pre-decode failed, falling back to original file.";
+        }
+    }
+
+    emit progress(10, "Initializing Python bridge for separation...");
 
     QString pythonPath = findPython();
     QString bridgePath = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/python_bridge.py");
@@ -219,7 +241,7 @@ void VocalSeparatorWorker::startSeparation(const QString& audioPath,
         }
     });
 
-    connect(proc, &QProcess::finished, this, [this, proc, audioPath, outputDir, fullStdOut, fullStdErr](int exitCode) {
+    connect(proc, &QProcess::finished, this, [this, proc, audioPath, inputPath, isTemporaryInput, outputDir, fullStdOut, fullStdErr](int exitCode) {
         if (exitCode == 0) {
             QString out = *fullStdOut;
             qDebug() << "VocalSeparatorWorker: Python output:" << out;
@@ -228,18 +250,34 @@ void VocalSeparatorWorker::startSeparation(const QString& audioPath,
             QString vocalsPath;
 
             try {
-                // Parse the JSON output: {"files": ["file1.wav", "file2.wav"]}
-                auto j = nlohmann::json::parse(out.toStdString());
-                if (j.contains("files") && j["files"].is_array()) {
-                    for (const auto& f : j["files"]) {
-                        QString fileName = QString::fromStdString(f.get<std::string>());
-                        QString fullPath = QDir(outputDir).absoluteFilePath(fileName);
+                // Extract just the JSON part from stdout (in case libraries leak print statements)
+                std::string stdOutStr = out.toStdString();
+                size_t startFormat = stdOutStr.find_first_of('{');
+                size_t endFormat = stdOutStr.find_last_of('}');
+                
+                if (startFormat != std::string::npos && endFormat != std::string::npos && endFormat > startFormat) {
+                    std::string jsonStr = stdOutStr.substr(startFormat, endFormat - startFormat + 1);
+                    auto j = nlohmann::json::parse(jsonStr);
+                    if (j.contains("files") && j["files"].is_array()) {
+                        for (const auto& f : j["files"]) {
+                            QString fileName = QString::fromStdString(f.get<std::string>());
+                            QString fullPath = QDir(outputDir).absoluteFilePath(fileName);
+                            
+                            // audio-separator outputs something like OriginalName_(Vocals)_ModelName.wav
+                            if (fileName.contains("(Vocals)", Qt::CaseInsensitive) || fileName.contains("vocals", Qt::CaseInsensitive)) {
+                                vocalsPath = fullPath;
+                            } else if (fileName.contains("(Instrumental)", Qt::CaseInsensitive) || fileName.contains("instrumental", Qt::CaseInsensitive)) {
+                                instrumentalPath = fullPath;
+                            }
+                        }
                         
-                        // audio-separator outputs something like OriginalName_(Vocals)_ModelName.wav
-                        if (fileName.contains("(Vocals)", Qt::CaseInsensitive) || fileName.contains("vocals", Qt::CaseInsensitive)) {
-                            vocalsPath = fullPath;
-                        } else if (fileName.contains("(Instrumental)", Qt::CaseInsensitive) || fileName.contains("instrumental", Qt::CaseInsensitive)) {
-                            instrumentalPath = fullPath;
+                        // Fallback: If filenames didn't match our strict keywords but we got exactly 2 files, guess them!
+                        if (j["files"].size() == 2 && (vocalsPath.isEmpty() || instrumentalPath.isEmpty())) {
+                            QString f1 = QString::fromStdString(j["files"][0].get<std::string>());
+                            QString f2 = QString::fromStdString(j["files"][1].get<std::string>());
+                            
+                            instrumentalPath = QDir(outputDir).absoluteFilePath(f1);
+                            vocalsPath = QDir(outputDir).absoluteFilePath(f2);
                         }
                     }
                 }
@@ -253,20 +291,26 @@ void VocalSeparatorWorker::startSeparation(const QString& audioPath,
                 emit progress(100, "Separation complete!");
                 emit separationComplete(instrumentalPath, vocalsPath);
             } else {
-                emit error("Separation seemed to succeed but output files were not found.\nCheck " + outputDir);
+                emit error(QString("Separation output was malformed or missing.\nExpected 2 files.\n\nPython output was:\n%1").arg(out));
             }
         } else {
             QString err = *fullStdErr;
             if (err.isEmpty()) err = "Process crashed or 'audio-separator' not found in Python environment.";
             emit error(QString("Separation failed (Exit %1):\n%2").arg(exitCode).arg(err));
         }
+
+        // Cleanup temporary input file
+        if (isTemporaryInput) {
+            QFile::remove(inputPath);
+        }
+
         delete fullStdOut;
         delete fullStdErr;
         proc->deleteLater();
     });
 
     // Arguments: python_bridge.py separate <file> <model> <outdir>
-    QStringList args = {bridgePath, "separate", audioPath, modelName, outputDir};
+    QStringList args = {bridgePath, "separate", inputPath, modelName, outputDir};
 
     qDebug() << "VocalSeparatorWorker: launching" << pythonPath << args.join(" ");
     

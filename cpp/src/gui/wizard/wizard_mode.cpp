@@ -703,7 +703,15 @@ void WizardMode::onSeparationFinished(const QString& instrumentalPath, const QSt
         m_progressBar->setValue(0);
         m_percentLabel->setText("0%");
         m_taskStatusLabel->setText("Transcribing Vocals...");
-        m_statusLabel->setText("AI lyrics transcription in progress");
+
+        // Read transcription engine preference
+        QString engineStr = m_config ? m_config->get<QString>("ai.transcription_engine", "whisperx") : "whisperx";
+        TranscriptionEngine engine = (engineStr == "whisper")
+            ? TranscriptionEngine::Whisper
+            : TranscriptionEngine::WhisperX;
+        QString engineLabel = (engine == TranscriptionEngine::WhisperX) ? "WhisperX" : "Whisper";
+
+        m_statusLabel->setText(QString("AI lyrics transcription in progress (%1)").arg(engineLabel));
         
         auto* tThread = new QThread(this);
         auto* tWorker = new TranscriptionWorker();
@@ -736,7 +744,8 @@ void WizardMode::onSeparationFinished(const QString& instrumentalPath, const QSt
         QMetaObject::invokeMethod(tWorker, "startTranscription", Qt::QueuedConnection,
                                   Q_ARG(QString, vocalsPath),
                                   Q_ARG(QString, whisperModel),
-                                  Q_ARG(QString, langCode));
+                                  Q_ARG(QString, langCode),
+                                  Q_ARG(ncktv::TranscriptionEngine, engine));
     } else {
         emit projectReady(m_project);
     }

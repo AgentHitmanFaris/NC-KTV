@@ -305,10 +305,17 @@ void MainWindow::onVocalSeparationFinished(const QString& instPath, const QStrin
     QString langCode = m_config ? m_config->get<QString>("ai.language", "auto") : "auto";
     if (langCode.toLower() == "auto") langCode = "auto";
 
+    // Read engine preference
+    QString engineStr = m_config ? m_config->get<QString>("ai.transcription_engine", "whisperx") : "whisperx";
+    TranscriptionEngine engine = (engineStr == "whisper")
+        ? TranscriptionEngine::Whisper
+        : TranscriptionEngine::WhisperX;
+
     QMetaObject::invokeMethod(transcriptionWorker_, "startTranscription", Qt::QueuedConnection,
                               Q_ARG(QString, vocPath),
                               Q_ARG(QString, whisperModel),
-                              Q_ARG(QString, langCode));
+                              Q_ARG(QString, langCode),
+                              Q_ARG(ncktv::TranscriptionEngine, engine));
 }
 
 void MainWindow::onTranscriptionFinished(const QString& resultJson) {

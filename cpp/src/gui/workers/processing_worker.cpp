@@ -66,8 +66,8 @@ void ProcessingWorker::startProcessing(const QString& inputPath, const QString& 
             emit progress(100, "Pipeline complete (without transcription).");
         });
 
-        // Use vocals for transcription (better quality)
-        transcriber->startTranscription(vocalsPath, "base", "Auto");
+        // Use vocals for transcription (better quality) — WhisperX by default
+        transcriber->startTranscription(vocalsPath, "medium", "Auto", TranscriptionEngine::WhisperX);
     });
 
     connect(separator, &VocalSeparatorWorker::error, this,

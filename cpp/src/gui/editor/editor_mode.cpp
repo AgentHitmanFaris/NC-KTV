@@ -181,9 +181,9 @@ void EditorMode::setupUi() {
         btn->setStyleSheet("QPushButton { text-align: left; padding: 12px 16px; font-size: 13px; font-weight: 600; color: #94a3b8; background: transparent; border: none; border-radius: 8px; } QPushButton:hover { background: rgba(255,255,255,0.03); color: #e2e8f0; } QPushButton:checked { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }");
         return btn;
     };
-    m_modeLyricsBtn = makeSidebarBtn("📄  Lyrics Editor");
-    m_modeTimingBtn = makeSidebarBtn("⏱  Timing Sync");
-    m_modeRenderBtn = makeSidebarBtn("🎬  Video Render");
+    m_modeLyricsBtn = makeSidebarBtn("Lyrics Editor");
+    m_modeTimingBtn = makeSidebarBtn("Timing Sync");
+    m_modeRenderBtn = makeSidebarBtn("Video Render");
     m_modeLyricsBtn->setChecked(true);
     modesLayout->addWidget(m_modeLyricsBtn);
     modesLayout->addWidget(m_modeTimingBtn);
@@ -192,11 +192,11 @@ void EditorMode::setupUi() {
     sidebarLayout->addStretch(1);
 
     // Console/Debug button
-    m_consoleBtn = new QPushButton("🐞  Debug Log", m_sidebar);
+    m_consoleBtn = new QPushButton("Debug Log", m_sidebar);
     m_consoleBtn->setStyleSheet("QPushButton { text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600; color: #64748b; background: transparent; border: none; border-radius: 8px; } QPushButton:hover { background: rgba(255,255,255,0.03); color: #94a3b8; }");
     sidebarLayout->addWidget(m_consoleBtn);
     
-    m_saveProjectBtn = new QPushButton("💾 Save Project", m_sidebar);
+    m_saveProjectBtn = new QPushButton("Save Project", m_sidebar);
     m_saveProjectBtn->setStyleSheet("QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #8b5cf6, stop:1 #6d28d9); color: white; border-radius: 8px; padding: 12px; font-size: 13px; font-weight: bold; border: none; } QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a78bfa, stop:1 #7c3aed); }");
     sidebarLayout->addWidget(m_saveProjectBtn);
     m_mainHLayout->addWidget(m_sidebar);

@@ -49,6 +49,7 @@ private:
     QCheckBox* m_gpuCheck = nullptr;
 
     // AI
+    QComboBox* m_transcriptionEngineCombo = nullptr;
     QComboBox* m_defaultModelCombo = nullptr;
     QComboBox* m_defaultUvrModelCombo = nullptr;
     QComboBox* m_defaultLanguageCombo = nullptr;

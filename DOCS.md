@@ -35,7 +35,7 @@ NC-KTV utilizes a modern **CMake** implementation. While it supports **vcpkg** f
 
 ### Core Dependencies:
 - **Qt 6.x** (`Core`, `Gui`, `Widgets`, `Multimedia`): The foundational windowing and event backbone.
-- **FFmpeg 7.x**: Core A/V decoding/encoding logic mapped directly in `src/core/audio/ffmpeg_utils.cpp`.
+- **FFmpeg 7.x**: Core A/V decoding/encoding logic mapped directly in `src/core/audio/ffmpeg_utils.cpp`. The Python AI bridge explicitly requires a separate static Windows FFmpeg build (with both `ffmpeg.exe` and `ffprobe.exe`) extracted locally within the `ffmpeg/bin` directory for robust engine execution (e.g. `audio-separator`) without global PATH pollution.
 - **ONNX Runtime**: Used extensively in `src/core/audio/vocal_remover.cpp` to execute the MDX-Net algorithms natively.
 - **nlohmann_json**: High-speed, intuitive configuration and project state serialization.
 - **yaml-cpp**: Powering the recursive `ConfigManager`.

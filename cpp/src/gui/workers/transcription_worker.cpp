@@ -1,10 +1,14 @@
 /**
  * @file transcription_worker.cpp
- * @brief Routes AI transcription through the Python whisper subprocess.
+ * @brief Routes AI transcription through the Python bridge subprocess.
  *
- * On MinGW builds, whisper.cpp cannot be compiled natively (ggml.c crash).
- * This worker launches the embedded Python interpreter with the whisper CLI
- * and emits the resulting JSON back to the UI.
+ * Supports two engines:
+ *   - Whisper  (legacy): attention-based word timestamps, ±500ms accuracy
+ *   - WhisperX (new):    Wav2Vec2 forced alignment, ±30ms accuracy
+ *
+ * Also provides startAlignment() for force-aligning known lyrics to audio,
+ * which skips transcription entirely and produces precise word timing from
+ * pre-existing lyrics text.
  */
 
 #include "transcription_worker.h"
@@ -13,6 +17,7 @@
 #include <QDir>
 #include <QFile>
 #include <QDebug>
+#include <QTemporaryFile>
 #include <nlohmann/json.hpp>
 
 namespace ncktv {
@@ -39,20 +44,85 @@ static QString findPython() {
     return "python";
 }
 
-TranscriptionWorker::TranscriptionWorker(QObject* parent) : QObject(parent) {}
+// Helper to find the python_bridge.py script
+static QString findBridge() {
+    QString bridgePath = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/python_bridge.py");
+    if (QFile::exists(bridgePath)) return bridgePath;
+    bridgePath = QDir::current().filePath("python_bridge.py");
+    return bridgePath;
+}
+
+// Helper to set up process environment with FFmpeg in PATH
+static QProcessEnvironment buildEnv() {
+    auto env = QProcessEnvironment::systemEnvironment();
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString ffDir = QDir::cleanPath(appDir + "/ffmpeg");
+    if (!QFile::exists(ffDir + "/ffmpeg.exe")) {
+        ffDir = QDir::cleanPath(appDir + "/../ffmpeg");
+    }
+    if (QFile::exists(ffDir + "/ffmpeg.exe")) {
+        QString path = env.value("PATH");
+        env.insert("PATH", QDir::toNativeSeparators(ffDir) + ";" + path);
+    }
+    return env;
+}
+
+TranscriptionWorker::TranscriptionWorker(QObject* parent) : QObject(parent) {
+    qRegisterMetaType<TranscriptionEngine>("TranscriptionEngine");
+    qRegisterMetaType<TranscriptionEngine>("ncktv::TranscriptionEngine");
+}
 
 void TranscriptionWorker::startTranscription(const QString& audioPath,
                                                const QString& model,
-                                               const QString& language)
+                                               const QString& language,
+                                               TranscriptionEngine engine)
 {
-    emit progressUpdated("Initializing Whisper (Python bridge)...");
+    QString engineLabel;
+    QStringList args;
+    
+    if (engine == TranscriptionEngine::WhisperX) {
+        engineLabel = "WhisperX";
+        args = {findBridge(), "transcribe-x", audioPath, "--model", model};
+    } else {
+        engineLabel = "Whisper";
+        args = {findBridge(), "transcribe", audioPath, "--model", model};
+    }
+
+    if (language != "auto" && !language.isEmpty()) {
+        args << "--lang" << language;
+    }
+
+    launchPythonBridge(args, engineLabel);
+}
+
+void TranscriptionWorker::startAlignment(const QString& audioPath,
+                                           const QString& lyricsText,
+                                           const QString& language)
+{
+    // Write lyrics to a temporary file for the Python bridge
+    QTemporaryFile* tmpFile = new QTemporaryFile(QDir::tempPath() + "/ncktv_lyrics_XXXXXX.txt", this);
+    if (!tmpFile->open()) {
+        emit error("Failed to create temporary lyrics file");
+        return;
+    }
+    tmpFile->write(lyricsText.toUtf8());
+    tmpFile->flush();
+    QString tmpPath = tmpFile->fileName();
+
+    QStringList args = {findBridge(), "align", audioPath,
+                        "--lyrics", tmpPath,
+                        "--lang", language};
+
+    launchPythonBridge(args, "WhisperX Alignment");
+
+    // tmpFile will be cleaned up when this worker is deleted
+}
+
+void TranscriptionWorker::launchPythonBridge(const QStringList& args, const QString& engineLabel)
+{
+    emit progressUpdated(QString("Initializing %1 (Python bridge)...").arg(engineLabel));
 
     QString pythonPath = findPython();
-    QString bridgePath = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/python_bridge.py");
-    // Fallback to current dir if not in app dir (for dev)
-    if (!QFile::exists(bridgePath)) {
-        bridgePath = QDir::current().filePath("python_bridge.py");
-    }
     QProcess* proc = new QProcess(this);
 
     // Accumulate stdout/stderr for the final JSON
@@ -60,18 +130,18 @@ void TranscriptionWorker::startTranscription(const QString& audioPath,
     QString* fullStdErr = new QString();
 
     // Read stderr incrementally to show live progress
-    connect(proc, &QProcess::readyReadStandardError, this, [this, proc, fullStdErr]() {
+    connect(proc, &QProcess::readyReadStandardError, this, [this, proc, fullStdErr, engineLabel]() {
         QByteArray chunk = proc->readAllStandardError();
         fullStdErr->append(QString::fromUtf8(chunk));
         
         QString line = QString::fromUtf8(chunk).trimmed();
         if (!line.isEmpty()) {
             QString lastLine = line.split('\n').last().trimmed();
-            emit progressUpdated("Whisper: " + lastLine);
+            emit progressUpdated(engineLabel + ": " + lastLine);
         }
     });
 
-    // Also read stdout incrementally just in case
+    // Read stdout incrementally
     connect(proc, &QProcess::readyReadStandardOutput, this, [this, proc, fullStdOut]() {
         QByteArray chunk = proc->readAllStandardOutput();
         fullStdOut->append(QString::fromUtf8(chunk));
@@ -85,41 +155,22 @@ void TranscriptionWorker::startTranscription(const QString& audioPath,
         }
     });
 
-    connect(proc, &QProcess::finished, this, [this, proc, fullStdOut, fullStdErr](int exitCode) {
+    connect(proc, &QProcess::finished, this, [this, proc, fullStdOut, fullStdErr, engineLabel](int exitCode) {
         if (exitCode == 0) {
             emit transcriptionComplete(*fullStdOut);
         } else {
             QString err = *fullStdErr;
-            if (err.isEmpty()) err = "Process crashed or 'whisper' not found in Python environment.";
-            emit error(QString("Transcription failed (Exit %1):\n%2").arg(exitCode).arg(err));
+            if (err.isEmpty()) err = engineLabel + " process crashed or dependencies not found.";
+            emit error(QString("%1 failed (Exit %2):\n%3").arg(engineLabel).arg(exitCode).arg(err));
         }
         delete fullStdOut;
         delete fullStdErr;
         proc->deleteLater();
     });
 
-    QStringList args = {bridgePath, "transcribe", audioPath,
-                        "--model", model};
-
-    if (language != "auto" && !language.isEmpty()) {
-        args << "--lang" << language;
-    }
-
-    qDebug() << "TranscriptionWorker: launching" << pythonPath << args.join(" ");
+    qDebug() << "TranscriptionWorker: launching" << engineLabel << pythonPath << args.join(" ");
     
-    // Add bundled FFmpeg to PATH so whisper can find it
-    auto env = QProcessEnvironment::systemEnvironment();
-    QString appDir = QCoreApplication::applicationDirPath();
-    QString ffDir = QDir::cleanPath(appDir + "/ffmpeg");
-    if (!QFile::exists(ffDir + "/ffmpeg.exe")) {
-        ffDir = QDir::cleanPath(appDir + "/../ffmpeg");
-    }
-    if (QFile::exists(ffDir + "/ffmpeg.exe")) {
-        QString path = env.value("PATH");
-        env.insert("PATH", QDir::toNativeSeparators(ffDir) + ";" + path);
-    }
-    proc->setProcessEnvironment(env);
-
+    proc->setProcessEnvironment(buildEnv());
     proc->start(pythonPath, args);
 }
 

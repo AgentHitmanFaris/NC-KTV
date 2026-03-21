@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] - 2026-03-22
+
+### Fixed
+- **FFmpeg Integration**: Fixed a critical issue where audio separation and metadata reading (via `audio-separator` and `pydub`) failed to process MP4/audio files due to incomplete FFmpeg environments. The Python bridge now explicitly requires and injects a standalone `ffmpeg/bin` directory (containing both `ffmpeg.exe` and `ffprobe.exe`) into the global `PATH`, completely replacing the unreliable `imageio-ffmpeg` hack.
+
+---
+
 ## [1.3.0] - 2026-03-18
 
 ### Added
