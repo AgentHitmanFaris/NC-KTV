@@ -52,6 +52,7 @@ set(GUI_SOURCES
 
     # Resources
     resources/resources.qrc
+    resources/app.rc
 )
 
 set(GUI_HEADERS

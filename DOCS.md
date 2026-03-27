@@ -1,9 +1,9 @@
 # NC-KTV Technical Documentation (C++ Architecture)
 
-**Version:** 1.2.0 (Lyrics Editor Refactor + Gemini Integration)
-**Last Updated:** March 2026
+**Version:** 1.3.1 (Hardware Accel + Resource/Icon Integration)
+**Last Updated:** March 27, 2026
 
-Comprehensive technical documentation covering the internal architecture, memory models, and hardware-accelerated rendering logic used in the NC-KTV C++ suite.
+Comprehensive technical documentation covering the internal architecture, memory models, hardware-accelerated rendering logic, and Windows executable resource management.
 
 ---
 
@@ -29,9 +29,10 @@ The migration from Python/PyQt6 to pure C++17/Qt6 was motivated by performance u
 
 ---
 
-## 2. Build System & Dependencies
+NC-KTV utilizes a modern **CMake** implementation. While it supports **vcpkg**, the preferred workflow is using the pre-configured **CMake Presets**. These presets have been optimized to use **relative paths** (`${sourceDir}/..`), allowing the development environment (including the bundled Qt toolchain) to be moved to different directories without breaking the build link.
 
-NC-KTV utilizes a modern **CMake** implementation. While it supports **vcpkg** for dependency management, the preferred workflow (especially on Windows) is using the pre-configured **CMake Presets** and Qt's bundled toolchain for a consistent, zero-config experience.
+### Windows Resource Integration
+The project includes a native Windows resource file (`cpp/src/gui/resources/app.rc`) that embeds the application icon (`logo.ico`) directly into the `.exe`. This ensures the application displays the correct brand icon in Windows Explorer and the Taskbar independently of the high-level `setWindowIcon` call.
 
 ### Core Dependencies:
 - **Qt 6.x** (`Core`, `Gui`, `Widgets`, `Multimedia`): The foundational windowing and event backbone.

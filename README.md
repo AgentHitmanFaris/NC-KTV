@@ -70,30 +70,31 @@ NC-KTV automates the entire karaoke video creation workflow:
 NC-KTV is now built using standard `CMake` and requires a modern C++17 compliant toolchain.
 
 ### Prerequisites
-- **Visual Studio 2022** (Windows) / **GCC 11+** (Linux) / **Clang 14+** (macOS)
-- **CMake** 3.21 or higher
-- **Qt 6.x** (Core, Gui, Widgets)
-- **vcpkg** (for automatic dependency management)
+- **MinGW-w64 (GCC 13.x)**: Part of the bundled Qt 6.8.2 toolchain.
+- **CMake 3.25+**: Essential for project configuration.
+- **Qt 6.8.2**: Core, Gui, Widgets, Multimedia, Network.
+- **Python 3.10+**: For the AI bridge (Whisper/UVR).
 
 ### Building from Source (Windows)
 
-To build the project on Windows using the provided presets:
+NC-KTV now features a streamlined, high-performance build pipeline using MinGW and a custom PowerShell script that handles both C++ compilation and Python environment bundling.
 
 ```powershell
-# 1. Initialize MSVC environment and configure
-cmd /c "call \"D:\ProgramData\Microsoft Visual Studio\VC\Auxiliary\Build\vcvars64.bat\" && \"D:\ProgramData\Qt\Tools\CMake_64\bin\cmake.exe\" --preset windows-debug"
+# 1. Open PowerShell and navigate to the project root
 
-# 2. Build the application
-cmd /c "call \"D:\ProgramData\Microsoft Visual Studio\VC\Auxiliary\Build\vcvars64.bat\" && \"D:\ProgramData\Qt\Tools\CMake_64\bin\cmake.exe\" --build --preset windows-debug"
-
-# 3. Run tests
-$env:PATH = "D:\ProgramData\Qt\6.10.2\msvc2022_64\bin;" + $env:PATH
-.\out\build\windows-debug\tests\ncktv_tests.exe
+# 2. Run the automated build script
+# This script configures CMake, builds the C++ engine (Ninja),
+# packages the Python AI bridge (PyInstaller), and assembles 
+# the portable directory with all necessary DLLs.
+.\build_portable_release.ps1
 ```
 
-The compiled executable will be at `out/build/windows-debug/src/gui/ncktv.exe`.
+Once completed, the final portable application will be available in the root directory as `ncktv.exe`, with all dependencies (Qt, FFmpeg, ONNX, Python Bridge) properly staged.
 
-Once compiled, the `ncktv` executable and tests will be placed in `cpp/out/build/windows-release/`.
+For manual development/debugging:
+1. Open the project in **VS Code** or **Qt Creator**.
+2. Select the `windows-debug` or `windows-release` CMake preset.
+3. Build using the standard CMake workflow (`Ctrl+Shift+B` in VS Code).
 
 ---
 
