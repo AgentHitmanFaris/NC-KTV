@@ -1,5 +1,7 @@
 # Syllable Editor - Mouse Interaction Guide
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) interaction model. The C++ `SyllableEditor` in `cpp/src/gui/components/syllable_editor.cpp` implements the same Ctrl+drag / click-to-seek paradigm natively.
+
 ## New Control Scheme (Fixed!)
 
 ### 🎯 **Seeking / Playback Control (Default Mode)**

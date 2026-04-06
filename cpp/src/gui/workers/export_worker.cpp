@@ -20,19 +20,20 @@ ExportWorker::ExportWorker(QObject* parent) : QObject(parent) {}
 static QString getFFmpegExecutable() {
     QString appDir = QCoreApplication::applicationDirPath();
     
-    // Check bundled ffmpeg in release structure
-    QString bundled = appDir + "/ffmpeg/ffmpeg.exe";
+    // Bundled structure: app_root/ffmpeg/bin/ffmpeg.exe
+    QString bundled = appDir + "/ffmpeg/bin/ffmpeg.exe";
     if (QFile::exists(bundled)) return QDir::toNativeSeparators(bundled);
     
-    // Check for development environment structure (assuming bin is in build/...)
-    bundled = QFileInfo(appDir).absolutePath() + "/ffmpeg/ffmpeg.exe";
+    // Parent directory check: ../ffmpeg/bin/ffmpeg.exe
+    bundled = QFileInfo(appDir).absolutePath() + "/ffmpeg/bin/ffmpeg.exe";
     if (QFile::exists(bundled)) return QDir::toNativeSeparators(bundled);
 
-    // Fallback to project root if running from VS/CMake build dir
+    // Project root check: search ancestors for ffmpeg/bin/ffmpeg.exe
     QDir projectRoot(appDir);
     while (projectRoot.cdUp()) {
-        if (QFile::exists(projectRoot.absoluteFilePath("ffmpeg/ffmpeg.exe"))) {
-            return QDir::toNativeSeparators(projectRoot.absoluteFilePath("ffmpeg/ffmpeg.exe"));
+        QString testPath = projectRoot.absoluteFilePath("ffmpeg/bin/ffmpeg.exe");
+        if (QFile::exists(testPath)) {
+            return QDir::toNativeSeparators(testPath);
         }
         if (projectRoot.isRoot()) break;
     }

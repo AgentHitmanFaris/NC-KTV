@@ -14,6 +14,7 @@
 #include <QHeaderView>
 #include <QProgressBar>
 #include <QPlainTextEdit>
+#include <QButtonGroup>
 
 #include "../core/project/ncktv_project.hpp"
 #include "undo_manager.h"
@@ -40,6 +41,9 @@ class EditorMode : public QWidget {
 public:
     explicit EditorMode(std::shared_ptr<core::Project> project, ConfigManager* config, QWidget* parent = nullptr);
 
+    // Tool mode enum (Task 3.2)
+    enum class ToolMode { Selection, Razor, Slip };
+
 signals:
     void requestSave();
     void requestSaveAs();
@@ -48,6 +52,7 @@ signals:
     void requestPreferences();
     void requestExport();
     void unsavedChangesChanged(bool hasUnsavedChanges);
+    void toolModeChanged(ToolMode mode);
 
 private slots:
     void onPlayPauseToggled(bool isPlaying);
@@ -92,18 +97,19 @@ private:
     TimingOffsetHandler* m_timingHandler = nullptr;
 
     // Layout — root layout
-    QHBoxLayout* m_mainHLayout = nullptr;
-    
-    // Left Sidebar
-    QWidget* m_sidebar = nullptr;
-    QPushButton* m_modeLyricsBtn = nullptr;
-    QPushButton* m_modeTimingBtn = nullptr;
-    QPushButton* m_modeRenderBtn = nullptr;
+    QVBoxLayout* m_rootLayout = nullptr;
+
+    // Top bar & tab bar
+    QPushButton* m_tabLyricsBtn = nullptr;
+    QPushButton* m_tabTimingBtn = nullptr;
+    QPushButton* m_tabRenderBtn = nullptr;
     QPushButton* m_saveProjectBtn = nullptr;
     QPushButton* m_consoleBtn = nullptr;
 
-    // Right Workspace
-    QVBoxLayout* m_workspaceLayout = nullptr;
+    // Playback time display in transport bar
+    QLabel* m_playbackTimeLabel = nullptr;
+
+    // Main content stack
     QStackedWidget* m_viewStack = nullptr; // 0: Lyrics, 1: Timing, 2: Render
     
     // Lyrics Editor View (Page 0)
@@ -143,6 +149,17 @@ private:
     QMediaPlayer* m_videoPlayer = nullptr;
     QAudioOutput* m_videoAudioOutput = nullptr;
     ConfigManager* m_config = nullptr;
+
+    // Tools panel (Task 3.2)
+    QButtonGroup* m_toolBtnGroup = nullptr;
+    ToolMode m_activeTool = ToolMode::Selection;
+
+    // Workspace splitters (Task 3.1)
+    QSplitter* m_workspaceSplitter = nullptr;
+    QSplitter* m_contentSplitter = nullptr;
+
+    // Source panel timecode overlay
+    QLabel* m_sourceTimecodeLabel = nullptr;
 };
 
 } // namespace ncktv

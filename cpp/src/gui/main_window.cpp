@@ -89,29 +89,55 @@ void MainWindow::setupApplicationUI() {
 
     this->setCentralWidget(centralWidget);
 
-    // Hide default menu bar for custom UI
-    menuBar()->hide();
     statusBar()->hide();
-    
-    // Setup Menus entries for custom UI usage (if needed later)
-    QMenu* fileMenu = new QMenu("&File", this);
-    QAction* newAction = fileMenu->addAction("New Project (Native)...", this, &MainWindow::onActionNewProject);
-    newAction->setShortcut(QKeySequence::New);
 
-    QAction* openAction = fileMenu->addAction("Open Project...", this, &MainWindow::onActionOpenProject);
-    openAction->setShortcut(QKeySequence::Open);
-
-    QAction* saveAction = fileMenu->addAction("Save Project", this, &MainWindow::onActionSaveProject);
-    saveAction->setShortcut(QKeySequence::Save);
-
-    QAction* saveAsAction = fileMenu->addAction("Save Project As...", this, &MainWindow::onActionSaveProjectAs);
-    saveAsAction->setShortcut(QKeySequence::SaveAs);
-
+    // File menu
+    QMenu* fileMenu = menuBar()->addMenu("File");
+    fileMenu->addAction("New Project", this, &MainWindow::onActionNewProject, QKeySequence::New);
+    fileMenu->addAction("Open Project...", this, &MainWindow::onActionOpenProject, QKeySequence::Open);
+    fileMenu->addAction("Save Project", this, &MainWindow::onActionSaveProject, QKeySequence::Save);
+    fileMenu->addAction("Save Project As...", this, &MainWindow::onActionSaveProjectAs, QKeySequence::SaveAs);
     fileMenu->addSeparator();
-    fileMenu->addAction("Preferences...", this, [this]() {
-        PreferencesDialog dialog(m_config, this);
-        dialog.exec();
-    });
+    fileMenu->addAction("Import...", this, [this]() { /* import */ });
+    fileMenu->addAction("Export Video...", this, [this]() { if (editorMode_) editorMode_->onExportClicked(); });
+    fileMenu->addSeparator();
+    fileMenu->addAction("Preferences...", this, [this]() { PreferencesDialog d(m_config, this); d.exec(); });
+    fileMenu->addSeparator();
+    fileMenu->addAction("Exit", this, &QWidget::close, QKeySequence::Quit);
+
+    // Edit menu
+    QMenu* editMenu = menuBar()->addMenu("Edit");
+    editMenu->addAction("Undo", QKeySequence::Undo);
+    editMenu->addAction("Redo", QKeySequence::Redo);
+    editMenu->addSeparator();
+    editMenu->addAction("Preferences...", this, [this]() { PreferencesDialog d(m_config, this); d.exec(); });
+
+    // Sequence menu (editor-only)
+    m_sequenceMenu = menuBar()->addMenu("Sequence");
+    m_sequenceMenu->addAction("Add Subtitle Line");
+    m_sequenceMenu->addAction("Remove Selected Line");
+    m_sequenceMenu->addAction("Split at Playhead");
+
+    // Clip menu (editor-only)
+    m_clipMenu = menuBar()->addMenu("Clip");
+    m_clipMenu->addAction("Set In Point");
+    m_clipMenu->addAction("Set Out Point");
+    m_clipMenu->addAction("Clear In/Out");
+
+    // Window menu (editor-only)
+    m_windowMenu = menuBar()->addMenu("Window");
+    m_windowMenu->addAction("Captions");
+    m_windowMenu->addAction("Source Monitor");
+    m_windowMenu->addAction("Program Monitor");
+    m_windowMenu->addAction("Timeline");
+    m_windowMenu->addAction("Tools");
+
+    // Help menu
+    QMenu* helpMenu = menuBar()->addMenu("Help");
+    helpMenu->addAction("Keyboard Shortcuts");
+    helpMenu->addAction("About NC-KTV Pro");
+
+    setEditorMenusEnabled(false);
 
     // Load Pro Theme
     QFile qssFile(":/styles/dark_theme.qss");
@@ -155,10 +181,17 @@ void MainWindow::setupWorkers() {
     transcriptionThread_->start();
 }
 
+void MainWindow::setEditorMenusEnabled(bool enabled) {
+    if (m_sequenceMenu) m_sequenceMenu->setEnabled(enabled);
+    if (m_clipMenu) m_clipMenu->setEnabled(enabled);
+    if (m_windowMenu) m_windowMenu->setEnabled(enabled);
+}
+
 void MainWindow::onActionNewProject() {
     // Reset wizard and switch to it
     wizardMode_->reset();
     mainStack_->setCurrentWidget(wizardMode_);
+    setEditorMenusEnabled(false);
     statusBar()->showMessage("New Project Initialization...");
 }
 
@@ -439,6 +472,7 @@ void MainWindow::onProjectReady(Project* project) {
     
     mainStack_->addWidget(editorMode_);
     mainStack_->setCurrentWidget(editorMode_);
+    setEditorMenusEnabled(true);
 }
 
 } // namespace ncktv

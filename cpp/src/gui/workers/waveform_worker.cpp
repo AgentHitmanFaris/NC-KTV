@@ -21,9 +21,9 @@ void WaveformWorker::generate(const QString& filePath) {
     qDebug() << "WaveformWorker: Generating for" << filePath;
 
     QString appDir = QCoreApplication::applicationDirPath();
-    QString ffmpeg = QDir::cleanPath(appDir + "/ffmpeg/ffmpeg.exe");
+    QString ffmpeg = QDir::cleanPath(appDir + "/ffmpeg/bin/ffmpeg.exe");
     if (!QFile::exists(ffmpeg)) {
-        ffmpeg = QDir::cleanPath(QDir::currentPath() + "/ffmpeg/ffmpeg.exe");
+        ffmpeg = QDir::cleanPath(QDir::currentPath() + "/ffmpeg/bin/ffmpeg.exe");
         if (!QFile::exists(ffmpeg)) ffmpeg = "ffmpeg";
     }
 

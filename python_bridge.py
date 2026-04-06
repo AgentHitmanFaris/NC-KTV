@@ -20,10 +20,44 @@ import warnings
 import re
 from pathlib import Path
 
+# ─── Locate and Expose FFmpeg Globally (MUST RUN BEFORE OTHER IMPORTS) ────────
+# This ensures that libraries like audio-separator and imageio find the correct binaries.
+_script_dir = Path(__file__).parent.resolve()
+
+# Handle PyInstaller _MEI_xxxx temporary directory or executable directory
+if getattr(sys, 'frozen', False):
+    # If running as a bundled executable, _script_dir is the dir containing the EXE
+    # or the temp folder if onedir/onefile is used.
+    _base_dir = Path(sys._MEIPASS).resolve() if hasattr(sys, '_MEIPASS') else Path(sys.executable).parent.resolve()
+    _exe_dir = Path(sys.executable).parent.resolve()
+else:
+    _base_dir = _script_dir
+    _exe_dir = _script_dir
+
+_possible_ffmpeg_dirs = [
+    _exe_dir / "ffmpeg" / "bin",
+    _base_dir / "ffmpeg" / "bin",
+    _exe_dir / "bin",
+    Path("D:/NC-KTV/ffmpeg/bin"),
+    Path("C:/ffmpeg/bin"),
+]
+
+for _fd in _possible_ffmpeg_dirs:
+    if (_fd / "ffmpeg.exe").exists():
+        # Prepend to PATH to ensure our version takes priority
+        os.environ["PATH"] = str(_fd.absolute()) + os.pathsep + os.environ.get("PATH", "")
+        # Also set imageio_ffmpeg's internal path if possible, though PATH is usually enough
+        break
+
 # Suppress annoying warnings
 warnings.filterwarnings("ignore")
 
+# Ensure this script's directory is on sys.path for sibling imports
+if str(_script_dir) not in sys.path:
+    sys.path.insert(0, str(_script_dir))
+
 # Force PyInstaller to detect dynamic imports used by audio_separator
+# These imports are moved AFTER path setup to ensure they pick up our FFmpeg if they check on import
 try:
     import onnx
     import onnxruntime
@@ -35,21 +69,6 @@ try:
 except ImportError:
     pass
 
-# Ensure this script's directory is on sys.path for sibling imports
-_script_dir = str(Path(__file__).parent.resolve())
-if _script_dir not in sys.path:
-    sys.path.insert(0, _script_dir)
-
-# ─── Locate and Expose FFmpeg Globally ───────────────────────────────────────
-_possible_ffmpeg = [
-    Path(_script_dir) / "ffmpeg" / "bin",
-    Path("D:/NC-KTV/ffmpeg/bin"),
-]
-for _fd in _possible_ffmpeg:
-    if (_fd / "ffmpeg.exe").exists():
-        os.environ["PATH"] = str(_fd.absolute()) + os.pathsep + os.environ.get("PATH", "")
-        # Note: audio-separator and pydub rely on ffmpeg and ffprobe being in PATH
-        break
 
 
 # ─── Audio Preprocessing Utilities ───────────────────────────────────────────

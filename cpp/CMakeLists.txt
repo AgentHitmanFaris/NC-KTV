@@ -83,12 +83,12 @@ if(WIN32)
 
         find_program(DLLTOOL_EXE dlltool
             HINTS "${CMAKE_CXX_COMPILER_DIR}"
-                  "D:/NC-KTV/qt/Tools/mingw1310_64/bin"
+                  "D:/ProgramData/Qt/Tools/mingw1310_64/bin"
             REQUIRED
         )
         find_program(GENDEF_EXE gendef
             HINTS "${CMAKE_CXX_COMPILER_DIR}"
-                  "D:/NC-KTV/qt/Tools/mingw1310_64/bin"
+                  "D:/ProgramData/Qt/Tools/mingw1310_64/bin"
         )
 
         if(GENDEF_EXE)

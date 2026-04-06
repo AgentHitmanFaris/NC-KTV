@@ -1,7 +1,7 @@
 # NC-KTV Technical Documentation (C++ Architecture)
 
-**Version:** 1.3.1 (Hardware Accel + Resource/Icon Integration)
-**Last Updated:** March 27, 2026
+**Version:** 1.3.2 (Robust AI Bridge + FFmpeg Path Overhaul)
+**Last Updated:** April 7, 2026
 
 Comprehensive technical documentation covering the internal architecture, memory models, hardware-accelerated rendering logic, and Windows executable resource management.
 
@@ -20,7 +20,7 @@ Comprehensive technical documentation covering the internal architecture, memory
 
 ## 1. Architectural Overview
 
-The migration from Python/PyQt6 to pure C++17/Qt6 was motivated by performance upper-bounds encountered during heavy waveform rendering and real-time audio separation. The new architecture completely decoupling the computationally intense engine operations from the main UI thread.
+The migration from Python/PyQt6 to pure C++20/Qt6 was motivated by performance upper-bounds encountered during heavy waveform rendering and real-time audio separation. The new architecture completely decoupling the computationally intense engine operations from the main UI thread.
 
 **Key Design Pillars:**
 - **Zero-Copy Serialization**: Minimizing redundant state transformations between UI memory and playback buffers.
@@ -29,14 +29,14 @@ The migration from Python/PyQt6 to pure C++17/Qt6 was motivated by performance u
 
 ---
 
-NC-KTV utilizes a modern **CMake** implementation. While it supports **vcpkg**, the preferred workflow is using the pre-configured **CMake Presets**. These presets have been optimized to use **relative paths** (`${sourceDir}/..`), allowing the development environment (including the bundled Qt toolchain) to be moved to different directories without breaking the build link.
+NC-KTV utilizes a modern **CMake** implementation with **CMake Presets** configured in `cpp/CMakePresets.json`. All tool paths point to the system Qt installation at `D:\ProgramData\Qt\` — no local `qt/` or `bin/` folder is required.
 
 ### Windows Resource Integration
 The project includes a native Windows resource file (`cpp/src/gui/resources/app.rc`) that embeds the application icon (`logo.ico`) directly into the `.exe`. This ensures the application displays the correct brand icon in Windows Explorer and the Taskbar independently of the high-level `setWindowIcon` call.
 
 ### Core Dependencies:
-- **Qt 6.x** (`Core`, `Gui`, `Widgets`, `Multimedia`): The foundational windowing and event backbone.
-- **FFmpeg 7.x**: Core A/V decoding/encoding logic mapped directly in `src/core/audio/ffmpeg_utils.cpp`. The Python AI bridge explicitly requires a separate static Windows FFmpeg build (with both `ffmpeg.exe` and `ffprobe.exe`) extracted locally within the `ffmpeg/bin` directory for robust engine execution (e.g. `audio-separator`) without global PATH pollution.
+- **Qt 6.10.2** (`Core`, `Gui`, `Widgets`, `Multimedia`): The foundational windowing and event backbone. Installed at `D:\ProgramData\Qt\6.10.2\mingw_64`.
+- **FFmpeg 7.x**: Core A/V decoding/encoding logic mapped directly in `src/core/audio/ffmpeg_utils.cpp`. The Python AI bridge implements a robust auto-detection system to locate `ffmpeg.exe` and `ffprobe.exe` across development (native `.py`) and portable (PyInstaller `.exe`) environments. It injects the `ffmpeg/bin` directory directly into the global `PATH` at runtime, ensuring that dependencies like `audio-separator` and `pydub` operate reliably without requiring a manual system-wide installation.
 - **ONNX Runtime**: Used extensively in `src/core/audio/vocal_remover.cpp` to execute the MDX-Net algorithms natively.
 - **nlohmann_json**: High-speed, intuitive configuration and project state serialization.
 - **yaml-cpp**: Powering the recursive `ConfigManager`.

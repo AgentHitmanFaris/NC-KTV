@@ -1,5 +1,7 @@
 # Application Window: Fullscreen by Default
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ rewrite handles this via `MainWindow::showMaximized()` in `cpp/src/gui/main_window.cpp`.
+
 ## Date: 2026-02-04
 
 ## Change Summary

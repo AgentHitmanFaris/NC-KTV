@@ -16,18 +16,26 @@ namespace ncktv {
 
 static QString getFFmpegPath() {
     QString appDir = QCoreApplication::applicationDirPath();
-    QString bundled = appDir + "/ffmpeg/ffmpeg.exe";
+    
+    // Bundled structure: app_root/ffmpeg/bin/ffmpeg.exe
+    QString bundled = appDir + "/ffmpeg/bin/ffmpeg.exe";
     if (QFile::exists(bundled)) return QDir::toNativeSeparators(bundled);
-    bundled = QFileInfo(appDir).absolutePath() + "/ffmpeg/ffmpeg.exe";
+    
+    // Parent directory check: ../ffmpeg/bin/ffmpeg.exe
+    bundled = QFileInfo(appDir).absolutePath() + "/ffmpeg/bin/ffmpeg.exe";
     if (QFile::exists(bundled)) return QDir::toNativeSeparators(bundled);
+    
+    // Project root check: search ancestors for ffmpeg/bin/ffmpeg.exe
     QDir projectRoot(appDir);
     while (projectRoot.cdUp()) {
-        if (QFile::exists(projectRoot.absoluteFilePath("ffmpeg/ffmpeg.exe"))) {
-            return QDir::toNativeSeparators(projectRoot.absoluteFilePath("ffmpeg/ffmpeg.exe"));
+        QString testPath = projectRoot.absoluteFilePath("ffmpeg/bin/ffmpeg.exe");
+        if (QFile::exists(testPath)) {
+            return QDir::toNativeSeparators(testPath);
         }
         if (projectRoot.isRoot()) break;
     }
-    return "ffmpeg";
+    
+    return "ffmpeg"; // Fallback to system PATH
 }
 
 bool GPUDetector::isCudaAvailable() {

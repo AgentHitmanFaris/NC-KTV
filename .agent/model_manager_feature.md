@@ -1,5 +1,7 @@
 # Vocal Removal Model Manager Feature
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ equivalent is `ModelManagerDialog` in `cpp/src/gui/dialogs/model_manager_dialog.cpp`.
+
 ## Date: 2026-02-04
 
 ## Overview

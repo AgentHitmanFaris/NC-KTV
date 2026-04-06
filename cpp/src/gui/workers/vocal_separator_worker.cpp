@@ -46,11 +46,26 @@ VocalSeparatorWorker::VocalSeparatorWorker(QObject* parent) : QObject(parent) {}
 // ── Identify the FFmpeg executable bundled next to the app ───────────────────
 static QString findFFmpeg() {
     QString appDir = QCoreApplication::applicationDirPath();
-    QString ff = QDir::cleanPath(appDir + "/ffmpeg/ffmpeg.exe");
+    
+    // Bundled structure: app_root/ffmpeg/bin/ffmpeg.exe
+    QString ff = QDir::cleanPath(appDir + "/ffmpeg/bin/ffmpeg.exe");
     if (QFile::exists(ff)) return ff;
-    ff = QDir::cleanPath(appDir + "/../ffmpeg/ffmpeg.exe");
+    
+    // Parent check (for dev builds): ../ffmpeg/bin/ffmpeg.exe
+    ff = QDir::cleanPath(appDir + "/../ffmpeg/bin/ffmpeg.exe");
     if (QFile::exists(ff)) return ff;
-    return "ffmpeg";
+
+    // Project root check: search ancestors for ffmpeg/bin/ffmpeg.exe
+    QDir projectRoot(appDir);
+    while (projectRoot.cdUp()) {
+        QString testPath = projectRoot.absoluteFilePath("ffmpeg/bin/ffmpeg.exe");
+        if (QFile::exists(testPath)) {
+            return QDir::toNativeSeparators(testPath);
+        }
+        if (projectRoot.isRoot()) break;
+    }
+
+    return "ffmpeg"; // Fallback to system PATH
 }
 
 // ── Decode any audio file to interleaved float32 PCM (stereo 44100 Hz) ───────

@@ -1,5 +1,7 @@
 # UI Crispness Fix - Less "Squishy" Elements
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) QSS theme. The C++ rewrite uses 4px border-radius throughout its QSS stylesheets in `cpp/src/gui/resources/`.
+
 ## Date: 2026-02-04
 
 ## Problem

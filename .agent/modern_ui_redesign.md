@@ -1,5 +1,7 @@
 # NC-KTV Modern UI Redesign
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) QSS theme. The C++ rewrite uses QSS stylesheets in `cpp/src/gui/resources/` loaded via the Qt resource system.
+
 ## Date: 2026-02-04
 
 ## Overview

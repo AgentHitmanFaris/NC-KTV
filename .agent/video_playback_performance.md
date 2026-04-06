@@ -1,5 +1,7 @@
 # Video Playback Performance Optimization
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ rewrite handles video sync via `AudioPlayer` and `QMediaPlayer` in `cpp/src/gui/components/audio_player.cpp`.
+
 ## Date: 2026-02-04
 
 ## Problem Report

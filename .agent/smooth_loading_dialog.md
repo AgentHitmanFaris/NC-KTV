@@ -1,5 +1,7 @@
 # Smooth Loading Dialog Fix
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ equivalent uses `QProgressDialog` with `ProcessingOverlay` in `cpp/src/gui/`.
+
 ## Date: 2026-02-04
 
 ## Problem

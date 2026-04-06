@@ -1,5 +1,7 @@
 # Syllable Editor: Stunning Modern UI Redesign
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ rewrite renders all syllable states via QPainter in `cpp/src/gui/components/syllable_editor.cpp`.
+
 ## Date: 2026-02-04
 
 ## Overview

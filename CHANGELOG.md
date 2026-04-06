@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.3] - 2026-04-07
+
+### Changed
+- **Qt Upgrade**: Upgraded from Qt 6.8.2 to **Qt 6.10.2** (MinGW build). All tool paths now reference the system-wide Qt installation at `D:\ProgramData\Qt\`.
+- **Build System**: `CMakePresets.json` updated to use absolute paths to `D:\ProgramData\Qt\Tools\CMake_64`, `D:\ProgramData\Qt\Tools\Ninja`, and `D:\ProgramData\Qt\Tools\mingw1310_64`. The local `qt/` and `bin/` folders are no longer required.
+- **Build Script**: `build_portable_release.ps1` updated to reference Qt 6.10.2 binaries and `windeployqt` from the system Qt installation.
+- **Portable Output**: Build output directory changed from repo root to `NC-KTV-Portable\` for a cleaner workspace.
+- **CMakeLists**: Updated `dlltool`/`gendef` hints to point to `D:\ProgramData\Qt\Tools\mingw1310_64\bin`.
+
+---
+
+## [1.3.2] - 2026-04-04
+
+### Improved
+- **FFmpeg Robustness**: Refined the FFmpeg location logic in the Python bridge to ensure early initialization. The path detection now correctly handles PyInstaller `_MEIPASS` temporary directories and executable-relative paths, ensuring that `audio-separator` and `pydub` can reliably find FFmpeg binaries in both development and portable environments.
+- **Path Search Optimization**: Expanded the search logic to include multiple local and system fallback directories (including `D:/` and `C:/` common paths) for increased resilience across different machine configurations.
+
+### Fixed
+- **Portable Build Assembly**: Verified that `build_portable_release.ps1` correctly stages all dependencies, including the newly optimized Python bridge, in the final redistribution package.
+
+---
+
 ## [1.3.1] - 2026-03-22
 
 ### Fixed

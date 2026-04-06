@@ -1,5 +1,7 @@
 # Syllable Editor Performance Comparison
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ rewrite uses `SyllableEditor` in `cpp/src/gui/components/syllable_editor.cpp` with native QPainter optimizations.
+
 ## Visual Indicators of Improvement
 
 ### Before (Laggy Experience)

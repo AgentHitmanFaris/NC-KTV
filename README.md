@@ -2,12 +2,12 @@
 
 <img src="assets/logo.png" alt="NC-KTV Logo" width="180"/>
 
-# NC-KTV (C++ Edition)
+# NC-KTV (C++ Edition) v1.3.2
 
 **Next-Generation Professional Music Video Karaoke Maker**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/nc-ktv/cpp)
-[![Qt Version](https://img.shields.io/badge/Qt-6.x-41CD52.svg?style=for-the-badge&logo=qt)](https://www.qt.io/)
+[![Qt Version](https://img.shields.io/badge/Qt-6.10.2-41CD52.svg?style=for-the-badge&logo=qt)](https://www.qt.io/)
 [![CMake](https://img.shields.io/badge/CMake-3.21+-064F8C.svg?style=for-the-badge&logo=cmake)](https://cmake.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
@@ -23,7 +23,7 @@
 
 Welcome to the **C++ Qt6 Rebirth** of NC-KTV. 
 
-Originally written in Python, we have completely overhauled the NC-KTV engine using modern **C++17 and Qt6** to achieve unparalleled performance, hardware-accelerated rendering, and a butter-smooth editing experience. This marks a massive leap in processing speed and UI responsiveness, enabling real-time waveform rendering, precise audio seeking, and seamless subtitle processing.
+Originally written in Python, we have completely overhauled the NC-KTV engine using modern **C++20 and Qt6** to achieve unparalleled performance, hardware-accelerated rendering, and a butter-smooth editing experience. This marks a massive leap in processing speed and UI responsiveness, enabling real-time waveform rendering, precise audio seeking, and seamless subtitle processing.
 
 NC-KTV automates the entire karaoke video creation workflow:
 1. **Import** any media file natively via FFmpeg.
@@ -70,9 +70,9 @@ NC-KTV automates the entire karaoke video creation workflow:
 NC-KTV is now built using standard `CMake` and requires a modern C++17 compliant toolchain.
 
 ### Prerequisites
-- **MinGW-w64 (GCC 13.x)**: Part of the bundled Qt 6.8.2 toolchain.
-- **CMake 3.25+**: Essential for project configuration.
-- **Qt 6.8.2**: Core, Gui, Widgets, Multimedia, Network.
+- **MinGW-w64 (GCC 13.x)**: Installed via Qt at `D:\ProgramData\Qt\Tools\mingw1310_64`.
+- **CMake 3.25+**: Installed via Qt at `D:\ProgramData\Qt\Tools\CMake_64`.
+- **Qt 6.10.2**: Core, Gui, Widgets, Multimedia, Network — installed at `D:\ProgramData\Qt\6.10.2\mingw_64`.
 - **Python 3.10+**: For the AI bridge (Whisper/UVR).
 
 ### Building from Source (Windows)
@@ -89,7 +89,7 @@ NC-KTV now features a streamlined, high-performance build pipeline using MinGW a
 .\build_portable_release.ps1
 ```
 
-Once completed, the final portable application will be available in the root directory as `ncktv.exe`, with all dependencies (Qt, FFmpeg, ONNX, Python Bridge) properly staged.
+Once completed, the final portable application will be available in `NC-KTV-Portable\` with all dependencies (Qt, FFmpeg, ONNX, Python Bridge) properly staged.
 
 For manual development/debugging:
 1. Open the project in **VS Code** or **Qt Creator**.

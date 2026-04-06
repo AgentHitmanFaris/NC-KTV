@@ -9,6 +9,7 @@
 #include "../core/project/ncktv_project.hpp"
 
 class QStackedWidget;
+class QMenu;
 
 namespace ncktv {
 
@@ -25,6 +26,9 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
+
+public slots:
+    void setEditorMenusEnabled(bool enabled);
 
 private slots:
     void onActionNewProject();
@@ -50,6 +54,11 @@ private:
     std::shared_ptr<Project> legacyProject_; // For compatibility with WizardMode
     
     ConfigManager* m_config = nullptr;
+
+    // Editor-only menus (disabled in wizard mode)
+    QMenu* m_sequenceMenu = nullptr;
+    QMenu* m_clipMenu = nullptr;
+    QMenu* m_windowMenu = nullptr;
     
     // Workers and Threads for Multi-threaded AI
     VocalSeparatorWorker* vocalWorker_ = nullptr;

@@ -1,5 +1,7 @@
 # Tab Mutual Exclusion Fix
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ rewrite uses `QStackedWidget` / `QButtonGroup` in `cpp/src/gui/editor/editor_mode.cpp` for proper mutual exclusion.
+
 ## Date: 2026-02-04
 
 ## Problem

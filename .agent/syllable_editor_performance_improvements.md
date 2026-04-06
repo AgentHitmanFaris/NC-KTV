@@ -1,5 +1,7 @@
 # Syllable Editor Performance Improvements
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ rewrite applies equivalent optimizations (waveform caching, dirty region updates, throttling) natively in `cpp/src/gui/components/syllable_editor.cpp`.
+
 ## Date: 2026-02-04
 
 ## Problem Statement

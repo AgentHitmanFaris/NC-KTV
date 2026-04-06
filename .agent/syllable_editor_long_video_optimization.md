@@ -1,5 +1,7 @@
 # Syllable Editor: Long Video Performance Optimization
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ rewrite uses viewport culling natively in `cpp/src/gui/components/syllable_editor.cpp`.
+
 ## Date: 2026-02-04
 
 ## Problem Report

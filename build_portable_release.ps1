@@ -2,11 +2,11 @@ $ErrorActionPreference = "Stop"
 
 # Configuration
 $ProcCount = $env:NUMBER_OF_PROCESSORS
-$QtBin = (Resolve-Path ".\qt\6.8.2\mingw_64\bin").Path
-$CMake = (Resolve-Path ".\bin\cmake.exe").Path
+$QtBin = "D:\ProgramData\Qt\6.10.2\mingw_64\bin"
+$CMake = "D:\ProgramData\Qt\Tools\CMake_64\bin\cmake.exe"
 $PythonExe = (Resolve-Path ".\python_embed\python.exe").Path
 $BridgeFile = (Resolve-Path ".\python_bridge.py").Path
-$TargetDir = "."
+$TargetDir = ".\NC-KTV-Portable"
 
 # ==============================================================================
 # 1. C++ INCREMENTAL BUILD

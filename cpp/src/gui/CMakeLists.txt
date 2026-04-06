@@ -110,3 +110,46 @@ target_link_libraries(ncktv PRIVATE
 if(WIN32 AND NOT MSVC AND TARGET onnxruntime_implib)
     add_dependencies(ncktv onnxruntime_implib)
 endif()
+
+# ─── ncktv_gui_sources: interface target exposing GUI source paths ────────────
+# Used by the GUI test executable to compile the same sources without main.cpp.
+set(NCKTV_GUI_SOURCES_NO_MAIN
+    main_window.cpp
+    wizard/wizard_mode.cpp
+    editor/editor_mode.cpp
+    editor/timing_offset_handler.cpp
+    editor/undo_manager.cpp
+    precision/precision_mode.cpp
+    components/syllable_editor.cpp
+    components/karaoke_preview.cpp
+    components/timeline_widget.cpp
+    components/waveform_widget.cpp
+    components/audio_player.cpp
+    components/curve_editor.cpp
+    components/effect_panel.cpp
+    components/timing_calibration.cpp
+    components/lyrical_pro_widget.cpp
+    dialogs/export_dialog.cpp
+    dialogs/import_dialog.cpp
+    dialogs/new_project_dialog.cpp
+    dialogs/model_manager_dialog.cpp
+    dialogs/model_manager_widget.cpp
+    dialogs/plugin_manager_dialog.cpp
+    dialogs/theme_manager_dialog.cpp
+    dialogs/preferences_dialog.cpp
+    dialogs/shortcuts_dialog.cpp
+    dialogs/video_options_dialog.cpp
+    dialogs/export_credits_dialog.cpp
+    dialogs/word_editor.cpp
+    dialogs/lyrics_search_dialog.cpp
+    workers/transcription_worker.cpp
+    workers/vocal_separator_worker.cpp
+    workers/processing_worker.cpp
+    workers/export_worker.cpp
+    workers/online_search_worker.cpp
+    workers/progress_reporter.cpp
+    workers/waveform_worker.cpp
+    resources/resources.qrc
+    PARENT_SCOPE
+)
+set(NCKTV_GUI_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)

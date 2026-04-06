@@ -1,5 +1,7 @@
 # Video Playback Synchronization Fixes
 
+> **Note:** This document describes the Python-era (pre-v1.0.0) implementation. The C++ rewrite handles A/V sync in `cpp/src/gui/components/audio_player.cpp` with frame-skip optimization and state-aware tolerance.
+
 ## Date: 2026-02-04
 
 ## Bugs Reported

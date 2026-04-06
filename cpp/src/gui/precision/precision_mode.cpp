@@ -4,8 +4,27 @@
 #include <QComboBox>
 #include <QAction>
 #include <QMenu>
+#include <QHBoxLayout>
+#include <QLabel>
 
 namespace ncktv {
+
+static QWidget* makePanelHeader(QWidget* parent, const QString& title, QList<QWidget*> rightActions = {}) {
+    auto* header = new QWidget(parent);
+    header->setObjectName("panelHeader");
+    header->setFixedHeight(28);
+    auto* layout = new QHBoxLayout(header);
+    layout->setContentsMargins(10, 0, 6, 0);
+    layout->setSpacing(0);
+    auto* titleLabel = new QLabel(title.toUpper(), header);
+    titleLabel->setObjectName("panelTitle");
+    layout->addWidget(titleLabel);
+    layout->addStretch();
+    for (QWidget* action : rightActions) {
+        layout->addWidget(action);
+    }
+    return header;
+}
 
 PrecisionMode::PrecisionMode(std::shared_ptr<core::Project> project, QWidget* parent)
     : QWidget(parent)
@@ -25,6 +44,8 @@ void PrecisionMode::setupUi() {
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
+    mainLayout->addWidget(makePanelHeader(this, "Precision Editor"));
+
     m_toolBar = new QToolBar(this);
     mainLayout->addWidget(m_toolBar);
 
@@ -33,6 +54,7 @@ void PrecisionMode::setupUi() {
 
     // ─── LEFT PANE : Subtitle List ───────────────────────────────────────────
     QWidget* leftWidget = new QWidget(m_mainSplitter);
+    leftWidget->setObjectName("precisionSubtitlePanel");
     auto* leftLayout = new QVBoxLayout(leftWidget);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(0);
@@ -53,6 +75,7 @@ void PrecisionMode::setupUi() {
 
     // ─── RIGHT PANE : Word Editor (Waveform) ─────────────────────────────────
     QWidget* rightWidget = new QWidget(m_mainSplitter);
+    rightWidget->setObjectName("precisionEditorPanel");
     auto* rightLayout = new QVBoxLayout(rightWidget);
     rightLayout->setContentsMargins(16, 14, 16, 14);
     rightLayout->setSpacing(10);
@@ -130,15 +153,19 @@ void PrecisionMode::setupUi() {
     rightLayout->addLayout(editLayout);
 
     // Audio Player & Video Preview at bottom
-    auto* bottomLayout = new QHBoxLayout();
-    m_audioPlayer = new AudioPlayer(rightWidget);
+    auto* transportBar = new QWidget(rightWidget);
+    transportBar->setObjectName("transportBar");
+    transportBar->setFixedHeight(40);
+    auto* bottomLayout = new QHBoxLayout(transportBar);
+    bottomLayout->setContentsMargins(8, 0, 8, 0);
+    bottomLayout->setSpacing(8);
+    m_audioPlayer = new AudioPlayer(transportBar);
     bottomLayout->addWidget(m_audioPlayer, 1);
 
-    m_previewWidget = new KaraokePreview(rightWidget);
+    m_previewWidget = new KaraokePreview(transportBar);
     m_previewWidget->setFixedSize(320, 180);
     bottomLayout->addWidget(m_previewWidget, 0);
-
-    rightLayout->addLayout(bottomLayout);
+    rightLayout->addWidget(transportBar);
 
     m_mainSplitter->addWidget(rightWidget);
     m_mainSplitter->setSizes({ 300, 900 });
@@ -206,15 +233,7 @@ void PrecisionMode::setupConnections() {
 }
 
 void PrecisionMode::applyTheme() {
-    QString qss = R"(
-        QWidget { background-color: #1e1e1e; color: #d4d4d4; font-size: 13px; }
-        QToolBar { background-color: #252526; border-bottom: 1px solid #111111; padding: 4px; }
-        QPushButton { background-color: #333333; border: 1px solid #555; border-radius: 3px; padding: 5px 10px; color: #ccc; }
-        QPushButton:hover { background-color: #404040; }
-        QPushButton:disabled { color:#555; border-color:#444; }
-        QSplitter::handle { background-color: #111111; margin: 1px; }
-    )";
-    setStyleSheet(qss);
+    // Styling handled by global dark_theme.qss via objectName selectors
 }
 
 void PrecisionMode::syncViewState() {

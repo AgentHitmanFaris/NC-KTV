@@ -8,6 +8,9 @@
 #include <QVBoxLayout>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QListWidget>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include "../../core/config/config_manager.h"
 
 #include "project/project.h"
@@ -42,18 +45,18 @@ private:
     void setupUi();
     void createWelcomePage();
     void createProcessingPage();
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
     QStackedWidget* m_pages;
-    
-    // Page 1: Welcome / Selection (Pro Dashboard)
+
+    // Page 1: Welcome / Selection
     QLineEdit* m_filePathEdit;
     QPushButton* m_startBtn;
     QCheckBox* m_transcribeCheck;
     QComboBox* m_langCombo;
     QComboBox* m_modelCombo = nullptr;
 
-    // Pro Dashboard widgets
-    QLabel* m_heroTitle;
+    // Drop zone widgets
     QWidget* m_dropZone;
     QLabel* m_dropTitle;
     QLabel* m_dropSubtitle;
