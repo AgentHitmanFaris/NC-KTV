@@ -14,12 +14,18 @@ class KaraokePreview : public QWidget {
     Q_OBJECT
 
 public:
+    // Display style: VideoOverlay = lyrics over video (bottom-third),
+    //                CenteredBlack = lyrics centered on black bg (karaoke box style)
+    enum class DisplayMode { VideoOverlay, CenteredBlack };
+
     explicit KaraokePreview(QWidget* parent = nullptr);
 
     // Data Loading
     void loadLyrics(core::LyricsData* data);
     void updateTime(double timeSeconds);
     void setBackgroundImage(const QImage& img);
+    void setDisplayMode(DisplayMode mode);
+    DisplayMode displayMode() const { return m_displayMode; }
 
     // Attach the media player so this widget decodes video frames
     void setMediaPlayer(QMediaPlayer* player);
@@ -37,6 +43,7 @@ private:
     double m_currentTime = 0.0;
     QImage m_backgroundImg;
     QVideoSink* m_videoSink = nullptr;
+    DisplayMode m_displayMode = DisplayMode::VideoOverlay;
 
     // View State
     const int m_targetWidth = 1920;

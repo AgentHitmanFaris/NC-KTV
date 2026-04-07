@@ -41,8 +41,17 @@ class EditorMode : public QWidget {
 public:
     explicit EditorMode(std::shared_ptr<core::Project> project, ConfigManager* config, QWidget* parent = nullptr);
 
-    // Tool mode enum (Task 3.2)
-    enum class ToolMode { Selection, Razor, Slip };
+    // Tool mode enum — matches Premiere Pro tools (excluding Hand, Rate Stretch, Ripple Edit)
+    enum class ToolMode {
+        Selection,      // V — default pointer
+        TrackSelect,    // A — select all clips on track forward
+        RollingEdit,    // N — adjust edit point between two clips
+        Razor,          // C — cut clips
+        Slip,           // Y — slip clip content
+        Slide,          // U — slide clip position
+        Pen,            // P — add keyframes
+        Zoom            // Z — zoom in/out
+    };
 
 signals:
     void requestSave();
@@ -160,6 +169,12 @@ private:
 
     // Source panel timecode overlay
     QLabel* m_sourceTimecodeLabel = nullptr;
+
+    // Display mode toggle button in source panel header
+    QPushButton* m_displayModeBtn = nullptr;
+
+    // Lyrics blocks panel (below timeline, for drag-to-timeline)
+    QWidget* m_lyricsBlocksPanel = nullptr;
 };
 
 } // namespace ncktv

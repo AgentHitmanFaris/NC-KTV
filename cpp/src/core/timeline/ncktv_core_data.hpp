@@ -446,6 +446,45 @@ public:
             }
         } catch (...) {}
     }
+
+    // Intelligently split lines that are too long (> maxWords words) into
+    // multiple shorter lines, distributing timing proportionally.
+    // Preserves existing word-level token timing when available.
+    void splitLongLines(int maxWords = 6) {
+        std::vector<LyricsLine> result;
+        result.reserve(lines.size());
+
+        for (auto& line : lines) {
+            // Ensure tokens are populated
+            if (line.tokens.empty()) line.splitIntoWords();
+
+            if ((int)line.tokens.size() <= maxWords) {
+                result.push_back(std::move(line));
+                continue;
+            }
+
+            // Split tokens into chunks of maxWords
+            int total = (int)line.tokens.size();
+            for (int start = 0; start < total; start += maxWords) {
+                int end = std::min(start + maxWords, total);
+
+                LyricsLine chunk;
+                chunk.start_time = line.tokens[start].start_time;
+                chunk.end_time   = line.tokens[end - 1].end_time;
+
+                std::string chunkText;
+                for (int k = start; k < end; ++k) {
+                    if (k > start) chunkText += ' ';
+                    chunkText += line.tokens[k].text;
+                    chunk.tokens.push_back(line.tokens[k]);
+                }
+                chunk.text = chunkText;
+                result.push_back(std::move(chunk));
+            }
+        }
+
+        lines = std::move(result);
+    }
 };
 
 } // namespace core

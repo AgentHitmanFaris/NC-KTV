@@ -29,6 +29,7 @@
 #include <QTextBlock>
 #include <QTextEdit>
 #include <QFrame>
+#include <QScrollArea>
 #include <QButtonGroup>
 #include "../workers/transcription_worker.h"
 #include "../workers/export_worker.h"
@@ -186,7 +187,7 @@ void EditorMode::setupUi() {
     // ── Task 3.2: Tools Panel (32px fixed width) ─────────────────────────────
     auto* toolsPanel = new QWidget(m_workspaceSplitter);
     toolsPanel->setObjectName("toolsPanel");
-    toolsPanel->setFixedWidth(36);
+    toolsPanel->setFixedWidth(40);
     auto* toolsPanelLayout = new QVBoxLayout(toolsPanel);
     toolsPanelLayout->setContentsMargins(4, 8, 4, 8);
     toolsPanelLayout->setSpacing(4);
@@ -204,23 +205,61 @@ void EditorMode::setupUi() {
         return btn;
     };
 
-    auto* selectionBtn = makeToolBtn("\u25b2", "Selection Tool");
+    auto* selectionBtn = makeToolBtn("\u25b6", "Selection Tool (V)");
     selectionBtn->setChecked(true);
     toolsPanelLayout->addWidget(selectionBtn, 0, Qt::AlignHCenter);
     m_toolBtnGroup->addButton(selectionBtn, static_cast<int>(ToolMode::Selection));
 
-    auto* razorBtn = makeToolBtn("\u2702", "Razor Tool");
+    auto* trackSelectBtn = makeToolBtn("\u21e5", "Track Select Tool (A)");
+    toolsPanelLayout->addWidget(trackSelectBtn, 0, Qt::AlignHCenter);
+    m_toolBtnGroup->addButton(trackSelectBtn, static_cast<int>(ToolMode::TrackSelect));
+
+    auto* rollingEditBtn = makeToolBtn("\u21f9", "Rolling Edit Tool (N)");
+    toolsPanelLayout->addWidget(rollingEditBtn, 0, Qt::AlignHCenter);
+    m_toolBtnGroup->addButton(rollingEditBtn, static_cast<int>(ToolMode::RollingEdit));
+
+    auto* razorBtn = makeToolBtn("\u2702", "Razor Tool (C)");
     toolsPanelLayout->addWidget(razorBtn, 0, Qt::AlignHCenter);
     m_toolBtnGroup->addButton(razorBtn, static_cast<int>(ToolMode::Razor));
 
-    auto* slipBtn = makeToolBtn("\u2194", "Slip Tool");
+    auto* slipBtn = makeToolBtn("\u21d4", "Slip Tool (Y)");
     toolsPanelLayout->addWidget(slipBtn, 0, Qt::AlignHCenter);
     m_toolBtnGroup->addButton(slipBtn, static_cast<int>(ToolMode::Slip));
+
+    auto* slideBtn = makeToolBtn("\u21c6", "Slide Tool (U)");
+    toolsPanelLayout->addWidget(slideBtn, 0, Qt::AlignHCenter);
+    m_toolBtnGroup->addButton(slideBtn, static_cast<int>(ToolMode::Slide));
+
+    auto* penBtn = makeToolBtn("\u270f", "Pen Tool (P)");
+    toolsPanelLayout->addWidget(penBtn, 0, Qt::AlignHCenter);
+    m_toolBtnGroup->addButton(penBtn, static_cast<int>(ToolMode::Pen));
+
+    auto* zoomBtn = makeToolBtn("\u26b2", "Zoom Tool (Z)");
+    toolsPanelLayout->addWidget(zoomBtn, 0, Qt::AlignHCenter);
+    m_toolBtnGroup->addButton(zoomBtn, static_cast<int>(ToolMode::Zoom));
 
     connect(m_toolBtnGroup, &QButtonGroup::idClicked, this, [this](int id) {
         m_activeTool = static_cast<ToolMode>(id);
         emit toolModeChanged(m_activeTool);
     });
+
+    // Keyboard shortcuts for tools
+    auto addToolShortcut = [&](QKeySequence key, ToolMode mode) {
+        auto* sc = new QShortcut(key, this);
+        connect(sc, &QShortcut::activated, this, [this, mode]() {
+            m_activeTool = mode;
+            m_toolBtnGroup->button(static_cast<int>(mode))->setChecked(true);
+            emit toolModeChanged(m_activeTool);
+        });
+    };
+    addToolShortcut(Qt::Key_V, ToolMode::Selection);
+    addToolShortcut(Qt::Key_A, ToolMode::TrackSelect);
+    addToolShortcut(Qt::Key_N, ToolMode::RollingEdit);
+    addToolShortcut(Qt::Key_C, ToolMode::Razor);
+    addToolShortcut(Qt::Key_Y, ToolMode::Slip);
+    addToolShortcut(Qt::Key_U, ToolMode::Slide);
+    addToolShortcut(Qt::Key_P, ToolMode::Pen);
+    addToolShortcut(Qt::Key_Z, ToolMode::Zoom);
 
     m_workspaceSplitter->addWidget(toolsPanel);
 
@@ -234,7 +273,15 @@ void EditorMode::setupUi() {
     auto* sourcePanelLayout = new QVBoxLayout(sourcePanel);
     sourcePanelLayout->setContentsMargins(0, 0, 0, 0);
     sourcePanelLayout->setSpacing(0);
-    sourcePanelLayout->addWidget(makePanelHeader(sourcePanel, "Source Monitor"));
+    // Display mode toggle button
+    m_displayModeBtn = new QPushButton("\u25a3", sourcePanel); // ▣ = video overlay icon
+    m_displayModeBtn->setObjectName("subtitleActionBtn");
+    m_displayModeBtn->setFixedHeight(22);
+    m_displayModeBtn->setFixedWidth(28);
+    m_displayModeBtn->setToolTip("Toggle: Video Overlay / Karaoke Box (black background)");
+    m_displayModeBtn->setCheckable(true);
+
+    sourcePanelLayout->addWidget(makePanelHeader(sourcePanel, "Source Monitor", {m_displayModeBtn}));
 
     auto* sourceContent = new QWidget(sourcePanel);
     sourceContent->setObjectName("monitorContent");
@@ -365,6 +412,53 @@ void EditorMode::setupUi() {
     timelinePanelLayout->addWidget(timelineSplitter, 1);
     timelinePanel->setMinimumHeight(100);
 
+    // ── LYRICS BLOCKS PANEL (below timeline, for drag-to-timeline) ───────────
+    m_lyricsBlocksPanel = new QWidget(this);
+    m_lyricsBlocksPanel->setObjectName("lyricsBlocksPanel");
+    m_lyricsBlocksPanel->setFixedHeight(72);
+    auto* lbpLayout = new QVBoxLayout(m_lyricsBlocksPanel);
+    lbpLayout->setContentsMargins(0, 0, 0, 0);
+    lbpLayout->setSpacing(0);
+
+    // Header
+    auto* lbpHeader = makePanelHeader(m_lyricsBlocksPanel, "Lyrics Blocks  —  drag to timeline");
+    lbpLayout->addWidget(lbpHeader);
+
+    // Scrollable row of lyric blocks
+    auto* lbpScroll = new QScrollArea(m_lyricsBlocksPanel);
+    lbpScroll->setObjectName("lyricsBlocksScroll");
+    lbpScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    lbpScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    lbpScroll->setWidgetResizable(true);
+    lbpScroll->setFixedHeight(44);
+
+    auto* lbpContent = new QWidget();
+    lbpContent->setObjectName("lyricsBlocksContent");
+    auto* lbpContentLayout = new QHBoxLayout(lbpContent);
+    lbpContentLayout->setContentsMargins(4, 2, 4, 2);
+    lbpContentLayout->setSpacing(4);
+    lbpContentLayout->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    // Populate blocks from project lyrics
+    if (m_project) {
+        for (int i = 0; i < (int)m_project->lyrics.lines.size(); ++i) {
+            const auto& line = m_project->lyrics.lines[i];
+            auto* block = new QPushButton(QString::fromStdString(line.text), lbpContent);
+            block->setObjectName("lyricsBlock");
+            block->setFixedHeight(28);
+            block->setToolTip(QString("Line %1 — drag to timeline or click to seek").arg(i + 1));
+            // Click to seek to this line's start time
+            connect(block, &QPushButton::clicked, this, [this, i]() {
+                if (i < (int)m_project->lyrics.lines.size())
+                    m_audioPlayer->seek(m_project->lyrics.lines[i].start_time);
+            });
+            lbpContentLayout->addWidget(block);
+        }
+    }
+    lbpContentLayout->addStretch();
+    lbpScroll->setWidget(lbpContent);
+    lbpLayout->addWidget(lbpScroll);
+
     // ── VIEW STACK: wraps workspace + timeline so tabs can switch content ─────
     // Page 0: Timing Sync (workspace panels + timeline)
     m_timingView = new QWidget(this);
@@ -373,6 +467,7 @@ void EditorMode::setupUi() {
     timingViewLayout->setSpacing(0);
     timingViewLayout->addWidget(m_workspaceSplitter, 1);
     timingViewLayout->addWidget(timelinePanel);
+    timingViewLayout->addWidget(m_lyricsBlocksPanel);
 
     // Page 1: Lyrics Editor
     m_lyricsView = new QWidget(this);
@@ -439,16 +534,23 @@ void EditorMode::setupUi() {
     tLay->setContentsMargins(16, 0, 16, 0);
     tLay->setSpacing(8);
 
-    auto makeTransportBtn = [&](const QString& text) {
+    auto makeTransportBtn = [&](const QString& text, const QString& tip) {
         auto* btn = new QPushButton(text, m_transportBar);
         btn->setObjectName("transportBtn");
+        btn->setToolTip(tip);
+        btn->setFixedSize(28, 28);
         return btn;
     };
-    tLay->addWidget(makeTransportBtn("\u23ee")); // ⏮
-    tLay->addWidget(makeTransportBtn("\u25c4")); // ◄
-    tLay->addWidget(makeTransportBtn("\u25ba")); // ►
-    tLay->addWidget(makeTransportBtn("\u25ba")); // ►
-    tLay->addWidget(makeTransportBtn("\u23ed")); // ⏭
+
+    auto* goToInBtn    = makeTransportBtn("\u23ee", "Go to In Point");
+    auto* stepBackBtn  = makeTransportBtn("\u23ea", "Step Back (1 frame)");
+    auto* stepFwdBtn   = makeTransportBtn("\u23e9", "Step Forward (1 frame)");
+    auto* goToOutBtn   = makeTransportBtn("\u23ed", "Go to Out Point");
+
+    tLay->addWidget(goToInBtn);
+    tLay->addWidget(stepBackBtn);
+    tLay->addWidget(stepFwdBtn);
+    tLay->addWidget(goToOutBtn);
 
     auto* playBtn = new QPushButton("\u25b6", m_transportBar); // ▶
     playBtn->setObjectName("playBtn");
@@ -511,6 +613,16 @@ void EditorMode::setupUi() {
     });
 
     connect(m_trackSelector, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &EditorMode::onTrackSelectionChanged);
+
+    // Display mode toggle
+    connect(m_displayModeBtn, &QPushButton::toggled, this, [this](bool checked) {
+        auto mode = checked ? KaraokePreview::DisplayMode::CenteredBlack
+                            : KaraokePreview::DisplayMode::VideoOverlay;
+        m_previewWidget->setDisplayMode(mode);
+        m_displayModeBtn->setText(checked ? "\u25a0" : "\u25a3"); // ■ / ▣
+        m_displayModeBtn->setToolTip(checked ? "Mode: Karaoke Box (click for Video Overlay)"
+                                             : "Mode: Video Overlay (click for Karaoke Box)");
+    });
 
     // ── Source Lyrics inline editing ──────────────────────────────────────────
     connect(m_sourceLyricsEdit, &QPlainTextEdit::textChanged, this, [this]() {
@@ -583,6 +695,22 @@ void EditorMode::setupUi() {
     connect(m_audioPlayer->player(), &QMediaPlayer::playbackStateChanged, this, [playBtn](QMediaPlayer::PlaybackState state){
         playBtn->setText(state == QMediaPlayer::PlayingState ? "\u23f8" : "\u25b6");
     });
+
+    // Transport navigation buttons
+    connect(goToInBtn, &QPushButton::clicked, this, [this]{ m_audioPlayer->seek(0.0); });
+    connect(goToOutBtn, &QPushButton::clicked, this, [this]{
+        double dur = m_audioPlayer->player()->duration() / 1000.0;
+        m_audioPlayer->seek(dur);
+    });
+    connect(stepBackBtn, &QPushButton::clicked, this, [this]{
+        double t = std::max(0.0, m_currentTime - (1.0 / 30.0));
+        m_audioPlayer->seek(t);
+    });
+    connect(stepFwdBtn, &QPushButton::clicked, this, [this]{
+        double dur = m_audioPlayer->player()->duration() / 1000.0;
+        double t = std::min(dur, m_currentTime + (1.0 / 30.0));
+        m_audioPlayer->seek(t);
+    });
 }
 
 void EditorMode::setupToolBar() {
@@ -621,8 +749,20 @@ void EditorMode::setupConnections() {
     });
     connect(m_addSubtitleBtn, &QPushButton::clicked, this, &EditorMode::onAddSubtitleClicked);
     connect(m_splitTokensBtn, &QPushButton::clicked, this, [this]() {
-        int row = m_syncTable->currentRow(); if (row < 0 || !m_project) { QMessageBox::information(this, "Selection Required", "Please select a line to split."); return; }
-        int idx = m_syncTable->item(row, 3)->data(Qt::UserRole + 1).toInt(); m_project->lyrics.lines[idx].splitIntoWords(); updateSubtitleList();
+        if (!m_project) return;
+        int row = m_syncTable->currentRow();
+        if (row >= 0) {
+            // Single line: split words + split long lines
+            int idx = m_syncTable->item(row, 3)->data(Qt::UserRole + 1).toInt();
+            m_project->lyrics.lines[idx].splitIntoWords();
+        } else {
+            // No selection: apply to all lines — split words + split long lines
+            for (auto& line : m_project->lyrics.lines)
+                line.splitIntoWords();
+            m_project->lyrics.splitLongLines(6);
+        }
+        updateSubtitleList();
+        emit unsavedChangesChanged(true);
     });
     m_syncTable->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_syncTable, &QTableWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
@@ -771,6 +911,34 @@ void EditorMode::updateSubtitleList() {
 
     m_previewWidget->loadLyrics(&m_project->lyrics); 
     m_timelineWidget->loadLyrics(&m_project->lyrics);
+
+    // Refresh lyrics blocks panel
+    if (m_lyricsBlocksPanel) {
+        auto* scroll = m_lyricsBlocksPanel->findChild<QScrollArea*>("lyricsBlocksScroll");
+        if (scroll) {
+            auto* content = new QWidget();
+            content->setObjectName("lyricsBlocksContent");
+            auto* lay = new QHBoxLayout(content);
+            lay->setContentsMargins(4, 2, 4, 2);
+            lay->setSpacing(4);
+            lay->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            for (int i = 0; i < (int)lines.size(); ++i) {
+                const auto& line = lines[i];
+                auto* block = new QPushButton(QString::fromStdString(line.text), content);
+                block->setObjectName("lyricsBlock");
+                block->setFixedHeight(28);
+                block->setToolTip(QString("Line %1 — click to seek to %2")
+                    .arg(i + 1).arg(formatTimeMMSS(line.start_time)));
+                connect(block, &QPushButton::clicked, this, [this, i]() {
+                    if (i < (int)m_project->lyrics.lines.size())
+                        m_audioPlayer->seek(m_project->lyrics.lines[i].start_time);
+                });
+                lay->addWidget(block);
+            }
+            lay->addStretch();
+            scroll->setWidget(content);
+        }
+    }
 }
 void EditorMode::onTrackSelectionChanged(int index) {
     if (!m_project) return;
@@ -850,6 +1018,7 @@ void EditorMode::onAutoWhisperClicked() {
     connect(worker, &TranscriptionWorker::transcriptionComplete, this, [this, overlay](const QString& res){
         overlay->deleteLater();
         m_project->lyrics.importFromWhisperJson(res.toStdString());
+        m_project->lyrics.splitLongLines(6); // intelligently split lines > 6 words
         updateSubtitleList();
         emit unsavedChangesChanged(true);
     });
@@ -871,6 +1040,7 @@ void EditorMode::onImportSubtitleClicked() {
         if (f.open(QIODevice::ReadOnly)) {
             QString c = QString::fromUtf8(f.readAll());
             m_project->lyrics.importFromWhisperJson(c.toStdString());
+            m_project->lyrics.splitLongLines(6);
         }
     } else {
         // Use Unified Subtitle Parser for LRC, SRT, ASS, etc.
