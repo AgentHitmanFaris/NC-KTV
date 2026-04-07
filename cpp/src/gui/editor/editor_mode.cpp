@@ -736,11 +736,10 @@ void EditorMode::setupConnections() {
         if (!m_project || lineIdx < 0 || lineIdx >= (int)m_project->lyrics.lines.size()) return;
         auto& line = m_project->lyrics.lines[lineIdx];
         double dur = line.end_time - line.start_time;
+        float oldStart = line.tokens.empty() ? line.start_time : line.tokens.front().start_time;
         line.start_time = static_cast<float>(dropTime);
         line.end_time   = static_cast<float>(dropTime + dur);
-        // Shift tokens by the same delta
-        float delta = line.start_time - line.tokens.empty() ? 0.f :
-                      (line.start_time - line.tokens.front().start_time);
+        float delta = line.start_time - oldStart;
         for (auto& tok : line.tokens) {
             tok.start_time += delta;
             tok.end_time   += delta;

@@ -508,9 +508,6 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
     }
 }
 
-} // namespace ncktv
-
-
 void TimelineWidget::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasFormat("application/x-ncktv-lyric-index")) {
         event->acceptProposedAction();
