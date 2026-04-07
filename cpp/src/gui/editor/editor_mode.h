@@ -26,6 +26,9 @@
 #include "../components/lyrical_pro_widget.h"
 #include <QListWidget>
 #include <memory>
+#include <QPoint>
+#include <QDrag>
+#include <QMimeData>
 
 #include "../dialogs/export_dialog.h"
 #include "../workers/export_worker.h"
@@ -83,6 +86,9 @@ private slots:
 public slots:
     void onExportClicked();
     void onExportSettingsClicked();
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
     void setupUi();
@@ -175,6 +181,9 @@ private:
 
     // Lyrics blocks panel (below timeline, for drag-to-timeline)
     QWidget* m_lyricsBlocksPanel = nullptr;
+
+    // Drag tracking for lyric blocks
+    QPoint m_dragStartPos;
 };
 
 } // namespace ncktv

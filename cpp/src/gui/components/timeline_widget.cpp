@@ -9,7 +9,8 @@ TimelineWidget::TimelineWidget(QWidget* parent)
     : QWidget(parent)
 {
     setMinimumHeight(150);
-    setMouseTracking(true); // For hover effects if needed
+    setMouseTracking(true);
+    setAcceptDrops(true); // accept lyric block drops
 }
 
 void TimelineWidget::loadTimeline(core::TimelineData* data) {
@@ -65,6 +66,17 @@ void TimelineWidget::paintEvent(QPaintEvent* /*event*/) {
     }
     
     drawPlayhead(painter);
+
+    // Drop preview indicator
+    if (m_dropPreviewTime >= 0.0) {
+        double x = (m_dropPreviewTime * m_pixelsPerSecond) - m_scrollOffsetX;
+        painter.setPen(QPen(QColor("#00ff88"), 2, Qt::DashLine));
+        painter.drawLine(static_cast<int>(x), 0, static_cast<int>(x), height());
+        // Label
+        painter.setPen(QColor("#00ff88"));
+        painter.setFont(QFont("Segoe UI", 8));
+        painter.drawText(static_cast<int>(x) + 4, m_rulerHeight + 14, "Drop here");
+    }
 }
 
 void TimelineWidget::drawRuler(QPainter& painter) {
@@ -498,3 +510,37 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
 
 } // namespace ncktv
 
+
+void TimelineWidget::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-ncktv-lyric-index")) {
+        event->acceptProposedAction();
+        m_dropPreviewTime = (event->position().x() + m_scrollOffsetX) / m_pixelsPerSecond;
+        update();
+    }
+}
+
+void TimelineWidget::dragMoveEvent(QDragMoveEvent* event) {
+    if (event->mimeData()->hasFormat("application/x-ncktv-lyric-index")) {
+        event->acceptProposedAction();
+        m_dropPreviewTime = (event->position().x() + m_scrollOffsetX) / m_pixelsPerSecond;
+        update();
+    }
+}
+
+void TimelineWidget::dropEvent(QDropEvent* event) {
+    if (!event->mimeData()->hasFormat("application/x-ncktv-lyric-index")) return;
+    bool ok = false;
+    int lineIdx = event->mimeData()->data("application/x-ncktv-lyric-index").toInt(&ok);
+    if (!ok) return;
+
+    double dropTime = (event->position().x() + m_scrollOffsetX) / m_pixelsPerSecond;
+    dropTime = std::max(0.0, dropTime);
+
+    m_dropPreviewTime = -1.0;
+    event->acceptProposedAction();
+    update();
+
+    emit lyricDropped(lineIdx, dropTime);
+}
+
+} // namespace ncktv

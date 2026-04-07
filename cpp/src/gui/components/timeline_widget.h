@@ -5,6 +5,10 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QContextMenuEvent>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QMenu>
 #include <QCursor>
 
@@ -19,17 +23,18 @@ public:
     explicit TimelineWidget(QWidget* parent = nullptr);
 
     void loadTimeline(core::TimelineData* data);
-    void loadLyrics(core::LyricsData* data);   // for the subtitle track row
+    void loadLyrics(core::LyricsData* data);
     void updateCursor(double timeSeconds);
     void setPixelsPerSecond(double pps);
 
 signals:
     void seekRequested(double timeSeconds);
     void clipSelected(const QString& clipId);
-    // Subtitle editing signals
     void subtitleMoved(int lineIndex, double newStartTime, double newEndTime);
     void subtitleDeleted(int lineIndex);
     void subtitleDoubleClicked(int lineIndex);
+    // Emitted when a lyrics block is dropped onto the timeline
+    void lyricDropped(int lineIndex, double dropTimeSeconds);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -41,21 +46,25 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
     void leaveEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     void drawPlayhead(QPainter& painter);
     void drawTracks(QPainter& painter);
     void drawRuler(QPainter& painter);
-    bool inSubtitleTrack(int y) const;  // true if y is within the subtitle track row
+    bool inSubtitleTrack(int y) const;
 
     core::TimelineData* m_data = nullptr;
     core::LyricsData*   m_lyricsData = nullptr;
-    
+
     // View state
     double m_pixelsPerSecond = 100.0;
     double m_scrollOffsetX = 0.0;
     double m_currentTime = 0.0;
     double m_hoverTime = -1.0;
+    double m_dropPreviewTime = -1.0; // shows drop position indicator
     
     // Subtitle drag state
     int    m_draggingSubIdx  = -1;  // index of line being dragged (-1 = none)

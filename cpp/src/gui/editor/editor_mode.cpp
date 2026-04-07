@@ -411,11 +411,12 @@ void EditorMode::setupUi() {
 
     timelinePanelLayout->addWidget(timelineSplitter, 1);
     timelinePanel->setMinimumHeight(100);
+    timelinePanel->setMaximumHeight(180); // prevent expanding and pushing lyrics blocks away
 
     // ── LYRICS BLOCKS PANEL (below timeline, for drag-to-timeline) ───────────
     m_lyricsBlocksPanel = new QWidget(this);
     m_lyricsBlocksPanel->setObjectName("lyricsBlocksPanel");
-    m_lyricsBlocksPanel->setFixedHeight(72);
+    m_lyricsBlocksPanel->setFixedHeight(64);
     auto* lbpLayout = new QVBoxLayout(m_lyricsBlocksPanel);
     lbpLayout->setContentsMargins(0, 0, 0, 0);
     lbpLayout->setSpacing(0);
@@ -430,7 +431,7 @@ void EditorMode::setupUi() {
     lbpScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     lbpScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     lbpScroll->setWidgetResizable(true);
-    lbpScroll->setFixedHeight(44);
+    lbpScroll->setFixedHeight(36);
 
     auto* lbpContent = new QWidget();
     lbpContent->setObjectName("lyricsBlocksContent");
@@ -634,8 +635,8 @@ void EditorMode::setupUi() {
             m_project->lyrics.lines.push_back(ln);
         }
         for (int i = 0; i < newLines.size(); ++i) {
+            // Only update text — never re-split tokens here, that destroys timing
             m_project->lyrics.lines[i].text = newLines[i].trimmed().toStdString();
-            m_project->lyrics.lines[i].splitIntoWords();
         }
         if ((int)m_project->lyrics.lines.size() > newLines.size())
             m_project->lyrics.lines.resize(newLines.size());
@@ -729,6 +730,24 @@ void EditorMode::setupConnections() {
     connect(m_audioPlayer, &AudioPlayer::durationChanged, this, [this](double duration) { m_waveformWidget->setDuration(duration); });
     connect(m_waveformWidget, &WaveformWidget::seekRequested, m_audioPlayer, &AudioPlayer::seek);
     connect(m_timelineWidget, &TimelineWidget::seekRequested, m_audioPlayer, &AudioPlayer::seek);
+
+    // Lyric block dropped onto timeline — move that line's start time
+    connect(m_timelineWidget, &TimelineWidget::lyricDropped, this, [this](int lineIdx, double dropTime) {
+        if (!m_project || lineIdx < 0 || lineIdx >= (int)m_project->lyrics.lines.size()) return;
+        auto& line = m_project->lyrics.lines[lineIdx];
+        double dur = line.end_time - line.start_time;
+        line.start_time = static_cast<float>(dropTime);
+        line.end_time   = static_cast<float>(dropTime + dur);
+        // Shift tokens by the same delta
+        float delta = line.start_time - line.tokens.empty() ? 0.f :
+                      (line.start_time - line.tokens.front().start_time);
+        for (auto& tok : line.tokens) {
+            tok.start_time += delta;
+            tok.end_time   += delta;
+        }
+        updateSubtitleList();
+        emit unsavedChangesChanged(true);
+    });
     connect(m_syncTable, &QTableWidget::itemClicked, this, [this](QTableWidgetItem* item) {
         if (item->column() <= 1) {
             int row = item->row(); auto* startItem = m_syncTable->item(row, 1); if (startItem) { double t = startItem->data(Qt::UserRole).toDouble(); m_audioPlayer->seek(t); }
@@ -739,7 +758,7 @@ void EditorMode::setupConnections() {
         int row = item->row(); int idx = item->data(Qt::UserRole + 1).toInt();
         if (idx < 0 || idx >= (int)m_project->lyrics.lines.size()) return;
         bool modified = false; QString text = item->text().trimmed();
-        if (item->column() == 3) { if (!text.isEmpty()) { m_project->lyrics.lines[idx].text = text.toStdString(); m_project->lyrics.lines[idx].splitIntoWords(); modified = true; } }
+        if (item->column() == 3) { if (!text.isEmpty()) { m_project->lyrics.lines[idx].text = text.toStdString(); modified = true; } }
         else if (item->column() == 1 || item->column() == 2) {
             double val = 0.0; if (text.contains(":")) { auto parts = text.split(":"); if (parts.size() >= 2) val = parts[0].toInt() * 60.0 + parts[1].toDouble(); } else val = text.toDouble();
             if (item->column() == 1) m_project->lyrics.lines[idx].start_time = val; else m_project->lyrics.lines[idx].end_time = val;
@@ -791,6 +810,38 @@ void EditorMode::setupConnections() {
         });
         menu.exec(m_syncTable->mapToGlobal(pos));
     });
+}
+
+bool EditorMode::eventFilter(QObject* obj, QEvent* event) {
+    // Handle drag initiation from lyric block buttons
+    auto* btn = qobject_cast<QPushButton*>(obj);
+    if (btn && btn->objectName() == "lyricsBlock") {
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto* me = static_cast<QMouseEvent*>(event);
+            if (me->button() == Qt::LeftButton)
+                m_dragStartPos = me->pos();
+        } else if (event->type() == QEvent::MouseMove) {
+            auto* me = static_cast<QMouseEvent*>(event);
+            if ((me->buttons() & Qt::LeftButton) &&
+                (me->pos() - m_dragStartPos).manhattanLength() > 8) {
+                int lineIdx = btn->property("lyricIndex").toInt();
+                auto* drag = new QDrag(btn);
+                auto* mime = new QMimeData();
+                mime->setData("application/x-ncktv-lyric-index",
+                              QByteArray::number(lineIdx));
+                mime->setText(btn->text());
+                drag->setMimeData(mime);
+                // Simple pixmap label
+                QPixmap px(btn->size());
+                btn->render(&px);
+                drag->setPixmap(px);
+                drag->setHotSpot(me->pos());
+                drag->exec(Qt::MoveAction);
+                return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 void EditorMode::applyTheme() {
@@ -927,12 +978,15 @@ void EditorMode::updateSubtitleList() {
                 auto* block = new QPushButton(QString::fromStdString(line.text), content);
                 block->setObjectName("lyricsBlock");
                 block->setFixedHeight(28);
-                block->setToolTip(QString("Line %1 — click to seek to %2")
-                    .arg(i + 1).arg(formatTimeMMSS(line.start_time)));
+                block->setToolTip(QString("Line %1 — click to seek, drag to timeline").arg(i + 1));
+                // Click to seek
                 connect(block, &QPushButton::clicked, this, [this, i]() {
                     if (i < (int)m_project->lyrics.lines.size())
                         m_audioPlayer->seek(m_project->lyrics.lines[i].start_time);
                 });
+                // Drag to timeline
+                block->installEventFilter(this);
+                block->setProperty("lyricIndex", i);
                 lay->addWidget(block);
             }
             lay->addStretch();
