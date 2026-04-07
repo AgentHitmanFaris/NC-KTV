@@ -2,7 +2,7 @@
 
 <img src="assets/logo.png" alt="NC-KTV Logo" width="180"/>
 
-# NC-KTV (C++ Edition) v1.3.2
+# NC-KTV (C++ Edition) v1.3.4
 
 **Next-Generation Professional Music Video Karaoke Maker**
 

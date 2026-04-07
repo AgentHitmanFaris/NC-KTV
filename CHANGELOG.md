@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.4] - 2026-04-07
+
+### Added
+- **Lyrics Display Mode Toggle**: `KaraokePreview` now supports two display modes toggled via a `▣` button in the Source Monitor header:
+  - `VideoOverlay` — lyrics rendered over the video, bottom-third anchored, 60pt font, 2 lines
+  - `CenteredBlack` — pure black background, vertically centered, 72pt font, up to 4 lines
+- **HD Preview Rendering**: `SmoothPixmapTransform` and `TextAntialiasing` hints enabled on the karaoke preview painter — no more pixelated text.
+- **Tools Panel — 8 Tools**: Expanded from 3 to 8 tools matching Premiere Pro, all with keyboard shortcuts:
+  - Selection (V), Track Select (A), Rolling Edit (N), Razor (C), Slip (Y), Slide (U), Pen (P), Zoom (Z)
+- **Lyrics Blocks Panel**: New 64px panel directly below the timeline showing all lyric lines as clickable/draggable blocks. Click to seek; drag onto the timeline to reposition a line's timing.
+- **Drag-to-Timeline**: Lyric blocks use `QDrag` with MIME type `application/x-ncktv-lyric-index`. The `TimelineWidget` accepts drops and shows a green dashed preview line. On drop, the line's start/end time and all word tokens are shifted by the delta.
+- **Intelligent Line Splitting**: `LyricsData::splitLongLines(maxWords)` splits lines with more than N words into shorter chunks while preserving word-level token timing. Applied automatically after Whisper transcription and JSON import (default: 6 words per line).
+
+### Fixed
+- **Lyrics Timing Preserved on Edit**: Editing lyric text in the Lyrics Editor or Captions table no longer calls `splitIntoWords()`, which was re-distributing token timing from scratch on every keystroke. Text edits now only update the `.text` field; `splitIntoWords()` is only called explicitly via the AI Sync button.
+- **Timeline Gap Removed**: The `timelinePanel` now has a `maxHeight` of 180px, preventing it from expanding and pushing the Lyrics Blocks Panel off-screen.
+- **Transport Bar Buttons**: All 4 navigation buttons now have correct actions and tooltips — Go to In (⏮), Step Back 1 frame (⏪), Step Forward 1 frame (⏩), Go to Out (⏭).
+
+### Changed
+- **AI Sync Button**: With no row selected, now splits all lines intelligently (word-split + long-line split). With a row selected, splits only that line.
+
+---
+
 ## [1.3.3] - 2026-04-07
 
 ### Changed

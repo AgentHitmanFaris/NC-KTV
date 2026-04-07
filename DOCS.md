@@ -1,6 +1,6 @@
 # NC-KTV Technical Documentation (C++ Architecture)
 
-**Version:** 1.3.2 (Robust AI Bridge + FFmpeg Path Overhaul)
+**Version:** 1.3.4 (Lyrics Display Modes + Tools Panel + Drag-to-Timeline)
 **Last Updated:** April 7, 2026
 
 Comprehensive technical documentation covering the internal architecture, memory models, hardware-accelerated rendering logic, and Windows executable resource management.
@@ -64,10 +64,12 @@ Located in `src/gui/`, the UI utilizes Qt's `QWidget` event loops for complex ti
 ### The Editor Workspace (`EditorMode`):
 Constructed entirely using nested `QSplitter` layouts, allowing robust resizing:
 - **`AudioPlayer`**: Controls global playback state and implements hardware `QTimer` invalidations (refreshing at ~60Hz) specifically designed to circumvent asynchronous lag inherent to native `QMediaPlayer::seek` methodologies.
+- **`KaraokePreview`**: Renders lyrics over video or on a pure black background. Two display modes — `VideoOverlay` (bottom-third, 60pt, 2 lines) and `CenteredBlack` (centered, 72pt, up to 4 lines) — toggled via a button in the Source Monitor panel header. HD rendering via `SmoothPixmapTransform` + `TextAntialiasing`.
 - **`PrecisionMode` & `WordCanvas`**: A complete vertical cascading UI mirroring traditional Karaoke Builder Studio workflows. Employs a fixed left-aligned Y-axis waveform, enabling syllable blocks to be dragged vertically independently without interfering with standard X-axis track data.
-- **`TimelineWidget`**: Responsible for the top-level horizontal composition view of multitracked clips. Tracks deep word-level metrics natively from Whisper outputs, supporting granular drag-and-drop structural updates. Render operations are strictly debounced utilizing a >= 1.0 pixel threshold to radically lower `update()` saturation.
-- **`WaveformWidget`**: Employs Level-of-Detail (LOD) downsampling; waveforms are generated dynamically using pixel-bucketing algorithms tracking the min/max variance inside a static screen column. This compresses potentially millions of PCM samples into single vector bounds per frame line, yielding instantaneous scrolling logic.
-- **`KaraokePreview`**: A robust layout container rendering real-time representations of the `.ass` generator output atop a video background.
+- **`TimelineWidget`**: Responsible for the top-level horizontal composition view of multitracked clips. Accepts drag-and-drop of lyric blocks from the Lyrics Blocks Panel (MIME type `application/x-ncktv-lyric-index`), showing a green dashed drop preview and emitting `lyricDropped(lineIdx, time)` on release. Render operations are strictly debounced utilizing a >= 1.0 pixel threshold to radically lower `update()` saturation.
+- **`WaveformWidget`**: Employs Level-of-Detail (LOD) downsampling; waveforms are generated dynamically using pixel-bucketing algorithms tracking the min/max variance inside a static screen column.
+- **Lyrics Blocks Panel**: A 64px scrollable strip below the timeline showing all lyric lines as draggable `QPushButton` blocks. Click to seek; drag to timeline to reposition timing.
+- **Tools Panel**: 8 tools matching Premiere Pro — Selection (V), Track Select (A), Rolling Edit (N), Razor (C), Slip (Y), Slide (U), Pen (P), Zoom (Z) — all with keyboard shortcuts and `QButtonGroup` mutual exclusion.
 
 To prevent signal-flooding, UI interactions are debounced leveraging `QTimer::singleShot` proxies before committing large block mutations to `UndoManager`.
 
