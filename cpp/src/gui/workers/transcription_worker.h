@@ -53,7 +53,7 @@ signals:
 
 private:
     /// Shared process launcher used by both transcription and alignment
-    void launchPythonBridge(const QStringList& args, const QString& engineLabel);
+    void launchPythonBridge(const QString& executable, const QStringList& args, const QString& engineLabel);
 
     /// Helper used when the native engine path is active (MSVC build)
     QString serializeSegmentsToJson(const std::vector<ai::TranscribedSegment>& segments);

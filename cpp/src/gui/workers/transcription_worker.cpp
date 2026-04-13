@@ -44,12 +44,25 @@ static QString findPython() {
     return "python";
 }
 
-// Helper to find the python_bridge.py script
-static QString findBridge() {
-    QString bridgePath = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/python_bridge.py");
-    if (QFile::exists(bridgePath)) return bridgePath;
-    bridgePath = QDir::current().filePath("python_bridge.py");
-    return bridgePath;
+// Returns {executable, args_prefix} for the bridge.
+// In portable builds the PyInstaller bundle is used directly (no python interpreter needed).
+// In dev builds the .py script is run via the python interpreter.
+static std::pair<QString, QStringList> findBridge() {
+    QString appDir = QCoreApplication::applicationDirPath();
+
+    // 1. PyInstaller portable bundle (highest priority)
+    QString bundleExe = QDir::cleanPath(appDir + "/python_bridge/python_bridge.exe");
+    if (QFile::exists(bundleExe))
+        return {bundleExe, {}};
+
+    // 2. .py script next to the executable (dev / loose layout)
+    QString pyScript = QDir::cleanPath(appDir + "/python_bridge.py");
+    if (QFile::exists(pyScript))
+        return {findPython(), {pyScript}};
+
+    // 3. .py script in the working directory
+    pyScript = QDir::current().filePath("python_bridge.py");
+    return {findPython(), {pyScript}};
 }
 
 // Helper to set up process environment with FFmpeg in PATH
@@ -78,21 +91,22 @@ void TranscriptionWorker::startTranscription(const QString& audioPath,
                                                TranscriptionEngine engine)
 {
     QString engineLabel;
-    QStringList args;
-    
+    auto [bridgeExe, bridgePrefix] = findBridge();
+    QStringList args = bridgePrefix;
+
     if (engine == TranscriptionEngine::WhisperX) {
         engineLabel = "WhisperX";
-        args = {findBridge(), "transcribe-x", audioPath, "--model", model};
+        args << "transcribe-x" << audioPath << "--model" << model;
     } else {
         engineLabel = "Whisper";
-        args = {findBridge(), "transcribe", audioPath, "--model", model};
+        args << "transcribe" << audioPath << "--model" << model;
     }
 
     if (language != "auto" && !language.isEmpty()) {
         args << "--lang" << language;
     }
 
-    launchPythonBridge(args, engineLabel);
+    launchPythonBridge(bridgeExe, args, engineLabel);
 }
 
 void TranscriptionWorker::startAlignment(const QString& audioPath,
@@ -109,20 +123,19 @@ void TranscriptionWorker::startAlignment(const QString& audioPath,
     tmpFile->flush();
     QString tmpPath = tmpFile->fileName();
 
-    QStringList args = {findBridge(), "align", audioPath,
-                        "--lyrics", tmpPath,
-                        "--lang", language};
+    auto [bridgeExe2, bridgePrefix2] = findBridge();
+    QStringList args = bridgePrefix2;
+    args << "align" << audioPath << "--lyrics" << tmpPath << "--lang" << language;
 
-    launchPythonBridge(args, "WhisperX Alignment");
+    launchPythonBridge(bridgeExe2, args, "WhisperX Alignment");
 
     // tmpFile will be cleaned up when this worker is deleted
 }
 
-void TranscriptionWorker::launchPythonBridge(const QStringList& args, const QString& engineLabel)
+void TranscriptionWorker::launchPythonBridge(const QString& executable, const QStringList& args, const QString& engineLabel)
 {
     emit progressUpdated(QString("Initializing %1 (Python bridge)...").arg(engineLabel));
 
-    QString pythonPath = findPython();
     QProcess* proc = new QProcess(this);
 
     // Accumulate stdout/stderr for the final JSON
@@ -168,10 +181,10 @@ void TranscriptionWorker::launchPythonBridge(const QStringList& args, const QStr
         proc->deleteLater();
     });
 
-    qDebug() << "TranscriptionWorker: launching" << engineLabel << pythonPath << args.join(" ");
+    qDebug() << "TranscriptionWorker: launching" << engineLabel << executable << args.join(" ");
     
     proc->setProcessEnvironment(buildEnv());
-    proc->start(pythonPath, args);
+    proc->start(executable, args);
 }
 
 QString TranscriptionWorker::serializeSegmentsToJson(

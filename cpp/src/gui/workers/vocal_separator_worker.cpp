@@ -215,12 +215,21 @@ void VocalSeparatorWorker::startSeparation(const QString& audioPath,
 
     emit progress(10, "Initializing Python bridge for separation...");
 
-    QString pythonPath = findPython();
-    QString bridgePath = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/python_bridge.py");
-    // Fallback to current dir if not in app dir (for dev)
-    if (!QFile::exists(bridgePath)) {
-        bridgePath = QDir::current().filePath("python_bridge.py");
+    // Resolve bridge: prefer PyInstaller bundle, fall back to .py script
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString bridgeExe = QDir::cleanPath(appDir + "/python_bridge/python_bridge.exe");
+    QString executable;
+    QStringList args;
+    if (QFile::exists(bridgeExe)) {
+        executable = bridgeExe;
+    } else {
+        executable = findPython();
+        QString pyScript = QDir::cleanPath(appDir + "/python_bridge.py");
+        if (!QFile::exists(pyScript))
+            pyScript = QDir::current().filePath("python_bridge.py");
+        args << pyScript;
     }
+    args << "separate" << inputPath << modelName << outputDir;
     QProcess* proc = new QProcess(this);
 
     // Ensure output directory exists
@@ -324,10 +333,8 @@ void VocalSeparatorWorker::startSeparation(const QString& audioPath,
         proc->deleteLater();
     });
 
-    // Arguments: python_bridge.py separate <file> <model> <outdir>
-    QStringList args = {bridgePath, "separate", inputPath, modelName, outputDir};
-
-    qDebug() << "VocalSeparatorWorker: launching" << pythonPath << args.join(" ");
+    // Arguments: separate <file> <model> <outdir> — already built above
+    qDebug() << "VocalSeparatorWorker: launching" << executable << args.join(" ");
     
     // Add bundled FFmpeg to PATH so audio-separator can find it
     auto env = QProcessEnvironment::systemEnvironment();
@@ -339,7 +346,7 @@ void VocalSeparatorWorker::startSeparation(const QString& audioPath,
     }
     proc->setProcessEnvironment(env);
     
-    proc->start(pythonPath, args);
+    proc->start(executable, args);
 }
 
 } // namespace ncktv

@@ -128,3 +128,10 @@ build_pyinstaller_work/
 ui_pro_prototype/
 *.lnk
 debug.log
+
+# Local build artifacts
+bin/
+qt/
+share/
+config.ini
+
