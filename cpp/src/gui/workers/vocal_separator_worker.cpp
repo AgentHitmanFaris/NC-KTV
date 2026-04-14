@@ -330,6 +330,7 @@ void VocalSeparatorWorker::startSeparation(const QString& audioPath,
 
         delete fullStdOut;
         delete fullStdErr;
+        emit finished();
         proc->deleteLater();
     });
 

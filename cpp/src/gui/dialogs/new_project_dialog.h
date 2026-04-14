@@ -5,11 +5,10 @@
  */
 
 #include <QDialog>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QLabel>
-#include <QComboBox>
-#include <QCheckBox>
+
+QT_BEGIN_NAMESPACE
+namespace Ui { class NewProjectDialog; }
+QT_END_NAMESPACE
 
 namespace ncktv {
 
@@ -18,6 +17,7 @@ class NewProjectDialog : public QDialog {
 
 public:
     explicit NewProjectDialog(QWidget* parent = nullptr);
+    ~NewProjectDialog() override;
 
     QString projectName() const;
     QString sourceFile() const;
@@ -29,16 +29,7 @@ private slots:
     void onAccepted();
 
 private:
-    void setupUi();
-    void applyTheme();
-
-    QLineEdit*   m_nameEdit = nullptr;
-    QLineEdit*   m_sourceEdit = nullptr;
-    QPushButton* m_browseBtn = nullptr;
-    QComboBox*   m_modelCombo = nullptr;
-    QCheckBox*   m_gpuCheck = nullptr;
-    QPushButton* m_createBtn = nullptr;
-    QPushButton* m_cancelBtn = nullptr;
+    Ui::NewProjectDialog* ui;
 };
 
 } // namespace ncktv

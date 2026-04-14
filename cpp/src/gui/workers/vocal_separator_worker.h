@@ -21,6 +21,7 @@ signals:
     void progress(int percent, const QString& message);
     void separationComplete(const QString& instrumentalPath, const QString& vocalsPath);
     void error(const QString& errorMessage);
+    void finished();
 
 private:
 #if NCKTV_HAS_ONNX

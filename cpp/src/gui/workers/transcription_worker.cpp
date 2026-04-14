@@ -178,6 +178,7 @@ void TranscriptionWorker::launchPythonBridge(const QString& executable, const QS
         }
         delete fullStdOut;
         delete fullStdErr;
+        emit finished();
         proc->deleteLater();
     });
 

@@ -14,6 +14,8 @@
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QFile>
+#include <QThread>
+#include "components/dashboard_widget.h"
 
 // Include our Phase 1 & 3 Core Headers
 #include "../core/project/ncktv_project.hpp"
@@ -68,17 +70,25 @@ void MainWindow::setupApplicationUI() {
     
     // Stacked widget manages Wizard vs Editor mode natively
     mainStack_ = new QStackedWidget(this);
+    
+    dashboardWidget_ = new DashboardWidget(this);
     wizardMode_ = new WizardMode(m_config, this);
     
     // EditorMode requires a project, we'll create it when the project is ready
     // editorMode_ = new EditorMode(activeProject_, this); 
     
+    mainStack_->addWidget(dashboardWidget_);
     mainStack_->addWidget(wizardMode_);
     // if (editorMode_) mainStack_->addWidget(editorMode_);
+    
+    mainStack_->setCurrentWidget(dashboardWidget_);
     
     layout->addWidget(mainStack_);
 
     // Connect signals
+    connect(dashboardWidget_, &DashboardWidget::newProjectRequested, this, &MainWindow::onActionNewProject);
+    connect(dashboardWidget_, &DashboardWidget::openProjectRequested, this, &MainWindow::onActionOpenProject);
+    
     connect(wizardMode_, &WizardMode::projectReady, this, &MainWindow::onProjectReady);
     connect(wizardMode_, &WizardMode::requestOpen, this, &MainWindow::onActionOpenProject);
     connect(wizardMode_, &WizardMode::requestNew, this, &MainWindow::onActionNewProject);

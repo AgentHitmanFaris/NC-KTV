@@ -599,6 +599,17 @@ Rules:
 def run_separation(audio_file, model_name, output_dir):
     from audio_separator.separator import Separator
 
+    # Monkey patch to avoid AttributeError: 'NoneType' object has no attribute 'version' in PyInstaller builds
+    original_get_distribution = Separator.get_package_distribution
+    def dummy_get_package_distribution(self, package_name):
+        dist = original_get_distribution(self, package_name)
+        if dist is None:
+            class DummyDist:
+                version = "unknown"
+            return DummyDist()
+        return dist
+    Separator.get_package_distribution = dummy_get_package_distribution
+
     # Initialize separator
     script_dir = Path(__file__).parent
     models_dir = script_dir / "models" / "uvr"

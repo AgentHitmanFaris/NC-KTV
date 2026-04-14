@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.5] - 2026-04-14
+
+### Added
+- **Plugin Uninstallation**: Integrated `PluginManager::uninstallPlugin` to safely remove third-party plugins from `plugins/installed/`.
+- **Unit Testing Expansion**: Added `test_plugin_manager.cpp` to verify safe uninstallation and directory removal logic.
+ 
+### Fixed
+- **Thread Safety in Wizard**: Fixed "Cannot create children for a parent that is in a different thread" warnings in `WizardMode` by ensuring `VocalSeparatorWorker` and `TranscriptionWorker` slots are executed in their respective worker threads via correct lambda connection context.
+- **Path Traversal Security**: Added `QRegularExpression` based sanitization to `pluginId` in `PluginManager` to prevent malicious or accidental directory removal outside the `plugins/installed` scope.
+ 
+---
+ 
 ## [1.3.4] - 2026-04-07
 
 ### Added

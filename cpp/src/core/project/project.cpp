@@ -24,7 +24,8 @@ nlohmann::json ProjectSettings::toJson() const {
         {"use_gpu",        useGpu},
         {"sample_rate",    sampleRate},
         {"karaoke_style",  qs(karaokeStyle)},
-        {"output_format",  qs(outputFormat)}
+        {"output_format",  qs(outputFormat)},
+        {"transcription_lang", qs(transcriptionLang)}
     };
 }
 
@@ -35,6 +36,7 @@ ProjectSettings ProjectSettings::fromJson(const nlohmann::json& j) {
     if (j.contains("sample_rate"))   s.sampleRate   = j["sample_rate"].get<int>();
     if (j.contains("karaoke_style")) s.karaokeStyle = fromStd(j["karaoke_style"].get<std::string>());
     if (j.contains("output_format")) s.outputFormat = fromStd(j["output_format"].get<std::string>());
+    if (j.contains("transcription_lang")) s.transcriptionLang = fromStd(j["transcription_lang"].get<std::string>());
     return s;
 }
 
@@ -67,6 +69,8 @@ nlohmann::json Project::toJson() const {
     if (instrumentalPath.has_value()) j["instrumental_path"] = qs(instrumentalPath.value());
     if (vocalsPath.has_value())       j["vocals_path"]       = qs(vocalsPath.value());
     if (originalAudioPath.has_value())j["original_audio_path"]= qs(originalAudioPath.value());
+    if (transcriptionJson.has_value()) j["transcription_json"] = qs(transcriptionJson.value());
+    if (rawLyrics.has_value()) j["raw_lyrics"] = qs(rawLyrics.value());
 
     return j;
 }
@@ -90,6 +94,10 @@ Project Project::fromJson(const nlohmann::json& j) {
         p.vocalsPath = fromStd(j["vocals_path"].get<std::string>());
     if (j.contains("original_audio_path") && !j["original_audio_path"].is_null())
         p.originalAudioPath = fromStd(j["original_audio_path"].get<std::string>());
+    if (j.contains("transcription_json") && !j["transcription_json"].is_null())
+        p.transcriptionJson = fromStd(j["transcription_json"].get<std::string>());
+    if (j.contains("raw_lyrics") && !j["raw_lyrics"].is_null())
+        p.rawLyrics = fromStd(j["raw_lyrics"].get<std::string>());
 
     return p;
 }

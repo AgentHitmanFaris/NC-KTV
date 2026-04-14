@@ -5,7 +5,8 @@ set(GUI_SOURCES
     main_window.cpp
 
     # Wizard
-    wizard/wizard_mode.cpp
+        wizard/wizard_mode.cpp
+    wizard/wizard_mode.ui
 
     # Editor
     editor/editor_mode.cpp
@@ -24,12 +25,15 @@ set(GUI_SOURCES
     components/curve_editor.cpp
     components/effect_panel.cpp
     components/timing_calibration.cpp
-    components/lyrical_pro_widget.cpp
+        components/lyrical_pro_widget.cpp
+    components/dashboard_widget.cpp
+    components/dashboard_widget.ui
 
     # Dialogs
     dialogs/export_dialog.cpp
     dialogs/import_dialog.cpp
-    dialogs/new_project_dialog.cpp
+        dialogs/new_project_dialog.cpp
+    dialogs/new_project_dialog.ui
     dialogs/model_manager_dialog.cpp
     dialogs/model_manager_widget.cpp
     dialogs/plugin_manager_dialog.cpp
@@ -71,6 +75,7 @@ set(GUI_HEADERS
     components/effect_panel.h
     components/timing_calibration.h
     components/lyrical_pro_widget.h
+    components/dashboard_widget.h
     dialogs/export_dialog.h
     dialogs/import_dialog.h
     dialogs/new_project_dialog.h
@@ -115,7 +120,8 @@ endif()
 # Used by the GUI test executable to compile the same sources without main.cpp.
 set(NCKTV_GUI_SOURCES_NO_MAIN
     main_window.cpp
-    wizard/wizard_mode.cpp
+        wizard/wizard_mode.cpp
+    wizard/wizard_mode.ui
     editor/editor_mode.cpp
     editor/timing_offset_handler.cpp
     editor/undo_manager.cpp
@@ -128,10 +134,13 @@ set(NCKTV_GUI_SOURCES_NO_MAIN
     components/curve_editor.cpp
     components/effect_panel.cpp
     components/timing_calibration.cpp
-    components/lyrical_pro_widget.cpp
+        components/lyrical_pro_widget.cpp
+    components/dashboard_widget.cpp
+    components/dashboard_widget.ui
     dialogs/export_dialog.cpp
     dialogs/import_dialog.cpp
-    dialogs/new_project_dialog.cpp
+        dialogs/new_project_dialog.cpp
+    dialogs/new_project_dialog.ui
     dialogs/model_manager_dialog.cpp
     dialogs/model_manager_widget.cpp
     dialogs/plugin_manager_dialog.cpp

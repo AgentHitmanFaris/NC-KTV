@@ -21,8 +21,9 @@ struct ProjectSettings {
     QString uvrModel      = "UVR_MDXNET_KARA_2.onnx";
     bool    useGpu        = true;
     int     sampleRate    = 44100;
-    QString karaokeStyle  = "classic";
-    QString outputFormat  = "mp4";
+    QString karaokeStyle      = "classic";
+    QString outputFormat      = "mp4";
+    QString transcriptionLang = "auto";
 
     nlohmann::json toJson() const;
     static ProjectSettings fromJson(const nlohmann::json& j);
@@ -46,6 +47,8 @@ public:
     std::optional<QString> instrumentalPath;
     std::optional<QString> vocalsPath;
     std::optional<QString> originalAudioPath;
+    std::optional<QString> transcriptionJson;
+    std::optional<QString> rawLyrics;
 
     // Sub-objects
     LyricsData     lyrics;

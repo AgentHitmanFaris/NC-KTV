@@ -50,6 +50,7 @@ signals:
     void progressUpdated(const QString& message);
     void transcriptionComplete(const QString& resultJson);
     void error(const QString& errorMessage);
+    void finished();
 
 private:
     /// Shared process launcher used by both transcription and alignment

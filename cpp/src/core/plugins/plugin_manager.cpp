@@ -6,6 +6,7 @@
 #include "plugin_manager.h"
 #include <QDir>
 #include <QPluginLoader>
+#include <QRegularExpression>
 
 namespace ncktv {
 
@@ -54,11 +55,16 @@ bool PluginManager::installPluginPackage(const QString& /*packagePath*/) {
 bool PluginManager::uninstallPlugin(const QString& pluginId) {
     if (pluginId.isEmpty()) return false;
 
+    // Sanitization: Only allow alphanumeric, underscores, and dashes
+    QString safeId = pluginId;
+    safeId.remove(QRegularExpression("[^a-zA-Z0-9_\\-]"));
+    if (safeId.isEmpty()) return false;
+
     // 1. Unload if active
-    unloadPlugin(pluginId);
+    unloadPlugin(safeId);
 
     // 2. Remove directory
-    QDir pluginDir("plugins/installed/" + pluginId);
+    QDir pluginDir("plugins/installed/" + safeId);
     if (!pluginDir.exists()) return false;
 
     if (!pluginDir.removeRecursively()) {
@@ -67,7 +73,7 @@ bool PluginManager::uninstallPlugin(const QString& pluginId) {
 
     // 3. Remove from discovered list
     for (auto it = m_discovered.begin(); it != m_discovered.end(); ++it) {
-        if (it->id == pluginId) {
+        if (it->id == safeId) {
             m_discovered.erase(it);
             break;
         }

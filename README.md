@@ -2,7 +2,7 @@
 
 <img src="assets/logo.png" alt="NC-KTV Logo" width="180"/>
 
-# NC-KTV (C++ Edition) v1.3.4
+# NC-KTV (C++ Edition) v1.3.5
 
 **Next-Generation Professional Music Video Karaoke Maker**
 
@@ -18,6 +18,7 @@
 </div>
 
 ---
+powershell -ExecutionPolicy Bypass -File .\build_portable_release.ps1
 
 ## Overview
 
@@ -57,6 +58,10 @@ NC-KTV automates the entire karaoke video creation workflow:
 - **Targeted AI Control**: Select Whisper models (base, small, medium, large, turbo) and specific ISO codes (en, id, ms, ja, ko) inside the UI to balance speed vs. accuracy.
 - **Tap-to-Sync Engine**: Rebuilt event-driven synchronization for perfect rhythm matching.
 - **Auto-Romanization**: Lightning-fast transliteration of global scripts (Korean/Japanese to Latin).
+
+### Extensible Plugin System
+- **Universal Plugin Manager**: Cleanly install, enable, and uninstall third-party processing modules.
+- **Secure Sandbox**: Includes sanitized ID resolution and isolated directory structures for safe module expansion.
 
 ### Gemini AI Integration
 - **Transcribe with Gemini**: One-click button in the Source Lyrics tab that compresses the active audio to a small MP3 file and opens your custom Gemini Gems link in the browser. Simply upload the MP3, copy Gemini's output, and click **Paste & Sync** in the app.

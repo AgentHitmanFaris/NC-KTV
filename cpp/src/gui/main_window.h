@@ -10,9 +10,11 @@
 
 class QStackedWidget;
 class QMenu;
+class QThread;
 
 namespace ncktv {
 
+class DashboardWidget;
 class VocalSeparatorWorker;
 class TranscriptionWorker;
 class WizardMode;
@@ -47,6 +49,7 @@ private:
     void saveProject(const QString& fileName);
 
     QStackedWidget* mainStack_ = nullptr;
+    DashboardWidget* dashboardWidget_ = nullptr;
     WizardMode* wizardMode_ = nullptr;
     EditorMode* editorMode_ = nullptr;
     

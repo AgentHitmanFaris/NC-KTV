@@ -55,6 +55,8 @@ omnizart_env/
 # IDE / Editor
 .vscode/
 .idea/
+.qtcreator/
+*.user
 *.swp
 *.swo
 *~
