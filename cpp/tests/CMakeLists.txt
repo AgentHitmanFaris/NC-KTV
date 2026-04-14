@@ -21,6 +21,7 @@ set(TEST_SOURCES
     test_parsers.cpp
     test_config.cpp
     test_effect_compositor.cpp
+    test_plugin_manager.cpp
 )
 
 add_executable(ncktv_tests ${TEST_SOURCES})

@@ -51,9 +51,29 @@ bool PluginManager::installPluginPackage(const QString& /*packagePath*/) {
     return false;
 }
 
-bool PluginManager::uninstallPlugin(const QString& /*pluginId*/) {
-    // TODO: Remove plugin directory
-    return false;
+bool PluginManager::uninstallPlugin(const QString& pluginId) {
+    if (pluginId.isEmpty()) return false;
+
+    // 1. Unload if active
+    unloadPlugin(pluginId);
+
+    // 2. Remove directory
+    QDir pluginDir("plugins/installed/" + pluginId);
+    if (!pluginDir.exists()) return false;
+
+    if (!pluginDir.removeRecursively()) {
+        return false;
+    }
+
+    // 3. Remove from discovered list
+    for (auto it = m_discovered.begin(); it != m_discovered.end(); ++it) {
+        if (it->id == pluginId) {
+            m_discovered.erase(it);
+            break;
+        }
+    }
+
+    return true;
 }
 
 PluginInterface* PluginManager::getPlugin(const QString& pluginId) const {
