@@ -12,6 +12,8 @@ import re
 
 # ── Known Hallucination Patterns ─────────────────────────────────────────────
 
+PUNCTUATION_RE = re.compile(r"[.,!?;:\"']")
+
 BANNED_WORDS = {
     "dimatorzok", "dimatorsok", "dima_torzok",
     "amara.org",
@@ -90,7 +92,7 @@ def is_hallucination(segment: dict) -> bool:
     # Check for attribution-heavy segments
     attr_count = 0
     for w in words:
-        clean = re.sub(r"[.,!?;:\"']", "", w).lower()
+        clean = PUNCTUATION_RE.sub("", w).lower()
         if clean in BANNED_WORDS or clean in ATTRIBUTION_WORDS:
             attr_count += 1
 
@@ -167,15 +169,15 @@ def remove_hallucinated_words(words: list) -> list:
     to_remove: set = set()
 
     for i, w in enumerate(words):
-        clean = re.sub(r"[.,!?;:\"']", "", w.get("word", "")).lower()
+        clean = PUNCTUATION_RE.sub("", w.get("word", "")).lower()
         if clean in BANNED_WORDS:
             to_remove.add(i)
             for j in range(max(0, i - 4), i):
-                neighbor = re.sub(r"[.,!?;:\"']", "", words[j].get("word", "")).lower()
+                neighbor = PUNCTUATION_RE.sub("", words[j].get("word", "")).lower()
                 if neighbor in ATTRIBUTION_WORDS:
                     to_remove.add(j)
             for j in range(i + 1, min(len(words), i + 3)):
-                neighbor = re.sub(r"[.,!?;:\"']", "", words[j].get("word", "")).lower()
+                neighbor = PUNCTUATION_RE.sub("", words[j].get("word", "")).lower()
                 if neighbor in ATTRIBUTION_WORDS:
                     to_remove.add(j)
 
