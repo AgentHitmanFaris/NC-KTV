@@ -35,6 +35,8 @@ $pyinstallerArgs = @(
     "--onedir", 
     "--noconsole",
     "--clean",
+    "--collect-all", "audio_separator",
+    "--collect-all", "whisperx",
     "--distpath", $OutputDir,
     "--workpath", $WorkDir,
     $BridgeFile

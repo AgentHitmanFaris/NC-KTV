@@ -3,20 +3,33 @@ project(NC-KTV VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# AUTOMOC/AUTORCC/AUTOUIC are enabled AFTER FetchContent so that
-# third-party libraries (whisper.cpp, onnxruntime) never see Qt's MOC.
 
-# ─── Qt6 Installation Path ───────────────────────────────────────────────────
-# Qt prefix path is controlled via CMakePresets.json (CMAKE_PREFIX_PATH).
-# MinGW preset  → D:/ProgramData/Qt/6.10.2/mingw_64
-# Nothing hard-coded here.
+# ─── VCPKG Integration (Manifest Mode) ───────────────────────────────────────
+# Detect and apply vcpkg toolchain automatically if present in the environment
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+    message(STATUS "Vcpkg toolchain injected: ${CMAKE_TOOLCHAIN_FILE}")
+endif()
 
-# ─── Find Dependencies ───────────────────────────────────────────────────────
-
-# Qt6 (required)
+# ─── Find Core Dependencies ──────────────────────────────────────────────────
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia MultimediaWidgets Network)
+include(FetchContent)
 
-# OpenSSL (optional - enables encrypted project files)
+FetchContent_Declare(nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
+FetchContent_Declare(zstd
+    GIT_REPOSITORY https://github.com/facebook/zstd.git
+    GIT_TAG v1.5.5
+    SOURCE_SUBDIR build/cmake
+)
+set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(zstd)
 find_package(OpenSSL QUIET)
 
 # Vulkan (High-Performance Graphics API)
@@ -29,36 +42,10 @@ else()
     add_compile_definitions(NCKTV_HAS_VULKAN=0)
 endif()
 
-# ─── Fetch Content (AI & Data Libraries) ─────────────────────────────────────
+# ─── External Content (ONNX Runtime) ─────────────────────────────────────────
+# ONNX GPU builds are retained in FetchContent to preserve the MinGW dlltool workflow.
 include(FetchContent)
 
-# 1. nlohmann/json (Header-only JSON parser)
-FetchContent_Declare(json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG        v3.11.3
-)
-FetchContent_MakeAvailable(json)
-
-# 2. whisper.cpp (Native Transcription Engine)
-# NOTE: whisper.cpp is NOT compiled on MinGW because ggml.c (~80k lines) causes
-# gcc to crash (heap exhaustion) on Windows. All transcription in NC-KTV is
-# already routed through the Python subprocess bridge (src/gui/workers/transcription_worker.cpp
-# launches the Python whisper CLI), so this C++ target is unused at runtime.
-# To re-enable for MSVC: uncomment below and set WHISPER_CUBLAS ON.
-#
-# FetchContent_Declare(whisper
-#     GIT_REPOSITORY https://github.com/ggerganov/whisper.cpp.git
-#     GIT_TAG        v1.6.2  GIT_SHALLOW 1)
-# set(WHISPER_BUILD_TESTS OFF CACHE BOOL "")
-# set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "")
-# set(WHISPER_CUBLAS OFF CACHE BOOL "")
-# set(WHISPER_CUDA   OFF CACHE BOOL "")
-# FetchContent_MakeAvailable(whisper)
-
-# 3. ONNX Runtime (prebuilt, GPU-capable)
-# Supports BOTH MSVC and MinGW on Windows:
-#   MSVC  → links against the shipped onnxruntime.lib import library.
-#   MinGW → uses dlltool to auto-generate a MinGW-compatible .a from the DLL.
 if(WIN32)
     set(ORT_VERSION "1.18.0")
     FetchContent_Declare(onnxruntime
@@ -82,22 +69,19 @@ if(WIN32)
         set(ORT_DEF    "${CMAKE_BINARY_DIR}/onnxruntime.def")
 
         find_program(DLLTOOL_EXE dlltool
-            HINTS "${CMAKE_CXX_COMPILER_DIR}"
-                  "D:/ProgramData/Qt/Tools/mingw1310_64/bin"
+            HINTS "${CMAKE_CXX_COMPILER_DIR}" "D:/ProgramData/Qt/Tools/mingw1310_64/bin"
             REQUIRED
         )
+        
         find_program(GENDEF_EXE gendef
-            HINTS "${CMAKE_CXX_COMPILER_DIR}"
-                  "D:/ProgramData/Qt/Tools/mingw1310_64/bin"
+            HINTS "${CMAKE_CXX_COMPILER_DIR}" "D:/ProgramData/Qt/Tools/mingw1310_64/bin"
         )
 
         if(GENDEF_EXE)
-            # Best path: gendef extracts the exports, dlltool creates the .a
             add_custom_command(
                 OUTPUT  "${ORT_IMPLIB}"
                 COMMAND "${GENDEF_EXE}" "${ORT_DLL}"
-                COMMAND "${CMAKE_COMMAND}" -E rename
-                        "${CMAKE_BINARY_DIR}/onnxruntime.def" "${ORT_DEF}"
+                COMMAND "${CMAKE_COMMAND}" -E rename "${CMAKE_BINARY_DIR}/onnxruntime.def" "${ORT_DEF}"
                 COMMAND "${DLLTOOL_EXE}" -d "${ORT_DEF}" -l "${ORT_IMPLIB}"
                 DEPENDS "${ORT_DLL}"
                 WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -105,13 +89,9 @@ if(WIN32)
                 VERBATIM
             )
         else()
-            # Fallback: dlltool alone using --dllname
             add_custom_command(
                 OUTPUT  "${ORT_IMPLIB}"
-                COMMAND "${DLLTOOL_EXE}"
-                        --dllname onnxruntime.dll
-                        --output-lib "${ORT_IMPLIB}"
-                        "${ORT_DLL}"
+                COMMAND "${DLLTOOL_EXE}" --dllname onnxruntime.dll --output-lib "${ORT_IMPLIB}" "${ORT_DLL}"
                 DEPENDS "${ORT_DLL}"
                 WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
                 COMMENT "Generating MinGW .a for ONNX Runtime via dlltool"
@@ -128,35 +108,13 @@ else()
     set(NCKTV_HAS_ONNX OFF)
 endif()
 
-# 4. zstd (Fast Data Compression)
-FetchContent_Declare(zstd
-    URL "https://github.com/facebook/zstd/archive/refs/tags/v1.5.5.tar.gz"
-    SOURCE_SUBDIR "build/cmake"
-)
-set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
-set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(ZSTD_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
-set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
-set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-set(ZSTD_LEGACY_SUPPORT OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(zstd)
-
-# 5. LibreSSL (OpenSSL-compatible Crypto Engineering)
-FetchContent_Declare(libressl
-    URL "https://github.com/libressl-portable/portable/releases/download/v3.9.1/libressl-3.9.1.tar.gz"
-)
-set(LIBRESSL_APPS OFF CACHE BOOL "" FORCE)
-set(LIBRESSL_TESTS OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(libressl)
-
-# ─── Enable Qt auto-tools (AFTER third-party FetchContent) ───────────────────
-# Now our own add_subdirectory targets see AUTOMOC ON.
+# ─── Enable Qt auto-tools ────────────────────────────────────────────────────
+# Ensure tools are run after dependencies to avoid MOC scanning third-party headers
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# ─── Targets ─────────────────────────────────────────────────────────────────
-
+# ─── Project Targets ─────────────────────────────────────────────────────────
 add_subdirectory(src/core)
 add_subdirectory(src/gui)
 add_subdirectory(tests)

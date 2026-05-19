@@ -1,6 +1,9 @@
 #pragma once
 #include <QObject>
-#include <QThread>
+#include <QString>
+#include <QJsonObject>
+#include <QTcpSocket>
+#include <QProcess>
 #include <vector>
 #include "../../core/audio/ncktv_whisper_engine.hpp"
 
@@ -11,7 +14,7 @@ namespace ncktv {
  * Controls which Python bridge backend is used for AI transcription.
  */
 enum class TranscriptionEngine {
-    Whisper,    ///< Legacy OpenAI Whisper (attention-based word timestamps, ±500ms)
+    Whisper,    ///< Legacy OpenAI Whisper (attention-based word timestamps)
     WhisperX,   ///< WhisperX with Wav2Vec2 forced alignment (±30ms precision)
 };
 
@@ -20,14 +23,11 @@ class TranscriptionWorker : public QObject {
 
 public:
     explicit TranscriptionWorker(QObject* parent = nullptr);
+    ~TranscriptionWorker();
 
 public slots:
     /**
-     * Start transcription using the selected engine.
-     * @param audioPath     Path to audio file (vocals preferred)
-     * @param model         Whisper model name (e.g. "base", "medium", "large-v3", "turbo")
-     * @param language      Language code (e.g. "en", "ja") or "auto" for detection
-     * @param engine        Transcription engine to use (Whisper or WhisperX)
+     * Start transcription using the selected engine via JSON-RPC.
      */
     void startTranscription(const QString& audioPath,
                             const QString& model    = "base",
@@ -35,12 +35,8 @@ public slots:
                             TranscriptionEngine engine = TranscriptionEngine::Whisper);
 
     /**
-     * Force-align known lyrics text to audio using WhisperX.
-     * Skips transcription entirely — only runs Wav2Vec2 alignment.
-     * This is ideal when lyrics are already available (LRC import, Gemini output, etc.)
-     * @param audioPath     Path to audio file (vocals preferred)
-     * @param lyricsText    Full lyrics text (lines separated by newlines)
-     * @param language      Language code for alignment model (must be specific, not "auto")
+     * Force-align known lyrics text to audio using WhisperX via JSON-RPC.
+     * Skips the need for temporary files by sending lyrics directly in the payload.
      */
     void startAlignment(const QString& audioPath,
                         const QString& lyricsText,
@@ -52,12 +48,23 @@ signals:
     void error(const QString& errorMessage);
     void finished();
 
-private:
-    /// Shared process launcher used by both transcription and alignment
-    void launchPythonBridge(const QString& executable, const QStringList& args, const QString& engineLabel);
+private slots:
+    void onSocketReadyRead();
+    void onSocketError(QTcpSocket::SocketError socketError);
+    void onProcessStandardError();
 
-    /// Helper used when the native engine path is active (MSVC build)
+private:
+    void sendRpcRequest(const QString& method, const QJsonObject& params);
+    bool ensureServerRunning();
+
     QString serializeSegmentsToJson(const std::vector<ai::TranscribedSegment>& segments);
+
+    QTcpSocket* m_socket;
+    QByteArray m_responseBuffer;
+
+    // Static process to ensure the Python server stays alive across multiple 
+    // worker calls. This avoids reloading PyTorch/Whisper models into VRAM every time.
+    static QProcess* s_serverProcess;
 };
 
 } // namespace ncktv
