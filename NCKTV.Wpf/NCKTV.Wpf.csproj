@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <Platforms>x64</Platforms>
+    <LangVersion>latest</LangVersion>
+    <ApplicationIcon>logo.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="logo.ico" />
+    <Resource Include="logo.png" />
+  </ItemGroup>
+
+  <!-- Copy native dependencies from C++ build directory -->
+  <Target Name="CopyNativeDlls" AfterTargets="AfterBuild">
+    <Message Text="Copying Native DLLs and Qt Plugins from C++ build directory..." Importance="High" />
+    <ItemGroup>
+      <BridgeDll Include="$(ProjectDir)..\build\ncktv_bridge.dll" />
+      <OnnxDll Include="$(ProjectDir)..\build\onnxruntime.dll" />
+      <QtDlls Include="$(ProjectDir)..\build\Qt6*.dll" />
+      <FFmpegDlls Include="$(ProjectDir)..\build\av*.dll" />
+      <FFmpegDlls2 Include="$(ProjectDir)..\build\sw*.dll" />
+      <FFmpegDlls3 Include="$(ProjectDir)..\build\post*.dll" />
+      <FFmpegExe Include="$(ProjectDir)..\build\ffmpeg.exe" />
+      <FFmpegExe2 Include="$(ProjectDir)..\build\ffprobe.exe" />
+      <ConfigYaml Include="$(ProjectDir)..\config.yaml" />
+      <PythonBridge Include="$(ProjectDir)..\python_bridge.py" />
+      <PythonDownloader Include="$(ProjectDir)..\download_whisperx_models.py" />
+      <PythonRobust Include="$(ProjectDir)..\robust_download.py" />
+      <PythonFilter Include="$(ProjectDir)..\hallucination_filter.py" />
+      <PythonReqs Include="$(ProjectDir)..\requirements.txt" />
+      
+      <!-- Qt Plugins recursively -->
+      <QtPlatformPlugins Include="$(ProjectDir)..\build\platforms\**\*.*" />
+      <QtStylePlugins Include="$(ProjectDir)..\build\styles\**\*.*" />
+      <QtMultimediaPlugins Include="$(ProjectDir)..\build\multimedia\**\*.*" />
+      <QtImagePlugins Include="$(ProjectDir)..\build\imageformats\**\*.*" />
+    </ItemGroup>
+    
+    <Copy SourceFiles="@(BridgeDll)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(OnnxDll)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtDlls)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegDlls)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegDlls2)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegDlls3)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegExe)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegExe2)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ConfigYaml)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PythonBridge)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PythonDownloader)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PythonRobust)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PythonFilter)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PythonReqs)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    
+    <!-- Copy plugins preserving subdirectories -->
+    <Copy SourceFiles="@(QtPlatformPlugins)" DestinationFolder="$(TargetDir)platforms\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtStylePlugins)" DestinationFolder="$(TargetDir)styles\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtMultimediaPlugins)" DestinationFolder="$(TargetDir)multimedia\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtImagePlugins)" DestinationFolder="$(TargetDir)imageformats\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

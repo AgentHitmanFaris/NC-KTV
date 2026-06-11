@@ -1,121 +1,167 @@
-<div align="center">
+# NC-KTV V2 - Premium Karaoke Maker and Non-Linear Editor
 
-<img src="assets/logo.png" alt="NC-KTV Logo" width="180"/>
-
-# NC-KTV (C++ Edition) v1.3.5
-
-**Next-Generation Professional Music Video Karaoke Maker**
-
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/nc-ktv/cpp)
-[![Qt Version](https://img.shields.io/badge/Qt-6.10.2-41CD52.svg?style=for-the-badge&logo=qt)](https://www.qt.io/)
-[![CMake](https://img.shields.io/badge/CMake-3.21+-064F8C.svg?style=for-the-badge&logo=cmake)](https://cmake.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-
-*High-performance, native desktop application for creating professional karaoke videos with AI-powered vocal separation, automatic transcription, and synchronized lyrics.*
-
-[**Features**](#core-features) • [**Installation**](#installation--build) • [**Architecture**](DOCS.md) • [**Changelog**](CHANGELOG.md)
-
-</div>
-
----
-powershell -ExecutionPolicy Bypass -File .\build_portable_release.ps1
-
-## Overview
-
-Welcome to the **C++ Qt6 Rebirth** of NC-KTV. 
-
-Originally written in Python, we have completely overhauled the NC-KTV engine using modern **C++20 and Qt6** to achieve unparalleled performance, hardware-accelerated rendering, and a butter-smooth editing experience. This marks a massive leap in processing speed and UI responsiveness, enabling real-time waveform rendering, precise audio seeking, and seamless subtitle processing.
-
-NC-KTV automates the entire karaoke video creation workflow:
-1. **Import** any media file natively via FFmpeg.
-2. **Extract** vocals cleanly using UVR-compatible **ONNX** models (MDX-Net) with a native C++ Mixed-Radix FFT DSP pipeline.
-3. **Transcribe** lyrics automatically (Whisper) or import industry standards.
-4. **Sync** lyrics with sub-millisecond precision using the new Hardware-Accelerated Timeline and **one-click Set Start/End** controls.
-5. **Export** to professional-grade formats (ASS, MP4, MKV) with **GPU-accelerated encoding** and custom resolution scaling.
+NC-KTV V2 is a professional, high-fidelity Karaoke Maker and Non-Linear Editor (NLE) designed to build high-quality karaoke video files. It features an advanced multi-track timeline, hardware-accelerated audio rendering, and AI-driven stem separation using ONNX Runtime.
 
 ---
 
-## Core Features
+## Core Capabilities
 
-### AI Vocal Separation
-- **High-Performance Bridge**: Driven by the authentic `audio-separator` Python library for 100% matching UVR quality.
-- **Hardware Acceleration**: Automatic target detection for CUDA (NVIDIA) via PyTorch. Local GPU libraries in `models/whisper/cudn12/` are auto-bundled into the portable build.
-- **Full Model Support**: Supports all UVR models including MDX-Net, VR Architecture, and Roformer (`.onnx` and `.pth`).
-
-### Hardware-Accelerated Studio Editor
-- **Native Qt6 UI**: Butter-smooth 60fps+ rendering of complex timeline data via `QPainter` and Hardware Accel, featuring smart render-debouncing.
-- **Interactive Waveforms**: Zoom, scrub, and manipulate gigabytes of audio data instantaneously using pixel-bucketing compression without UI blocking.
-- **Precision Karaoke Builder Studio Mode**: Brand-new fully vertical syllable tracking interface. Features cascading blocks locked to a Y-axis left-waveform display, a dedicated instant-update Lyrics Map sidebar for transcription tuning, fully-synchronized auto-scrolling, and millisecond-accurate "Play Segment" vocal isolation capabilities.
-- **One-Click Timing Sync**: Dedicated "Set Start" and "Set End" buttons in the transport bar to instantly align lyrics to the current playhead.
-- **GPU-Accelerated Export**: High-performance video rendering utilizing NVENC (NVIDIA), QSV (Intel), or AMF (AMD) with configurable resolution scaling (1080p to 360p).
-- **Dockable Workspace Panels**: The Synchronization Queue and Properties panels are full `QDockWidget` instances — tear off, float, and re-dock them anywhere for a completely custom workspace layout.
-- **In-Editor AI Support**: Kick off Whisper transcripts dynamically directly from the editor mode, complete with language override parameters and dimming modal overlays.
-- **Live Karaoke Preview**: Configurable zero-latency ASS subtitle rendering overlaid onto the active video track with a smooth **horizontal linear wipe** effect per word.
-
-### Intelligent Transcription and Sync
-- **Whisper Powered**: Uses OpenAI's Whisper via Python subprocess for robust, high-speed transcription.
-- **Word-Level Precision**: Automatic word-timestamp generation for perfect syllable alignment.
-- **Targeted AI Control**: Select Whisper models (base, small, medium, large, turbo) and specific ISO codes (en, id, ms, ja, ko) inside the UI to balance speed vs. accuracy.
-- **Tap-to-Sync Engine**: Rebuilt event-driven synchronization for perfect rhythm matching.
-- **Auto-Romanization**: Lightning-fast transliteration of global scripts (Korean/Japanese to Latin).
-
-### Extensible Plugin System
-- **Universal Plugin Manager**: Cleanly install, enable, and uninstall third-party processing modules.
-- **Secure Sandbox**: Includes sanitized ID resolution and isolated directory structures for safe module expansion.
-
-### Gemini AI Integration
-- **Transcribe with Gemini**: One-click button in the Source Lyrics tab that compresses the active audio to a small MP3 file and opens your custom Gemini Gems link in the browser. Simply upload the MP3, copy Gemini's output, and click **Paste & Sync** in the app.
-- **Smart Paste & Sync**: Parses Gemini/AI transcription text (plain or LRC format with range timestamps like `[00:15.15 - 00:19.30]`) and directly loads it into the Synchronization Queue.
-- **Configurable URL**: Paste your own Gemini Gem link directly in the UI so the app always opens the right transcription tool.
+* **Multi-Track Timeline**: Synchronous editing of Audio (backing and vocal tracks), Video (guide tracks), and Lyrics tracks with real-time waveform visualization.
+* **Syllable-Level Timing and Tuning**: Interactive adjustments of syllable start times, duration, and boundaries with frame accuracy.
+* **Live Master Monitor and Real-Time Preview**: Glassmorphic preview panel anchored directly on the Program Monitor with interactive toggles to preview Background Modes (Video + Lyrics vs. Lyrics Only) and Lyrics Layouts (Bottom Overlay vs. Center Queue).
+* **Performance Optimizations**: Advanced O(1) playhead cache validation. Skips redundant track/clip nested loops on playhead ticks, ensuring lag-free video rendering and smooth playback with no dropped frames during timed lyrics sweeps.
+* **Timed Lyrics Fetching**: Integrated in-app timed lyrics search utilizing the public LRCLIB database. Query songs by track name and artist, browse matching results, preview synced lyric lines, and import them directly onto the timeline with a single click.
+* **YouTube Discovery and Downloader**: In-app YouTube discovery module utilizing yt-dlp. Search for background videos or backing tracks, select results, and download Audio (WAV format) or Video (MP4 format) asynchronously with real-time progress indicators, cancellation, and direct timeline imports.
+* **AI Stem Separation**: Advanced audio stem separation powered by ONNX Runtime with a high-fidelity Mid-Side DSP fallback mode.
+* **Muxing Render Engine**: Fully integrated FFmpeg H.264/AAC muxer for direct project rendering, supporting bidirectional synchronization with the Live Master Monitor.
+* **Drag-and-Drop NLE Editing**: Drag media files from Windows Explorer onto the application window to import them to the project pool, or drop them directly onto the timeline lanes to create timed clips. Supports dragging internally imported Media Library assets onto the tracks for seamless NLE editing workflows.
+* **Smart Decoding Engine Fallback**: Safe Software Decoding fallback option to easily bypass hardware accelerated decoding freezes, black screens, or texture allocation failures (e.g., when playing heavy 4K AV1 videos on unsupported platforms). Switch modes and restart with a single click.
+* **Waveform Cache Persistence**: Writes precomputed audio peaks to `.pk` files to instantly render audio waveforms on project reload without waiting for FFmpeg decoding.
+* **Syllable Timing Curves**: Custom Bezier timing curves with an interactive visual editor and presets (Ease In, Ease Out, Hold, etc.) to control non-linear syllable sweeps.
+* **Vocal Alignment Helpers**: Automatically aligns recorded vocals or audio tracks with reference guide tracks using a sliding envelope-based cross-correlation algorithm.
+* **Native QML Splash Screen Window**: Custom borderless loading window on startup rendering gradient progress animations, pulsing neon glow spots, and floating brand icon, initializing editor assets in the background.
 
 ---
 
-## Installation and Build
-
-NC-KTV is now built using standard `CMake` and requires a modern C++17 compliant toolchain.
+## Installation and Build Guide
 
 ### Prerequisites
-- **MinGW-w64 (GCC 13.x)**: Installed via Qt at `D:\ProgramData\Qt\Tools\mingw1310_64`.
-- **CMake 3.25+**: Installed via Qt at `D:\ProgramData\Qt\Tools\CMake_64`.
-- **Qt 6.10.2**: Core, Gui, Widgets, Multimedia, Network — installed at `D:\ProgramData\Qt\6.10.2\mingw_64`.
-- **Python 3.10+**: For the AI bridge (Whisper/UVR).
+Ensure the following system dependencies are installed and registered on your system PATH:
+* **C++ Compiler**: A compiler supporting C++20 (e.g., MSVC 2022, GCC 13+).
+* **CMake**: Version 3.25 or higher.
+* **Qt 6 Framework**: Version 6.10.2 including Core, Gui, Widgets, Network, Multimedia, Qml, Quick, and QuickControls2.
+* **Python**: Required for executing downloader dependencies.
+* **yt-dlp**: Required for video discovery and download. Install it via pip:
+  ```cmd
+  pip install yt-dlp
+  ```
 
-### Building from Source (Windows)
-
-NC-KTV now features a streamlined, high-performance build pipeline using MinGW and a custom PowerShell script that handles both C++ compilation and Python environment bundling.
-
-```powershell
-# 1. Open PowerShell and navigate to the project root
-
-# 2. Run the automated build script
-# This script configures CMake, builds the C++ engine (Ninja),
-# packages the Python AI bridge (PyInstaller), and assembles 
-# the portable directory with all necessary DLLs.
-.\build_portable_release.ps1
+### Building the Project
+To compile the targets, navigate to the build directory and run the compilation script:
+```cmd
+cd build
+build.bat
 ```
 
-Once completed, the final portable application will be available in `NC-KTV-Portable\` with all dependencies (Qt, FFmpeg, ONNX, Python Bridge) properly staged.
+---
 
-For manual development/debugging:
-1. Open the project in **VS Code** or **Qt Creator**.
-2. Select the `windows-debug` or `windows-release` CMake preset.
-3. Build using the standard CMake workflow (`Ctrl+Shift+B` in VS Code).
+## Operation Instructions
+
+### Launch the Application
+Execute the following commands in PowerShell to run the primary GUI editor:
+```powershell
+$env:PATH += ";D:\ProgramData\Qt\6.10.2\msvc2022_64\bin"
+./build/NC-KTV_V2.exe
+```
+
+### Search and Sync Synced Lyrics
+1. Select a Lyrics Track in the timeline or let the app auto-create one.
+2. Click on the LYRICS FINDER tab in the left-hand panel.
+3. Enter the Song Title and Artist Name, then click SEARCH SYNCHRONIZED LYRICS.
+4. Select a search result from the list to preview the timed LRC file.
+5. Click IMPORT LYRICS INTO SUBTITLE TRACK to instantly generate perfectly aligned timed subtitle clips.
+
+### Download YouTube Assets
+1. Click the YT DISCOVER tab in the left panel.
+2. Search for any song (e.g. Queen bohemian rhapsody instrumental).
+3. Select the target video from the search list.
+4. Click DOWNLOAD AUDIO BACKING (WAV) or DOWNLOAD VIDEO GUIDE (MP4).
+5. Once completed, the file will be saved in your workspace video directory, registered in your Media Library, and automatically loaded on the active timeline playhead.
 
 ---
 
-## Architecture & Documentation
+## Automated Verification Tests
 
-For a deep dive into the completely revamped C++ architecture, hardware-accelerated UI patterns, and the multithreaded audio pipeline, please see our dedicated [**Technical Documentation (DOCS.md)**](DOCS.md).
+The project includes a comprehensive automated unit and integration test suite to verify the C++ core timeline and audio processing libraries.
+
+### Running the Tests
+To compile and execute the test suite on Windows, run the helper scripts in the `build` directory:
+1. Compile the project targets (compiles both the GUI editor and the test suite):
+   ```cmd
+   cd build
+   build.bat
+   ```
+2. Run the automated test suite:
+   ```cmd
+   run_tests.bat
+   ```
+This will run the tests in offscreen mode and redirect the standard output to `build/test_out.txt`.
+
+### Test Coverage
+The automated test suite verifies:
+* **Timecode Conversions**: Microsecond/frame translation and formatting.
+* **Snapping Engine**: Magnetic snapping to playhead, clips, and zero.
+* **Clip Splitting**: Splitting timeline clips with sub-millisecond precision.
+* **Project Serialization**: Save, load, and clear operations using `.nctv` JSON schema.
+* **Source Trimming and Offsets**: Custom source inpoints and playback offsets.
+* **Syllable LRC Parser**: Timed syllable-level tag parsing.
+* **LoD Peak Generation**: Waveform generation for different zoom levels.
+* **Audio Gain Ramping**: Smooth volume changes and offline mixdowns.
+* **Resampler & Windowing Math**: High-fidelity audio resampling and DSP window overlaps.
+* **Stem Separator Fallback**: Software CPU DSP fallback modes when ONNX/GPU is unavailable.
+* **Mid-Side DSP Separation**: Math verification of software fallback algorithms (vocals = (L+R)/2, instrumental = (L-R)/2) using synthetic interleaved stereo signals.
+* **Markers & Subtitle Styles**: Persistent lyric text fonts, styles, and sequence markers.
+* **Romanization**: Korean, Japanese, and mixed text conversions.
+* **Lyrics Import**: Timed LRC/SRT subtitle importing.
+* **Lyric Engine**: Syllable tracking, active word indices, and lookahead lines.
+* **Filename Parser & Metadata Guesser**: Capitalizing and auto-extracting artist/title from media filenames.
+* **HW/SW Decoding Preferences**: QSettings-backed hardware/software decoding preferences.
+* **Unified Event Propagation**: Propagating `timelineChanged()` signal across all timeline mutations.
 
 ---
 
-## Contributing
+## Technical Dependencies
 
-We welcome contributions to the NC-KTV C++ engine! 
-- Please ensure PRs targeting core systems compile successfully across MSVC, GCC, and Clang.
-- Run the included `GTest` suite via `ctest` before opening a pull request.
+The application relies on the following static and dynamic components:
+* **nlohmann_json**: Git Tag v3.11.3 (fetched via CMake FetchContent).
+* **ONNX Runtime (GPU/CPU)**: Version 1.18.0 (fetched via CMake).
+* **FFmpeg Libraries**: avcodec, avformat, avfilter, avutil, swresample, swscale (latest GPL shared builds fetched via CMake).
+* **yt-dlp**: Command-line YouTube media extractor.
 
 ---
 
-## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Project Roadmap and Todo List
+
+### Immediate Priorities (Todo List)
+- [ ] **Expanded Audio Filters**: Add basic equalizer, reverb, and delay DSP filters to the tracks.
+
+### Mid-Term Goals
+- [ ] **Multi-Format Video Rendering**: Add container selections for export (e.g., MKV, WebM, AVI) and dedicated MP3/WAV audio mixdowns.
+- [ ] **Custom Swipe Layout Templates**: Allow saving preset layouts for custom font packages, sweep speeds, and bouncing balls.
+- [ ] **Dynamic Video Transcoding**: Automatically transcode heavy, hardware-unfriendly video formats during import to improve runtime performance.
+
+### Long-Term Roadmap
+- [ ] **Cloud Collaboration Support**: Collaborative project sync for multi-user editing teams.
+- [ ] **Extension SDK**: Create a plugin system for custom transition filters and audio effects.
+
+---
+
+## Changelog
+
+### Version 2.0.0-Professional (Unreleased Updates)
+
+#### Added
+- **Timeline Vertical Zoom**: Continuous vertical zooming (40px to 200px) with dedicated toolbar sliders and keyboard/mouse wheel shortcuts (Ctrl / Shift + Wheel).
+- **New Project Utility**: Real-time project resets with warnings to prevent losing unsaved changes.
+- **Filename Parser (Metadata Guesser)**: Automated cleanup and capitalization parsing on imported files to resolve Song Title and Artist metadata automatically.
+- **C++ Unified Event Propagation**: Single-gateway QML notification system (timelineChanged()) for all clip and track edits.
+- **LRCLIB Lyrics Database**: Direct in-app retrieval, previewing, and importing of synced lyrics.
+- **Asynchronous YouTube Downloader**: Embedded YT discover browser with direct import and background queue downloads.
+- **YouTube Search Pagination**: Paginated search results loading (endless scroll) using optimized range query parameters in `yt-dlp` and a custom-styled "Load More Results" UI button.
+- **Safe Decoding Toggle**: One-click software decoding mode option to bypass hardware acceleration rendering freezes.
+- **Mid-Side DSP Verification Test**: Comprehensive automated math verification tests for CPU fallback audio separating algorithms.
+- **Waveform Peak Cache (.pk)**: Real-time serialization and verification of precomputed audio peak cache files to accelerate waveform loading times.
+- **Syllable Bezier Curve Sweeps**: Interactive graphical control points editor, presets, and Newton-Raphson solvers for customizable lyric swipe transitions.
+- **Envelope Cross-Correlation Alignment**: Automatic synchronization of target audio clips against reference guide tracks.
+- **Native QML Loading Splash Window**: Asynchronously-loaded borderless splash window showing pulsing neon glows and active asset preparation to guarantee zero-lag transition to the maximized main window.
+
+#### Changed
+- **Video Sync Gating**: Seek drift threshold increased to 1000.0ms for stutter-free playback.
+- **Cleaned Properties Panel Spacing**: Legible layouts for coordinate timecodes, nudge controls, and syllable durations.
+- **GPU-Texture Caching**: Overhauled karaoke text rendering using O(1) texture copy routines.
+
+#### Fixed
+- **Left/Right Panels Stretching**: Resolved panel collapsing in horizontal SplitView by binding heights to parent.height.
+- **WAV Buffer Swap**: Fixed vocal/instrumental audio stem separations writing to opposite tracks in stem_separator.cpp.
+- **Intro Splash Sync**: Resolved title/artist rendering delays during startup intro animations.
+- **Track Selection Shadows**: Prevented drag events from being captured by the outer window's drop zone.

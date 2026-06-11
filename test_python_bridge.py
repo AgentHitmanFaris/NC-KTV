@@ -35,3 +35,41 @@ def test_normalize_word_edge_cases():
     assert _normalize_word("") == ""
     assert _normalize_word("!!!") == ""
     assert _normalize_word("   ") == ""
+
+
+def test_parse_line_to_words_and_syllables():
+    from python_bridge import parse_line_to_words_and_syllables
+    
+    # English
+    assert parse_line_to_words_and_syllables("To-mor-row is a-noth-er day", "en") == [
+        ["To-", "mor-", "row"],
+        ["is"],
+        ["a-", "noth-", "er"],
+        ["day"]
+    ]
+    
+    # CJK (Chinese)
+    assert parse_line_to_words_and_syllables("明天会更好", "zh") == [
+        ["明"],
+        ["天"],
+        ["会"],
+        ["更"],
+        ["好"]
+    ]
+
+def test_interpolate_word_times():
+    from python_bridge import interpolate_word_times
+    
+    words = [
+        {"start": None, "end": None},
+        {"start": 2.0, "end": 3.0},
+        {"start": None, "end": None}
+    ]
+    interpolate_word_times(words, 0.0, 5.0)
+    
+    assert words[0]["start"] == 0.0
+    assert words[0]["end"] == 1.0
+    assert words[1]["start"] == 2.0
+    assert words[1]["end"] == 3.0
+    assert words[2]["start"] == 4.0
+    assert words[2]["end"] == 5.0

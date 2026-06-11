@@ -1,0 +1,504 @@
+<Window x:Class="NCKTV.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:NCKTV.Wpf"
+        Title="NC-KTV V2 - Vocal &amp; Karaoke timing suite" 
+        Height="820" Width="1360"
+        Background="{StaticResource BgLightBrush}"
+        WindowStartupLocation="CenterScreen"
+        Icon="logo.png">
+    
+    <Window.Resources>
+        <!-- Style for Sidebar actions (hyperlinks style) -->
+        <Style x:Key="SidebarActionStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#0056B3"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="Margin" Value="15,2,0,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock x:Name="textBlock" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="textBlock" Property="TextDecorations" Value="Underline"/>
+                                <Setter Property="Foreground" Value="#003366"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SidebarTopActionStyle" TargetType="Button" BasedOn="{StaticResource SidebarActionStyle}">
+            <Setter Property="Margin" Value="5,4,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- 1. Header Area containing Preview Monitor and Shortcuts -->
+            <RowDefinition Height="140"/>
+            <!-- 2. Main Workspaces Split -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 1. TOP HEADER / TOOLBAR -->
+        <Border Grid.Row="0" Background="{StaticResource PanelLightBrush}" BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="0,0,0,1">
+            <Grid Margin="15,5">
+                <Grid.ColumnDefinitions>
+                    <!-- Left: Preview Checkbox and Buttons -->
+                    <ColumnDefinition Width="220"/>
+                    <!-- Center: Navy Blue Preview Monitor -->
+                    <ColumnDefinition Width="*"/>
+                    <!-- Right: Keyboard visual key shortcut bar -->
+                    <ColumnDefinition Width="500"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Column: Preview Controls -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Orientation="Vertical">
+                    <CheckBox x:Name="ChkAutoUpdate" Content="Update automatically" IsChecked="True" FontSize="11" Margin="0,0,0,6" Foreground="{StaticResource TextDarkBrush}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <Button x:Name="BtnUpdate" Content="Update" Width="85" Margin="0,0,6,0" Click="BtnUpdate_Click"/>
+                        <Button x:Name="BtnVideoPreview" Content="Video preview..." Width="105" Click="BtnVideoPreview_Click"/>
+                    </StackPanel>
+                    <!-- Small transport panel -->
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnPlay" Content="▶ Play" Width="60" Margin="0,0,4,0" Click="BtnPlay_Click"/>
+                        <Button x:Name="BtnPause" Content="‖ Pause" Width="60" Margin="0,0,4,0" Click="BtnPause_Click"/>
+                        <Button x:Name="BtnStop" Content="■ Stop" Width="60" Click="BtnStop_Click"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Center Column: Navy Blue Karaoke Preview Monitor -->
+                <Border Grid.Column="1" Background="{StaticResource MonitorBgBrush}" BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6" Margin="10,5" Padding="15,8">
+                    <Grid>
+                        <!-- Monitor label -->
+                        <TextBlock Text="LIVE KARAOKE PREVIEW MONITOR" FontSize="9" Foreground="#6C6C9F" HorizontalAlignment="Left" VerticalAlignment="Top" FontWeight="Bold"/>
+
+                        <!-- Lyrics sweep content -->
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock x:Name="TxtLiveLyricsPrevLine" Text="We wake up every morning, chasing down the sun" FontSize="13" Foreground="#8A8A9E" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                            <Grid HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtSubtitleInactive" Text="Life's a thrill ride, yeah, we're living on the run" FontSize="18" FontWeight="Bold" Foreground="#CCCCCC" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="TxtSubtitleActive" Text="Life's a thrill ride, yeah, we're living on the run" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentGreenBrush}" HorizontalAlignment="Center" Visibility="Collapsed"/>
+                            </Grid>
+                            <TextBlock x:Name="TxtLiveLyricsNextLine" Text="With the world beneath our feet, and the sky above so blue" FontSize="12" Foreground="#8A8A9E" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Right Column: Shortcuts Help Guides (Physical Keyboard Keycaps) -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <!-- Spacebar Key -->
+                    <Border Style="{StaticResource KeycapStyle}" Width="90">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Spacebar" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextDarkBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Play/Pause" FontSize="9" Foreground="{StaticResource TextGrayBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- Ctrl Key -->
+                    <Border Style="{StaticResource KeycapStyle}" Width="65">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Ctrl" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextDarkBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Tap Word" FontSize="9" Foreground="{StaticResource TextGrayBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- Backspace Key -->
+                    <Border Style="{StaticResource KeycapStyle}" Width="85">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Backspace" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextDarkBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Clear Word" FontSize="9" Foreground="{StaticResource TextGrayBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- Minus Key -->
+                    <Border Style="{StaticResource KeycapStyle}" Width="65">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Minus" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextDarkBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Merge" FontSize="9" Foreground="{StaticResource TextGrayBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- Enter Key -->
+                    <Border Style="{StaticResource KeycapStyle}" Width="65">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Enter" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextDarkBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Split" FontSize="9" Foreground="{StaticResource TextGrayBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 2. MAIN PANELS -->
+        <Grid Grid.Row="1" Margin="15">
+            <Grid.ColumnDefinitions>
+                <!-- Left panel: Syllable adjuster -->
+                <ColumnDefinition Width="320"/>
+                <!-- Center panel: Main lyrics editor -->
+                <ColumnDefinition Width="*"/>
+                <!-- Right panel: Utility TabControl -->
+                <ColumnDefinition Width="380"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- A. LEFT PANEL: Syllable adjuster & vertical waveform -->
+            <Border Grid.Column="0" Background="{StaticResource PanelLightBrush}" BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6" Margin="0,0,10,0">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Wave Metadata header -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock x:Name="TxtFileName" Text="File name: (No file loaded)" FontSize="10" Foreground="{StaticResource TextGrayBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="TxtWaveLength" Text="Length: 0.000 sec" FontSize="10" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="TxtWavePos" Text="Position: 0.000 sec" FontSize="10" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="Zoom: " FontSize="10" Foreground="{StaticResource TextGrayBrush}" VerticalAlignment="Center"/>
+                            <TextBox x:Name="TxtZoom" Text="100" Width="50" Height="20" Background="White" Foreground="Black" BorderBrush="{StaticResource BorderLightBrush}" FontSize="10" Padding="2,0" TextAlignment="Center" TextChanged="TxtZoom_TextChanged"/>
+                            <TextBlock x:Name="TxtTimecode" Text="00:00:00.00" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBlueBrush}" Margin="15,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Scrollable timeline canvas containing vertical waveform and clips -->
+                    <ScrollViewer Grid.Row="1" x:Name="ScrollSyllableAdjuster" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="#D8D8D8">
+                        <Grid x:Name="GridVerticalTimeline" Width="280">
+                            <!-- Vertical Waveform Control -->
+                            <local:WaveformControl x:Name="VerticalWaveform" Orientation="Vertical" Width="90" HorizontalAlignment="Left" Margin="10,0,0,0"/>
+
+                            <!-- Canvas for syllable overlays -->
+                            <Canvas x:Name="CanvasSyllables" Background="Transparent" Width="280">
+                                <!-- Horizontal Playhead Indicator line -->
+                                <Line x:Name="VerticalPlayheadLine" X1="0" X2="280" Y1="0" Y2="0" Stroke="#FFD60A" StrokeThickness="2"/>
+                            </Canvas>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- B. CENTER PANEL: Lyrics editor with a vertical toolbar -->
+            <Grid Grid.Column="1" Margin="0,0,10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="45"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Vertical Toolbar -->
+                <StackPanel Grid.Column="0" Orientation="Vertical" VerticalAlignment="Top" Margin="0,10,0,0">
+                    <Button Content="🎵" ToolTip="Load Soundtrack File" Height="34" Width="34" Margin="0,0,0,8" Click="BtnImportMedia_Click" FontSize="16" Padding="0"/>
+                    <Button Content="🖥" ToolTip="Video Preview settings" Height="34" Width="34" Margin="0,0,0,8" Click="BtnVideoPreview_Click" FontSize="16" Padding="0"/>
+                    <Button Content="💾" ToolTip="Save Project" Height="34" Width="34" Margin="0,0,0,8" Click="BtnSave_Click" FontSize="16" Padding="0"/>
+                    <Button Content="📂" ToolTip="Open Project" Height="34" Width="34" Margin="0,0,0,8" Click="BtnLoad_Click" FontSize="16" Padding="0"/>
+                    <Button Content="⚡" ToolTip="Generate Syllable Blocks" Height="34" Width="34" Margin="0,0,0,8" Click="BtnAutoTime_Click" FontSize="16" Padding="0"/>
+                    <Button Content="👥" ToolTip="Toggle Duet Mode" Height="34" Width="34" Margin="0,0,0,8" Click="BtnDuetMode_Click" FontSize="16" Padding="0"/>
+                </StackPanel>
+
+                <!-- Main lyrics editor textbox (Light Gray background, Segoe UI) -->
+                <TextBox Grid.Column="1" x:Name="TxtMainLyricsEditor" AcceptsReturn="True" TextWrapping="Wrap" Background="#CCCCCC" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Padding="15" FontSize="15" FontFamily="{StaticResource OutfitFont}" VerticalScrollBarVisibility="Auto" TextChanged="TxtMainLyricsEditor_TextChanged" Margin="0,0,0,0"/>
+            </Grid>
+
+            <!-- C. RIGHT PANEL: Consolidated utility tabs (Actions, YT, LRC, Export, Media Pool) -->
+            <Border Grid.Column="2" Background="{StaticResource PanelLightBrush}" BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6">
+                <TabControl Margin="8">
+                    <!-- Tab 1: Tasks (The action links tree-list from screenshot) -->
+                    <TabItem Header="TASKS">
+                        <Grid Margin="4,8,4,4">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="10,5">
+                                    <!-- Top Level Actions -->
+                                    <Button Content="📝 AI Song Creator" Style="{StaticResource SidebarTopActionStyle}" Click="BtnAiSongCreator_Click"/>
+                                    <Button Content="📂 Load primary soundtrack" Style="{StaticResource SidebarTopActionStyle}" Click="BtnImportMedia_Click"/>
+                                    <Button Content="💿 Import CD+G File" Style="{StaticResource SidebarTopActionStyle}" Click="BtnImportCdg_Click"/>
+                                    
+                                    <!-- Lyrics Group -->
+                                    <StackPanel Orientation="Horizontal" Margin="5,8,0,4">
+                                        <TextBlock Text="▲" FontSize="8" Foreground="#666666" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Lyrics" FontWeight="Bold" FontSize="11" Foreground="#333333"/>
+                                    </StackPanel>
+                                    <Button Content="🎵 Import MIDI lyrics" Style="{StaticResource SidebarActionStyle}" Click="BtnImportMidi_Click"/>
+                                    <Button Content="📜 Import local LRC/SRT file" Style="{StaticResource SidebarActionStyle}" Click="BtnImportLrcFile_Click"/>
+                                    <Button Content="🎙 AI Sync Syllables" Style="{StaticResource SidebarActionStyle}" Click="BtnAiSyncSyllables_Click"/>
+                                    <Button Content="👥 Full duet mode" Style="{StaticResource SidebarActionStyle}" Click="BtnDuetMode_Click"/>
+
+                                    <!-- Edit Group -->
+                                    <StackPanel Orientation="Horizontal" Margin="5,8,0,4">
+                                        <TextBlock Text="▲" FontSize="8" Foreground="#666666" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Edit" FontWeight="Bold" FontSize="11" Foreground="#333333"/>
+                                    </StackPanel>
+                                    <Button Content="⚡ Insert Event" Style="{StaticResource SidebarActionStyle}" Click="BtnAutoTime_Click"/>
+                                    <Button Content="🎨 Apply style" Style="{StaticResource SidebarActionStyle}" Click="BtnApplyStyle_Click"/>
+
+                                    <!-- Video Group -->
+                                    <StackPanel Orientation="Horizontal" Margin="5,8,0,4">
+                                        <TextBlock Text="▲" FontSize="8" Foreground="#666666" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Video" FontWeight="Bold" FontSize="11" Foreground="#333333"/>
+                                    </StackPanel>
+                                    <Button Content="🎥 Video Settings" Style="{StaticResource SidebarActionStyle}" Click="BtnVideoSettings_Click"/>
+
+                                    <!-- Tools Group -->
+                                    <StackPanel Orientation="Horizontal" Margin="5,8,0,4">
+                                        <TextBlock Text="▲" FontSize="8" Foreground="#666666" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Tools" FontWeight="Bold" FontSize="11" Foreground="#333333"/>
+                                    </StackPanel>
+                                    <Button Content="🎙 Vocal Remover" Style="{StaticResource SidebarActionStyle}" Click="BtnSeparateStems_Click"/>
+
+                                    <!-- Create Group -->
+                                    <StackPanel Orientation="Horizontal" Margin="5,8,0,4">
+                                        <TextBlock Text="▲" FontSize="8" Foreground="#666666" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Create" FontWeight="Bold" FontSize="11" Foreground="#333333"/>
+                                    </StackPanel>
+                                    <Button Content="🎬 Create video file" Style="{StaticResource SidebarActionStyle}" Click="BtnExport_Click"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- Tab 2: Media Pool -->
+                    <TabItem Header="MEDIA POOL">
+                        <Grid Margin="4,8,4,4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <ListBox Grid.Row="0" x:Name="LstMedia" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Margin="0,0,0,10">
+                                <!-- Audio files listed here -->
+                            </ListBox>
+
+                            <StackPanel Grid.Row="1">
+                                <Button x:Name="BtnImportMedia" Content="+ Load Soundtrack File" HorizontalAlignment="Stretch" Margin="0,0,0,5" Click="BtnImportMedia_Click"/>
+                                <Button x:Name="BtnSeparateStems" Content="🎙 AI Stem Separator" Background="#E5E5EA" BorderBrush="{StaticResource BorderLightBrush}" HorizontalAlignment="Stretch" Click="BtnSeparateStems_Click"/>
+
+                                <!-- AI Separation Progress -->
+                                <StackPanel x:Name="PanelSepProgress" Margin="0,10,0,0" Visibility="Collapsed">
+                                    <TextBlock x:Name="TxtSepProgressStatus" Text="Separating: 0%" FontSize="11" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                                    <ProgressBar x:Name="SepProgressBar" Minimum="0" Maximum="100" Value="0" Foreground="{StaticResource AccentBlueBrush}"/>
+                                </StackPanel>
+
+                                <!-- Specs output -->
+                                <Border BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="System Specifications:" FontSize="10" Foreground="{StaticResource TextGrayBrush}"/>
+                                        <TextBlock x:Name="TxtSpecs" Text="CPU: Loading..." FontSize="10" Foreground="{StaticResource TextGrayBrush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- Tab 3: YouTube Downloader -->
+                    <TabItem Header="YT DOWNLOAD">
+                        <Grid Margin="4,8,4,4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- YouTube Search Input -->
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtYtSearchQuery" Grid.Column="0" Height="28" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Padding="5,2" VerticalAlignment="Center" KeyDown="TxtYtSearchQuery_KeyDown"/>
+                                <Button x:Name="BtnYtSearch" Grid.Column="1" Content="🔍" Margin="6,0,0,0" Width="32" Height="28" Click="BtnYtSearch_Click"/>
+                            </Grid>
+
+                            <!-- Results List -->
+                            <ListBox Grid.Row="1" x:Name="LstYtResults" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="0,0,0,1" Padding="6" HorizontalAlignment="Stretch" Width="340">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="80"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                
+                                                <!-- Thumbnail Image -->
+                                                <Image Grid.Column="0" Source="{Binding Thumbnail}" Width="75" Height="42" Stretch="UniformToFill" Margin="0,0,6,0" VerticalAlignment="Top"/>
+                                                
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{Binding Title}" Foreground="Black" FontWeight="Bold" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"/>
+                                                    <TextBlock Text="{Binding ChannelAndDuration}" Foreground="{StaticResource TextGrayBrush}" FontSize="9" Margin="0,0,0,4"/>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Content="🎵 Audio" Grid.Column="0" Margin="0,0,2,0" Height="22" Padding="1,0" FontSize="9" Click="BtnYtDownloadAudio_Click" Tag="{Binding}"/>
+                                                        <Button Content="🎥 Video" Grid.Column="1" Margin="2,0,2,0" Height="22" Padding="1,0" FontSize="9" Click="BtnYtDownloadVideo_Click" Tag="{Binding}"/>
+                                                        <Button Content="📺 Play" Grid.Column="2" Margin="2,0,0,0" Height="22" Padding="1,0" FontSize="9" Click="BtnYtPreview_Click" Tag="{Binding}" Background="#FFEBEB" BorderBrush="#FFC7C7" Foreground="#C62828"/>
+                                                    </Grid>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Download Progress Panel -->
+                            <StackPanel Grid.Row="2" x:Name="PanelYtDownloads" Margin="0,10,0,0" Visibility="Collapsed">
+                                <TextBlock Text="ACTIVE YT DOWNLOADS" FontSize="10" FontWeight="Bold" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,5"/>
+                                <ListBox x:Name="LstYtDownloads" Background="#F2F2F7" BorderThickness="0" Foreground="Black" MaxHeight="80">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2" Width="320">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Title}" Foreground="Black" FontSize="10" TextTrimming="CharacterEllipsis"/>
+                                                <Button Grid.Row="0" Grid.Column="1" Content="✕" Width="18" Height="18" Padding="0" Margin="4,0,0,0" FontSize="8" Click="BtnYtCancelDownload_Click" Tag="{Binding VideoId}"/>
+                                                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Minimum="0" Maximum="100" Value="{Binding Progress}" Height="8" Margin="0,3,0,3" Foreground="{StaticResource AccentBlueBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- Tab 4: LRC Lyrics Finder -->
+                    <TabItem Header="LRC SEARCH">
+                        <Grid Margin="4,8,4,4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Labels -->
+                            <Grid Grid.Row="0" Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Song Title" FontSize="10" Foreground="{StaticResource TextGrayBrush}" VerticalAlignment="Bottom" Margin="0,0,5,0" FontWeight="Bold"/>
+                                <TextBlock Grid.Column="1" Text="Artist Name (Optional)" FontSize="10" Foreground="{StaticResource TextGrayBrush}" VerticalAlignment="Bottom" Margin="5,0,5,0" FontWeight="Bold"/>
+                                <TextBlock Grid.Column="2" Width="36"/>
+                            </Grid>
+
+                            <!-- Search Inputs -->
+                            <Grid Grid.Row="1" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtLrcTitle" Grid.Column="0" Height="28" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Padding="5,2" Margin="0,0,5,0" VerticalAlignment="Center" ToolTip="Enter Song Title"/>
+                                <TextBox x:Name="TxtLrcArtist" Grid.Column="1" Height="28" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Padding="5,2" Margin="5,0,5,0" VerticalAlignment="Center" ToolTip="Enter Artist Name"/>
+                                <Button x:Name="BtnLrcSearch" Grid.Column="2" Content="Find" Height="28" Click="BtnLrcSearch_Click"/>
+                            </Grid>
+
+                            <!-- Results Split View -->
+                            <Grid Grid.Row="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="180"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Results List -->
+                                <ListBox Grid.Row="0" x:Name="LstLrcResults" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Margin="0,0,0,5" SelectionChanged="LstLrcResults_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="0,0,0,1" Padding="4" HorizontalAlignment="Stretch" Width="320">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Title}" Foreground="Black" FontWeight="Bold" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding Artist}" Foreground="{StaticResource TextGrayBrush}" FontSize="9"/>
+                                                    <TextBlock Text="{Binding Album}" Foreground="{StaticResource TextGrayBrush}" FontSize="9" FontStyle="Italic"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <!-- Preview and Import Button -->
+                                <Grid Grid.Row="1">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Text="Lyrics Preview:" FontSize="10" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                                    <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="4" Padding="6">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <TextBlock x:Name="TxtLrcPreviewText" Foreground="Black" FontSize="11" TextWrapping="Wrap" FontFamily="{StaticResource MonospaceFont}"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                    <Button x:Name="BtnImportLrcSearchResult" Grid.Row="2" Content="Import Synced Lyrics" Background="#F2F2F7" BorderBrush="{StaticResource BorderLightBrush}" HorizontalAlignment="Stretch" Margin="0,8,0,0" Click="BtnImportLrcSearchResult_Click" IsEnabled="False"/>
+                                </Grid>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- Tab 5: Synced Words Sweep Preview -->
+                    <TabItem Header="WORDS SWEEP">
+                        <Grid Margin="4,8,4,4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="PanelLyrics" Margin="10" Orientation="Vertical">
+                                    <TextBlock Text="Import synced lyrics (LRC) or run AI Sync to start..." FontSize="13" Foreground="{StaticResource TextGrayBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <Grid Grid.Row="1" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtLrcInput" Grid.Column="0" Height="28" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Padding="5,2" VerticalAlignment="Center" GotFocus="TxtLrcInput_GotFocus"/>
+                                <Button x:Name="BtnImportLrc" Grid.Column="1" Content="Import LRC" Margin="10,0,0,0" Click="BtnImportLrc_Click"/>
+                                <Button x:Name="BtnImportLrcFile" Grid.Column="2" Content="Import File..." Margin="10,0,0,0" Click="BtnImportLrcFile_Click"/>
+                                <Button x:Name="BtnAiSyncSyllablesTab" Grid.Column="3" Content="🎙 AI Sync" Margin="10,0,0,0" Click="BtnAiSyncSyllables_Click" Background="#E5F1FF" BorderBrush="#B2D7FF" Foreground="#0066CC" FontWeight="Bold"/>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <!-- Tab 6: Video Export settings -->
+                    <TabItem Header="EXPORT">
+                        <Grid Margin="4,8,4,4">
+                            <StackPanel Margin="10">
+                                <TextBlock Text="VIDEO EXPORT CONFIGURATION" FontWeight="Bold" Foreground="Black" FontSize="12" Margin="0,0,0,15"/>
+                                
+                                <TextBlock Text="Resolution Width" FontSize="11" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="TxtExportWidth" Text="1920" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Resolution Height" FontSize="11" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="TxtExportHeight" Text="1080" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Frames Per Second (FPS)" FontSize="11" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="TxtExportFps" Text="30" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Video Bitrate (bps)" FontSize="11" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="TxtExportVideoBitrate" Text="4000000" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Audio Bitrate (bps)" FontSize="11" Foreground="{StaticResource TextGrayBrush}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="TxtExportAudioBitrate" Text="192000" Margin="0,0,0,20"/>
+
+                                <Button x:Name="BtnExportAction" Content="🏁 Export Video File" Background="#F2F2F7" BorderBrush="{StaticResource BorderLightBrush}" HorizontalAlignment="Stretch" Click="BtnExport_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

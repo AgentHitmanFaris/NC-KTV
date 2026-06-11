@@ -1,587 +1,81 @@
 # Changelog
 
-All notable changes to NC-KTV will be documented in this file.
+All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased]
 
----
-
-## [1.3.5] - 2026-04-14
-
-### Added
-- **Plugin Uninstallation**: Integrated `PluginManager::uninstallPlugin` to safely remove third-party plugins from `plugins/installed/`.
-- **Unit Testing Expansion**: Added `test_plugin_manager.cpp` to verify safe uninstallation and directory removal logic.
- 
-### Fixed
-- **Thread Safety in Wizard**: Fixed "Cannot create children for a parent that is in a different thread" warnings in `WizardMode` by ensuring `VocalSeparatorWorker` and `TranscriptionWorker` slots are executed in their respective worker threads via correct lambda connection context.
-- **Path Traversal Security**: Added `QRegularExpression` based sanitization to `pluginId` in `PluginManager` to prevent malicious or accidental directory removal outside the `plugins/installed` scope.
- 
----
- 
-## [1.3.4] - 2026-04-07
+### Performance
+- Overhauled C++ `KaraokeLyricRenderer` to pre-render styled text lines into `QImage` textures and cache font-specific layouts. Real-time playhead updates now perform simple O(1) texture blits instead of CPU-intensive path vector calculations and rasterization (`QPainterPath::addText`, `strokePath`, `fillPath`) on the GUI thread, resolving video playback lag.
+- Eliminated infinite `SequentialAnimation` loop on the branding dot indicator that ran 24/7 consuming animation frames even when idle.
+- Removed `layer.enabled: true` from the intro splash breathing circle, which forced unnecessary offscreen GPU texture allocation.
+- Replaced `Math.random()` calls in the program monitor and source monitor Canvas visualizers with deterministic sine-wave patterns, eliminating forced GPU repaints every frame.
+- Reduced source monitor visualizer timer interval from 33ms (30fps) to 50ms (20fps) and gated it behind visibility check.
+- Optimized ClipItem `sweepProgress` calculation to short-circuit when the playhead is outside the clip's time range, reducing per-frame work from O(clips × syllables) to O(1) for inactive clips.
+- Removed redundant overlapping MouseArea in ClipItem that duplicated selection handling already performed by the drag MouseArea.
+- Replaced N per-delegate `isActive` syllable bindings in PropertiesPanel with a single centrally-computed `activeSylIdx` property, reducing binding evaluations from O(N) to O(1) per playhead tick.
+- Added zoom-change repaint trigger to the timeline ruler Canvas to prevent stale tick marks after zooming.
 
 ### Added
-- **Lyrics Display Mode Toggle**: `KaraokePreview` now supports two display modes toggled via a `▣` button in the Source Monitor header:
-  - `VideoOverlay` — lyrics rendered over the video, bottom-third anchored, 60pt font, 2 lines
-  - `CenteredBlack` — pure black background, vertically centered, 72pt font, up to 4 lines
-- **HD Preview Rendering**: `SmoothPixmapTransform` and `TextAntialiasing` hints enabled on the karaoke preview painter — no more pixelated text.
-- **Tools Panel — 8 Tools**: Expanded from 3 to 8 tools matching Premiere Pro, all with keyboard shortcuts:
-  - Selection (V), Track Select (A), Rolling Edit (N), Razor (C), Slip (Y), Slide (U), Pen (P), Zoom (Z)
-- **Lyrics Blocks Panel**: New 64px panel directly below the timeline showing all lyric lines as clickable/draggable blocks. Click to seek; drag onto the timeline to reposition a line's timing.
-- **Drag-to-Timeline**: Lyric blocks use `QDrag` with MIME type `application/x-ncktv-lyric-index`. The `TimelineWidget` accepts drops and shows a green dashed preview line. On drop, the line's start/end time and all word tokens are shifted by the delta.
-- **Intelligent Line Splitting**: `LyricsData::splitLongLines(maxWords)` splits lines with more than N words into shorter chunks while preserving word-level token timing. Applied automatically after Whisper transcription and JSON import (default: 6 words per line).
-
-### Fixed
-- **Lyrics Timing Preserved on Edit**: Editing lyric text in the Lyrics Editor or Captions table no longer calls `splitIntoWords()`, which was re-distributing token timing from scratch on every keystroke. Text edits now only update the `.text` field; `splitIntoWords()` is only called explicitly via the AI Sync button.
-- **Timeline Gap Removed**: The `timelinePanel` now has a `maxHeight` of 180px, preventing it from expanding and pushing the Lyrics Blocks Panel off-screen.
-- **Transport Bar Buttons**: All 4 navigation buttons now have correct actions and tooltips — Go to In (⏮), Step Back 1 frame (⏪), Step Forward 1 frame (⏩), Go to Out (⏭).
+- Internal Media Library drag-and-drop support: you can now drag-and-drop media assets directly from the Media Browser list onto the timeline tracks to insert them.
+- Global persistent software decoding preference setting (`disable_hw_decoding` in `QSettings`) that disables hardware acceleration for the Qt Multimedia FFmpeg backend on startup to resolve device/texture allocation failures (like `8007000e`) for 4K and AV1 files.
+- One-click recovery toggle button ("Switch to Software Decoding & Restart") directly inside the playback error/warning dialog to allow instant switching to software mode when a video fails to play.
+- "SYSTEM DECODING PREFERENCES" card in the global metadata properties panel to view the active decoding mode and manually switch between Hardware (Fast) and Software (Safe) modes with a restart prompt.
+- `disableHwDecoding` and `setDisableHwDecoding` settings controls and a `restartApplication` helper to the C++ `TimelineManager` backend.
+- Syllable-level timing and tuning methods to the C++ core backend (`Clip::updateSyllable`).
+- Interactive Syllable Tuning Inspector in the clip properties panel supporting 50ms nudging controls.
+- Live audio visualizer canvas rendering a spectrum sine wave inside the preview monitor.
+- Lookahead lyrics overlay display in the preview monitor, showing the active cue and upcoming lyrics line.
+- Search and filter layout in the Media Library panel.
+- Stationary track headers layout in the timeline grid, ensuring that track titles, volumes, and controls remain pinned to the left edge of the viewport during horizontal scrolling.
+- Horizontal time ruler cover to block scrolling ticks behind the stationary header block.
+- Playhead and clip guide visual tooltip displaying current timeline timecodes during drag operations.
+- Master volume control slider inside the transport deck.
+- Shortcut Guide helper dialog mapping core keyboard shortcuts.
+- Project Save and Load UI buttons and status text alerts.
+- Magnetic snapping to exactly 0s in the timeline snapping engine.
+- Real-time progress percentage updates and status text in both the Media Library panel and the Properties Panel during stem separation.
+- Automated auto-put logic to instantly place imported media files into compatible tracks at the current playhead time on the timeline.
+- Fully functional "+ VIDEO TRACK" creation button in the timeline control header.
+- Custom orange color accents and layout styling tags for Video Tracks inside the timeline lane headers.
+- Horizontal playback auto-scrolling viewport follow in TimelineView.qml, automatically keeping the playhead visible and centered at 25% of the tracks area during active playback.
+- Premiere Pro-style continuous vertical track zooming from 40px to 200px in the timeline tracks area, with toolbar zoom controls (slider and increment buttons) and mouse wheel shortcuts (`Ctrl / Shift + Wheel` to zoom vertically, `Alt + Wheel` to zoom horizontally).
+- "New Project" button (`btnNew`) and action flow in the main header toolbar that resets the workspace tracks layout, timeline manager, active metadata, and selection, with dialog prompts to prevent losing unsaved changes.
+- C++ `TimelineManager::timelineChanged()` signal that acts as a single gateway to propagate track `clipsChanged`, clip `durationChanged`, and clip `lyricTextChanged` events to QML.
+- Automatic metadata guesser in C++ `TimelineManager` that parses imported media filenames to extract and capitalize clean Song Title and Artist Name metadata.
+- Automated unit tests in `timeline_test.cpp` for Metadata Guesser/Filename Parser, Hardware/Software decoding preferences, and QML event propagation (`timelineChanged()` signal).
+- Comprehensive automated verification tests documentation in `README.md` outlining execution steps and test coverage details.
+- Automated unit test `testMidSideDspSeparation()` in `timeline_test.cpp` to verify software fallback Mid-Side DSP stem separation logic with synthetic stereo signals.
+- YouTube Discovery pagination features, implementing `searchMore()` in `YoutubeManager` C++ backend and a paginated "Load More Results" footer button in `MediaBrowser.qml`.
+- Waveform cache persistence using `.pk` files to instantly render visual audio waveforms on startup.
+- Non-linear subtitle/lyric sweeps with customizable syllable Bezier curves, visual editor handles, and Newton-Raphson solvers.
+- Vocal Alignment tool performing sliding amplitude envelope cross-correlations to synchronize clips to guide tracks.
+- Variable playback speed (`playbackRate`) control in C++ `AudioEngine` and interactive tuning toolbar ComboBox in `LyricTunerWindow.qml` with automated loop triggers on syllable highlight.
+- Native QML/C++ borderless Loading Splash Screen Window showing real-time progress and spinning animation, while asynchronously compiling and preparing workspace components on startup.
 
 ### Changed
-- **AI Sync Button**: With no row selected, now splits all lines intelligently (word-split + long-line split). With a row selected, splits only that line.
-
----
-
-## [1.3.3] - 2026-04-07
-
-### Changed
-- **Qt Upgrade**: Upgraded from Qt 6.8.2 to **Qt 6.10.2** (MinGW build). All tool paths now reference the system-wide Qt installation at `D:\ProgramData\Qt\`.
-- **Build System**: `CMakePresets.json` updated to use absolute paths to `D:\ProgramData\Qt\Tools\CMake_64`, `D:\ProgramData\Qt\Tools\Ninja`, and `D:\ProgramData\Qt\Tools\mingw1310_64`. The local `qt/` and `bin/` folders are no longer required.
-- **Build Script**: `build_portable_release.ps1` updated to reference Qt 6.10.2 binaries and `windeployqt` from the system Qt installation.
-- **Portable Output**: Build output directory changed from repo root to `NC-KTV-Portable\` for a cleaner workspace.
-- **CMakeLists**: Updated `dlltool`/`gendef` hints to point to `D:\ProgramData\Qt\Tools\mingw1310_64\bin`.
-
----
-
-## [1.3.2] - 2026-04-04
-
-### Improved
-- **FFmpeg Robustness**: Refined the FFmpeg location logic in the Python bridge to ensure early initialization. The path detection now correctly handles PyInstaller `_MEIPASS` temporary directories and executable-relative paths, ensuring that `audio-separator` and `pydub` can reliably find FFmpeg binaries in both development and portable environments.
-- **Path Search Optimization**: Expanded the search logic to include multiple local and system fallback directories (including `D:/` and `C:/` common paths) for increased resilience across different machine configurations.
+- Re-anchored the root window's global `DropArea` and glassmorphic overlay to exclude the timeline editor area. This prevents the global drop area from shadowing/intercepting drop events, allowing files dragged directly onto the timeline tracks to be correctly added as clips and snapped to the drop point.
+- Refactored C++ `StemSeparator` spectrogram representations from pointer-chasing 3D vectors to flat 1D contiguous vectors to improve cache locality.
+- Pre-allocated STFT and ISTFT temporary frame/complex vectors outside of processing loops to eliminate over 120,000 dynamic heap memory operations.
+- Optimized fallback Mid-Side DSP separation loop by removing thread sleeping (`msleep`) and loop boundary branch checks, accelerating fallback execution by up to 100x.
+- Decoupled active clip dragging and trimming coordinates to use native QML drag targets, deferring C++ model writes and expensive waveform rebuilds to mouse release for smooth 60fps movement.
+- Exposed horizontal scroll coordinate `scrollX` from `TimelineView` to delegate `TrackLane` templates to resolve undeclared warning outputs.
+- Qualified the `snappingEnabled` and `compactTracks` properties inside `TimelineView.qml` with the root ID `timelineRoot` to resolve QML ReferenceError console warnings.
+- Gated the video preview seek synchronization behind a drift threshold of 1000.0ms (up from 250ms) to ensure smooth playback without constant seeking and stuttering.
+- Scaled and fixed layout size dimensions and button bounds (timecodes, nudge buttons, offset and duration columns) in the Properties Panel to prevent text wrapping or clipping.
 
 ### Fixed
-- **Portable Build Assembly**: Verified that `build_portable_release.ps1` correctly stages all dependencies, including the newly optimized Python bridge, in the final redistribution package.
+- Fixed playback compatibility issues for high-resolution (2K/4K) and AV1-encoded videos by providing a software decoding fallback mechanism.
+- Fixed QML TypeErrors on animation state changes, specifically resolving the missing property alias for `introAnimationSequence` on the intro splash screen.
+- QML double-to-qlonglong property assignment crash by wrapping calculations in `Math.round`.
+- Fixed playhead scrubbing lockups by directly writing to properties instead of using missing C++ setters as functions.
+- Corrected alignment of timeline ruler ticks and playhead lines by offsetting coordinates with the 180px track header boundary.
+- Fixed stem separation track duplication by searching for and reusing existing audio tracks.
+- Resolved video clip placement bugs where Video files incorrectly mapped to Audio tracks and could not be loaded into Video lanes.
+- Fixed playhead jumping when clicking on track headers in TimelineView.qml by adding a bounds check to the ruler MouseArea.
+- Fixed ONNX Runtime GPU execution provider loader failure by updating the CMake post-build script to copy all runtime library DLLs (including cuda, tensorrt, and shared providers) to the executable directory, allowing CUDA GPU-accelerated stem separation.
+- Resolved vocal/instrumental audio channel swap by correcting C++ WAV writing buffer paths in `stem_separator.cpp`.
+- Fixed the song title and artist metadata synchronization bug on intro splash launch in `main.qml`.
+- Fixed vertical panel collapsing of `MediaBrowser` (left pane) and `PropertiesPanel` (right pane) by binding their heights explicitly to `parent.height`.
+- Resolved application freezes during bulk lyric/track replacements by adding `beginResetModel()` and `endResetModel()` blocks to `ClipListModel::handleClipsChanged()`.
+- Fixed QML TypeError when calling `autoGenerateSyllables()` on `Clip` by adding `Q_INVOKABLE` macro declaration in C++ to expose the method to QML.
 
----
-
-## [1.3.1] - 2026-03-22
-
-### Fixed
-- **FFmpeg Integration**: Fixed a critical issue where audio separation and metadata reading (via `audio-separator` and `pydub`) failed to process MP4/audio files due to incomplete FFmpeg environments. The Python bridge now explicitly requires and injects a standalone `ffmpeg/bin` directory (containing both `ffmpeg.exe` and `ffprobe.exe`) into the global `PATH`, completely replacing the unreliable `imageio-ffmpeg` hack.
-
----
-
-## [1.3.0] - 2026-03-18
-
-### Added
-- **Hardware-Accelerated Export**: Integrated GPU encoding support for NVIDIA (NVENC), Intel (QSV), and AMD (AMF) via `GpuDetector`. Automatically selects the best available hardware encoder for significantly faster video rendering.
-- **Export Resolution Scaling**: Added a resolution selector to the Export dialog, allowing users to downscale videos (1080p, 720p, 480p, 360p) for smaller file sizes.
-- **Precision Timing Buttons**: Added "Set Start" and "Set End" buttons to the transport bar. These allow users to instantly stamp the current playhead position as the start or end time for the selected lyric line.
-
-### Fixed
-- **ASS Render Scaling**: Fixed a discrepancy where rendered ASS subtitles appeared smaller than the live preview by standardizing the default font size (60px).
-- **Inline Edit Audio Jump**: Prevented the audio player from reset-seeking to 0:00 when double-clicking the "Text" column in the synchronization table.
-- **Preview Stutter & Flickering**: Optimized the A/V synchronization frequency during playback to prevent aggressive decoder flushing, resulting in much smoother video previews.
-
----
-
-## [1.2.0] - 2026-03-18
-
-### Added
-- **Gemini AI Web Integration**: New "Transcribe with Gemini" button in the Source Lyrics tab. Automatically compresses the active audio track to a compact MP3 file (via ExportWorker/ffmpeg) and opens the Gemini browser at the configured URL. A companion Explorer window highlights the output file for easy drag-and-drop upload.
-- **Customizable Gemini URL**: A persistent text field allows the user to change their Gemini Gem link at any time without a rebuild.
-- **Paste & Sync Button**: A dedicated clipboard-import button parses Gemini transcription output (supports range-format LRC: `[00:15.15 - 00:19.30]`) and directly populates the Synchronization Queue.
-- **Dockable Panels**: The Synchronization Queue and Properties panels are now full `QDockWidget` instances. Users can tear them off, float them, and re-dock them anywhere on screen for a fully customized workspace.
-- **GPU Acceleration Bundling**: `build_portable_release.ps1` now auto-detects CUDA/cuDNN DLLs in `models/whisper/cudn12/bin/` and bundles them into the portable package via PyInstaller's `--add-binary` flag. This enables GPU-accelerated Whisper inference (ONNXRuntime CUDA provider) without a system-wide CUDA installation.
-- **Editable Source Lyrics**: The Source Lyrics view is now a fully editable `QPlainTextEdit` that highlights the currently playing line in real-time.
-
-### Fixed
-- **Lyrics Too Fast / Laggy Sync**: `TeleprompterView::updateTime()` replaced a linear scan with a **binary search** (`O(log n)`). The teleprompter now holds on the last finished line during inter-line gaps, and only previews the next line within a **0.8-second** lead-in (down from 2 seconds).
-- **LRC Timestamp Parsing Failure**: `SubtitleParser` regex `[-\u2013\u2014]` was replaced with `(?:-|–|—)` to fix range-format detection across all dash variants.
-- **Timing Sync button did nothing**: Wired up `connect()` handlers for `m_modeLyricsBtn` and `m_modeTimingBtn` — switching modes now correctly updates `m_viewStack`.
-- **`m_consoleBtn` null crash**: The Debug Log button was declared but never initialized. Fixed by constructing and adding it to the sidebar layout.
-- **`syncGridParent` stale lambda captures**: Renamed all captures to `updateDockVisibility`, matching the actual function name, preventing linker errors.
-- **`durationChanged` malformed lambda**: Extracted the initial `updateDockVisibility(0, 0)` call from inside the lambda into the proper `setupUi()` scope end.
-- **Namespace mismatch in Paste & Sync**: `ncktv::LyricsData` returned by `SubtitleParser` was being directly assigned to `m_project->lyrics` (type `core::LyricsData`). Fixed with explicit field-by-field conversion loop.
-
-### Changed
-- **Karaoke Preview Wipe Effect**: Upgraded from a binary color swap to a smooth **horizontal linear wipe** per word using QPainter clip rects and a cyan→blue gradient overlay.
-- **Build Script**: Portable build now reports `>>> Bundling local CUDA/cuDNN DLLs for GPU Acceleration...` when GPU libraries are detected.
-
----
-
-## [1.1.0] - 2026-03-17
-
-### Added
-- **Native Waveform Generation**: Replaced passive waveform display with a dedicated `WaveformWorker` that uses bundled FFmpeg to fast-decode and generate audio peaks in the background.
-- **Dynamic Waveform Sync**: Waveform now automatically updates when switching between Original, Instrumental, and Vocal tracks in the editor.
-- **Wizard Mode Header Menus**: Integrated "File", "Edit", and "Project" menus directly into the Wizard Mode splash screen for consistent project management from launch.
-- **Console Access**: Connected the "Console" button to instantly open the `debug.log` file via system default editor.
-- **Advanced Build Pipeline**: Integrated Nuitka compilation into `build_portable_release.ps1` for professional Python-to-C++ obfuscation of the AI bridge, effectively hiding the source code within a standalone executable.
-
-### Fixed
-- **"No Waveform" Issue**: Resolved the critical bug where the waveform display remained empty by implementing a native C++ background worker for audio peak calculation.
-- **AI Model Obfuscation**: Updated the Python bridge to correctly resolve `.dat` model extensions, allowing PyTorch models to be renamed and secured in portable builds.
-- **Build Stalling**: Enhanced the portable build script with verbose logging (`--verbose`, `--show-progress`) and non-interactive flags (`--assume-yes-for-downloads`) to prevent silent stalls during complex compilation phases.
-- **Path Resolution**: Fixed build script failures by using absolute path resolution for Python interpreters and source files.
-
-### Changed
-- **Nuitka Environment**: Build script now prioritizes the bundled `python_embed` environment for Nuitka compilation to ensure dependency consistency across different development machines.
-- **Project Structure Signals**: Added `requestOpen`, `requestNew`, and `requestPreferences` signals to `WizardMode` to unify project handling between the splash screen and main application.
-
----
-
-## [1.0.0] - 2026-03-15
-
-### Added
-- **C++ Native Engine**: Complete engine rewrite from Python to C++17 for immense performance gains.
-- **Hardware-Accelerated Timeline**: Rebuilt the Editor mode completely. Features ultra-smooth 60fps playhead tracking, down-sampled waveform rendering, and drag-and-drop subtitle chunks. 
-- **Lyrical Pro Mode**: A brand-new vertical teleprompter UI, providing a focused environment identical to *Karaoke Builder Studio*. Syllables stack alongside a frozen waveform, enabling millisecond-accurate editing via a unified word map and isolated segment playback.
-- **Native GUI-to-Core Bridge**: Implemented a dual-state `LyricsData` architecture allowing high-performance standard library operations (`std::string`/`std::vector`) inside the audio/DSP routines, while the Editor seamlessly updates via Qt-based structures (`QString`).
-- **Universal Subtitle Importer**: Drag and configure `.srt`, `.lrc`, `.txt`, and Whisper `.json` payloads flawlessly aligning against the core timeline.
-- **AssGenerator Overload**: Native support for `core::LyricsData` in `AssGenerator::generate`, allowing direct export from high-performance C++ core structures without extra serialization steps.
-- **Whisper & LRCLib Integration**: Built a flexible subprocess Python bridge for AI auto-transcription (`--model turbo` resolving to `large-v3-turbo`) and connected LRCLib APIs for instantaneous cloud lyric fetching.
-- **Model Manager**: Custom settings dialog to effortlessly manage UVR separation arrays and designate transcription languages.
-
-### Fixed
-- **Timeline/GUI Conflict**: Resolved severe architecture mismatch where the `SubtitleParser` passed GUI-level Qt objects directly into the `core::Project` struct. Standardized the ingest process bridging `QString` arrays to standard string arrays dynamically inside `EditorMode`.
-- **ConfigManager Template**: Fixed C++ template syntax error in `ConfigManager::get` by adding the `template` keyword for dependent names, resolving MinGW/GCC compilation failures.
-- **Vocal Separator Stability**: Transitioned the power-of-2 restricted FFT with a Mixed-Radix FFT implementation in DSP core, removing high-pitched distortion anomalies on isolated stems. Also resolved a crash transitioning from Wizard to Separator. 
-- **Video Playback Parsing**: Corrected URL mappings for YouTube dependencies, ensuring `video` and `youtubeUrl` JSON keys properly feed the FFmpeg extraction endpoints.
-- **MOP4/MP4 Export Error**: Verified FFmpeg parameter matches in `export_worker.cpp` establishing clear mapping for `.ass` subtitle burn-in.
-
-### Changed
-- **Portable Release Environment**: Perfected `build_portable_release.ps1` to actively stage `onnxruntime`, `ffmpeg`, custom FFmpeg libraries, and translation `.qm` bundles guaranteeing a zero-install C++ executable state.
-- **Transcription Worker**: Migrated local operations back to an encapsulated Python executable state for Whisper CLI, avoiding `ggml.c` mingw linkage faults while maintaining native C++ UX.
-- **AssGenerator Overload**: Added native support for `core::LyricsData` in `AssGenerator::generate`, allowing direct export from high-performance C++ core structures.
-- **Whisper Configuration**: Added Whisper model selection to Preferences with settings persistence in `config.ini`.
-
-### Fixed
-- **ConfigManager Template**: Fixed C++ template syntax error in `ConfigManager::get` by adding the `template` keyword for dependent names, resolving MinGW/GCC compilation failures.
-- **Editor Mode Compilation**: Fixed multiple missing header errors in `editor_mode.cpp` for `ExportDialog`, `PreferencesDialog`, and `AssGenerator`.
-- **Preferences Dialog**: Fixed missing `QCoreApplication` include causing build failure in `preferences_dialog.cpp`.
-- **Vocal Separator Stability**: Resolved a critical crash occurring in Wizard Mode when transitioning to Vocal Separation.
-- **Video Export Sync**: Fixed FFmpeg parameter mismatch in `export_worker.cpp` that prevented successful burning of synchronized lyrics into video exports.
-
-### Changed
-- **Portable Release**: Optimized the `build_portable_release.ps1` script to ensure all necessary runtime DLLs and Python bridge files are correctly staged in the final output.
-
----
-
-## [1.0.0-rc3] - 2026-03-14
-
-### Fixed
-- **Stem Separation Quality**: Replaced power-of-2 restricted FFT with a Mixed-Radix FFT implementation in `ncktv_mdx_dsp.hpp`. This fixes the "high-pitched / distorted" sound issue when using MDX-Net models with non-power-of-2 window sizes (e.g. 6144, 7680).
-- **Qt Deprecation Warning**: Fixed deprecated `QMouseEvent` constructor in `word_editor.cpp` by using the modern Qt 6 constructor with `position()` and `globalPosition()`.
-- **Memory Leak**: Fixed heap-allocated `QMouseEvent` in `WordCanvas::mouseReleaseEvent` that was never freed; replaced with stack-allocated event.
-
-### Changed
-- **Transcription Worker**: Restored the Python subprocess bridge for Whisper transcription (`python -m whisper`) with robust Python path detection (bundled portable, local venv, system fallback). The native C++ engine remains disabled on MinGW due to compiler limitations.
-- **DSP Engine**: The `rfft` and `ifft_full` functions now operate directly on the original window size without zero-padding, ensuring spectral bin accuracy matches model expectations.
-
----
-
-## [1.0.0-rc2] - 2026-03-06
-
-### Added
-- **New Project Dialog**: Full project creation UI with name, source file browser, UVR model selection, and GPU toggle.
-- **Import Dialog**: Subtitle/lyrics file browser with auto format detection (LRC/SRT/VTT/ASS/TTML/JSON/TXT) and file preview.
-- **Export Dialog**: 4 export presets (Karaoke Video, Lyrics Video, Audio Only, Subtitles Only), format/resolution/codec selection, lyrics style picker.
-- **Video Options Dialog**: Resolution presets + custom, codec (H.264/H.265/VP9/AV1), FPS, bitrate slider, hardware encoding toggle.
-- **Precision Mode Rebuild**: UI overhauled to strictly mirror the *Karaoke Builder Studio* vertical authoring experience.
-  - **Vertical Word Canvas**: Syllables now stack vertically descending alongside a fixed left-aligned waveform visualization.
-  - **Lyrics Map Table**: Right-sided `QTableWidget` to instantly select, edit, and navigate syllable text synchronizing perfectly with the canvas.
-  - **Play Segment**: Added an auto-isolating playback button that seeks and automatically stops exactly on word boundaries, compensating for QMediaPlayer async lag.
-  - **60fps Real-Time Sync**: Rewritten AudioPlayer utilizing `QTimer` at 16ms to power smooth auto-scrolling and frame-perfect Video Preview Picture-in-Picture sync.
-- **Preferences Dialog**: 4-tab layout (General, Audio, AI Models, Paths) with start mode, auto-save, sample rate, GPU, model, and language config.
-- **Shortcuts Dialog**: Comprehensive keyboard shortcut reference table with 17 entries and styled key highlighting.
-- **Model Manager Dialog/Widget**: Whisper model list with install status, download/remove buttons, progress bar, and local directory scanning.
-- **Plugin Manager Dialog**: Split-panel layout with plugin list, detail view (name/author/version/description), enable/disable toggle, install from `.nckplugin`, uninstall.
-- **Theme Manager Dialog**: Split-panel with theme list, preview area, apply/install/uninstall controls, built-in theme protection.
-- **Export Credits Dialog**: Song info (title/artist), custom credits text, countdown toggle, intro duration spinner.
-- **Curve Editor Component**: Visual Bézier curve editor with grid, draggable control points, preset easing curves, and smooth cubic rendering.
-- **Effect Panel Component**: Effect list with 9 effect types, start/duration/easing controls, integrated CurveEditor widget, bidirectional model sync.
-- **Timing Calibration Component**: ±5s master offset slider (0.001s precision), large numeric display, per-source latency compensation (UVR/transcription/playback).
-
-### Changed
-- **Export Worker**: Full FFmpeg QProcess pipeline with subtitle burn-in, multi-codec support (H.264/H.265/VP9), stderr progress parsing.
-- **Online Search Worker**: LRCLIB API integration via `LrcLibClient`, JSON result serialization, progress and error signals.
-- **Processing Worker**: 2-phase pipeline orchestration (UVR separation 0-50% → Whisper transcription 50-100%) with graceful transcription fallback.
-- **Main Window**: Wired Preferences, Theme Manager, Plugin Manager, and Shortcuts menus to actual dialog classes (removed placeholder QMessageBox stubs).
-- **Root Path Detection**: Replaced hardcoded `D:/Document/NC-KTV` path in `main.cpp` with dynamic resolution — walks up from executable directory looking for `assets/logo.png` marker.
-- **AudioClock Drift**: Implemented sample-rate-based drift calculation with latency correction summation in `getDriftAtTime()`.
-
-### Fixed
-- Missing `#include <QSpinBox>` in `export_credits_dialog.h` causing MSVC C2143 syntax error.
-
----
-
-## [1.0.0-rc1] - 2026-03-05
-
-### Added
-- **C++ Rebirth**: Complete port of the NC-KTV engine to modern C++17 and Qt 6.10.2.
-- **Logo & Splash**: Proper integration of application icon and splash screen.
-- **Portable FFmpeg**: Automatic runtime path injection for bundled FFmpeg/FFprobe in `python_embed/Scripts`.
-- **In-Editor Whisper AI**: Local AI auto-transcription directly in the Editor canvas with multistory language support (en, ms, id, ja, ko, zh).
-- **Universal Subtitle Importer**: Added a dedicated native importer block for `.lrc`, `.srt`, `.txt`, and Whisper `.json` payloads syncing perfectly into visual representation.
-- **Word-Level Subtitle Editing**: `TimelineWidget` now parses internal `LyricWord` structs from Whisper JSON and paints draggable word-edges within the main lyrics block.
-- **Dimming AI Modal**: Replaced standard progress bars with a `ProcessingOverlay` modal that blocks interactions and dims the canvas exclusively while Whisper computes.
-
-### Changed
-- **Build System**: Refined CMake configuration to treat OpenSSL and zstd as optional with plain-JSON fallbacks.
-- **Performance Optimizations**: 
-  - Debounced the real-time playback cursor syncing for both the `TimelineWidget` and `WaveformWidget` (bypassing render operations until mathematically necessary).
-  - Built a per-pixel aggregate bucketing algorithm in `WaveformWidget::drawWaveform` to compress millions of audio data points into single display columns.
-- **GUI Guidance**: Replaced solid red hover-cursors on the waveform and timeline panels with translucent white alignment guides (`rgba(255, 255, 255, 60)`) to cleanly distinguish them from the primary Playhead.
-
-### Fixed
-- **Transition Crash**: Fixed critical "use-after-free" segmentation fault when switching from Wizard to Editor mode by implementing deferred deletion (`deleteLater()`).
-- **Rendering Crash**: Resolved uninitialized pointer access in `TimelineWidget` paint events.
-- **Separation Model Fallback**: Switched default UVR model to `6_HP-Karaoke-UVR.pth` to resolve GitHub connectivity / DNS issues during first run.
-- **Path Sensitivity**: Hardcoded absolute root path detection for core assets to prevent CWD-related loading failures in terminal environments.
-
----
-
-## [0.11.0] - 2026-02-04
-
-### Added
-- **Optimization**: Significant Syllable Editor performance boost (85-96% draw call reduction) using viewport culling.
-- **OpenAI Model Support**: Native support for standard OpenAI `.pt` models in `models/whisper`.
-- **Uninstall Button**: Added ability to uninstall `faster-whisper` models to free up disk space.
-
-### Fixed
-- **Syllable Editor Lag**: Fixed severe UI freeze on long videos (2+ mins) by only rendering visible syllables/rows.
-- **Interaction Crash**: Fixed "prencede" crash when clicking the syllable canvas by adding robust error handling.
-- **Video Sync**: Fixed playback drift, stop state handling, and optimized sync checks with frame-skipping.
-
-### Changed
-- **Model Paths**: Standardized local model folder names for `faster-whisper` (e.g., `faster-whisper-medium`).
-- **Model Selection UI**: now clearly distinguishes between "Faster-Whisper" and "OpenAI Original" models.
-
-## [0.10.3] - 2026-01-09
-
-### Added
-- **Fine-Tune Syllable Editor**: Dedicated tab for precise word-level lyric timing adjustment
-- **Waveform Reference**: Full audio waveform displayed in the timeline and syllable editor
-- **Interactive Timeline**: Click-to-scrub, auto-scroll, and zoom functionality
-- **Dynamic Canvas**: Syllable editor automatically resizes to fit content length
-- **Zero-Duration Fallback**: Untimed lyrics are assigned a default duration for immediate visibility
-
-### Fixed
-- **Canvas Rendering**: Fixed crash where editor failed to draw due to missing method
-- **Invisible Lyrics**: Fixed issue where untimed lyrics had 0 duration and were hidden
-- **Line 4+ Visibility**: Fixed canvas not expanding vertically to show later lines
-- **Waveform Visibility**: Increased waveform opacity and detail for better reference
-
-## [0.10.2] - 2026-01-09
-
-### Added
-- **Intro Mode (Pre-roll)**: Option to play credits *before* the song starts (concatenates intro + main video)
-- **Countdown Feature**: Automatic "3, 2, 1, GO" count-in display if there is a >4s instrumental gap
-- **Global Timing Offset in Export**: Now correctly applies the user-configured timing offset to exported ASS subtitles
-
-### Fixed
-- **Export Crash**: Fixed `AttributeError` in `ASSGenerator` when generating styles (color format helper issue)
-- **Intro Mode Logic**: Fixed bug where intro mode was only applied if "Mixed" audio source was selected
-- **Upcoming Lyrics in Export**: Fixed styling to correctly dim upcoming lyric lines in exported video
-
-### Changed
-- **ASS Color Handling**: Refactored color conversion logic in `ASSGenerator` for better stability
-
-## [0.10.1] - 2026-01-07
-
-### Added
-- **OpenAI Model Support**: Explicitly lists `.pt` files as "(OpenAI)" in model selector
-- **Polished Model List**: Cleaner names for local and cached models (e.g. "medium [Installed]")
-
-### Fixed
-- **Startup Crash**: Fixed `TypeError` in project initialization when starting in Editor mode
-- **Runtime Crash**: Fixed Access Violation (0xC0000005) by removing conflicting CuDNN DLL loading
-- **Model Redownload**: Fixed bug where internal path construction caused local models to be ignored
-- **Startup Logic**: Fixed "Project creation cancelled" message appearing erroneously
-
-### Changed
-- **Default DLL Loading**: Reverted to standard embedded Python library loading for maximum stability
-
-## [0.10.0] - 2026-01-07
-
-### Added
-
-#### Phase 7: Community Themes and Plugins
-- **Plugin Architecture**: Extensible plugin system for custom effects and export templates
-- **Plugin Manager**: GUI for installing, enabling, and configuring plugins
-- **Plugin API**: Safe API for plugins to access NC-KTV features
-- **Theme System**: YAML-based theme files for UI and karaoke styling
-- **Theme Manager**: Visual theme browser with live preview and import/export
-- **Built-in Themes**: Dark and Light themes with customizable color palettes
-- **Example Plugin**: "Hello World" effect plugin with full documentation
-- **Plugin Types**: Support for Effect, Export Template, and UI Extension plugins
-- **Package Format**: `.nckplugin` and `.ncktheme` packages for easy distribution
-
-#### Developer Tools
-- **Plugin Development Guide**: Comprehensive documentation with examples
-- **Theme Creation Guide**: Complete guide to creating custom themes
-- **Plugin Manifest Format**: JSON-based plugin metadata with permissions system
-- **Hot Reloading**: Reload plugins without restarting application
-
-### Changed
-- **Configuration System**: Added `plugins.enabled` array to track enabled plugins
-- **Main Window**: Added "Themes" and "Plugins" menu items in Settings menu
-- **Default Theme**: Changed from 'dark' to 'builtin-dark' for new theme system
-
-### Technical
-- Created `src/core/plugin_base.py` (350 lines) - Plugin base classes and interfaces
-- Created `src/core/plugin_manager.py` (450 lines) - Plugin discovery and lifecycle
-- Created `src/utils/theme_manager.py` (400 lines) - Theme loading and application
-- Created `src/gui/dialogs/theme_manager_dialog.py` (300 lines) - Theme management UI
-- Created `src/gui/dialogs/plugin_manager_dialog.py` (350 lines) - Plugin management UI
-- Created `plugins/examples/hello_effect/` - Example effect plugin
-- Created `PLUGIN_DEVELOPMENT.md` - Plugin developer documentation
-- Created `THEME_CREATION.md` - Theme creation guide
-- Enhanced `src/utils/config.py` - Added plugins configuration section
-- Enhanced `src/gui/main_window.py` - Integrated plugin and theme managers
-
----
-
-## [0.9.0] - 2026-01-06
-
-### Added
-
-#### AI Transcription Upgrades
-- **Faster-Whisper Integration**: CTranslate2-based engine for 4x faster transcription
-- **Hybrid Model Loading**: Supports both `.pt` (OpenAI format) and optimized Faster-Whisper models
-- **Local Model Detection**: Automatically scans `models/whisper` for installed models
-- **Smart GPU Fallback**: Attempts GPU (float16) → GPU (int8) → CPU for maximum compatibility
-- **Custom DLL Loading**: Recursively searches for cuDNN/cuBLAS libraries in model folders
-
-#### Export Enhancements
-- **"Match Preview" Style**: Export videos with exact colors and styling from the karaoke preview widget
-- **Custom Color Support**: Pass active, inactive, and outline colors from preview to ASS generator
-- **Filtered Model List**: Model selection dialog now shows only locally available models
-
-### Changed
-- **CUDA Requirements**: Updated to CUDA 12.x (with automatic fallback for compatibility)
-- **Model Selection UI**: Removed download-only models from the selection list for cleaner UX
-- **Transcription Worker**: Refactored to intelligently switch between `whisper` and `faster-whisper` engines
-
-### Technical
-- Enhanced `src/utils/config.py` - Added `get_available_models()` with recursive `.bin` file search
-- Enhanced `src/gui/editor/editor_mode.py` - Model path resolution and display name mapping
-- Enhanced `src/workers/transcription_worker.py` - Dual-engine support with DLL path management
-- Enhanced `src/utils/ass_generator.py` - "Match Preview" style generation from custom colors
-- Enhanced `src/gui/dialogs/export_dialog.py` - Added "Match Preview" to lyrics style dropdown
-
-### Fixed
-- Fixed model loading for local `.pt` files by resolving full paths
-- Fixed GPU initialization errors with robust try/catch fallback logic
-- Fixed cuDNN DLL discovery in deeply nested installer directories
-
----
-
-## [0.8.0] - 2026-01-03
-
-### Added
-
-#### Timeline & Effects (Phase 6.2)
-- **Drag-and-Drop Clips**: Move clips on timeline with mouse, respects snap-to-grid
-- **Clip Resizing**: Drag clip edges to trim duration, minimum 100ms
-- **Clip Splitting**: Split clips at playhead with Ctrl+B, preserves effects
-- **Clip Deletion**: Delete selected clips with Delete key
-- **Effect Panel Dialog**: UI for adding/editing 8 effect types
-- **Animation Curve Editor**: Visual Bezier curve editing with presets
-
-#### Timing Synchronization (Phase 6.3)
-- **AudioClock System**: Sample-accurate master timing reference
-- **Sample Rate Validation**: Detects mismatches across audio files
-- **Timing Calibration Dialog**: Visual tool for drift correction
-- **Global Timing Offset**: ±5s adjustment with 0.001s precision
-- **Latency Compensation**: Automatic corrections for UVR/transcription/playback
-
-#### Universal Subtitle Support
-- **SRT (SubRip)**: Full import/export with HH:MM:SS,mmm timestamps
-- **LRC (Lyrics)**: Karaoke format with [MM:SS.xx] timestamps
-- **VTT (WebVTT)**: HTML5 standard subtitle format
-- **TTML/DFXP**: XML-based format (YouTube, Netflix)
-- **ASS/SSA**: Advanced SubStation Alpha format
-- **Unified Parser**: Auto-detection and seamless import
-
-#### Flexible Export System
-- **4 Export Presets**: Karaoke Video, Lyrics Video, Karaoke (No Video), Lyrics (No Video)
-- **Custom Options**: Video source, audio track, background color selection
-- **Export Validation**: Ensures required files are available
-
-### Changed
-- **Timeline Interaction**: Click empty space to seek, click clips to select
-- **Import Dialog**: Unified file filter for all subtitle formats
-- **Text Editor Sync**: Imported lyrics sync with editor to prevent timestamp reset
-
-### Technical
-- Created `src/utils/subtitle_parser.py` (400+ lines) - Universal subtitle parser
-- Created `src/utils/srt_parser.py` - SRT format parser
-- Created `src/utils/lrc_parser.py` - LRC format parser
-- Enhanced `src/sync/sync_data.py` - Added duration, romanized_text, import_from_text
-- Enhanced `src/core/audio_clock.py` - Sample-accurate timing system
-- Enhanced `src/gui/dialogs/export_dialog.py` - Flexible export options
-
-### Fixed
-- **Subtitle Parsing**: Fixed Windows line ending handling (CRLF)
-- **Timestamp Reset Bug**: Fixed lyrics import wiping timestamps when switching tabs
-- **LyricLine Compatibility**: Added missing duration and romanized_text properties
-- **Transcription Completion**: Fixed add_line() signature mismatch
-- **K Key Shortcut**: Uses correct toggle_playback() method
-
----
-
-## [0.7.0] - 2026-01-02
-
-### Added
-- **Phase 6.1: Core Timeline System**: Multi-track timeline editor with visual timeline view
-- **Timeline Widget**: Graphical timeline with ruler, zoom controls (10-200px/s), and snap-to-grid
-- **Multi-Track Support**: Color-coded tracks for Audio (blue), Video (pink), Effects (green), Lyrics (gold)
-- **Timeline Data Model**: Track, Clip, and Effect classes with full serialization support
-- **Playhead Synchronization**: Real-time playhead visualization synced with audio playback
-- **Click-to-Seek**: Click timeline ruler to jump to any position
-- **Timeline Toggle**: "Timeline View" button in editor to show/hide timeline panel
-- **Auto-Population**: Timeline automatically populated with audio, video, and lyrics tracks on project load
-- **Lyrics Timeline Clips**: Each lyric line appears as a clip on the timeline showing the actual lyrics text
-- **J/K/L Shortcuts**: Professional playback control - J (rewind 5s), K (pause/play), L (forward 5s)
-
-### Changed
-- **Project Format**: Bumped to v0.7 to support timeline data (backward compatible with v0.6)
-- **LyricsLine**: Extended with `effects`, `animation_curve`, and `custom_curve_points` fields
-- **Editor Layout**: Timeline widget added in vertical splitter below sync table
-- **Timeline Clips**: Display lyrics text instead of generic clip IDs for better readability
-
-### Technical
-- Created `src/core/timeline_data.py` (307 lines) - Timeline data structures
-- Created `src/gui/components/timeline_widget.py` (402 lines) - Timeline UI widget
-- Auto-migration from v0.6 projects (creates empty timeline if missing)
-- Timeline auto-initializes with default tracks (instrumental, vocals, video, lyrics)
-
----
-
-## [0.6.1] - 2026-01-01
-
-### Added
-- **Global Timing Offset**: Adjust all lyrics timing to compensate for AI transcription delay
-- **Adjustable Preview Lead Time**: Configure how early upcoming lyrics appear in karaoke mode
-
-### Changed
-- **Improved Transcription Source Priority**: Now uses original audio by default for better accuracy
-- **Enhanced Karaoke Preview Logic**: Better handling of current/upcoming line transitions
-- **Refined Timing Synchronization**: Eliminated perceived playback delay in lyrics display
-
-### Fixed
-- Fixed typo in CHANGELOG.md (keepachanglog → keepachangelog)
-- Fixed typo in wiki documentation (Using-the-Lyrics-Editor.md)
-- Fixed lyrics display timing to match actual audio playback accurately
-
----
-
-## [0.6.0] - 2026-01-01
-
-### Added
-- **Lyrics File Import**: Import from .txt or .lrc files with timestamp parsing
-- **Playback Speed Control**: Adjust speed (0.5x - 2.0x) for easier synchronization
-- **Cross-Project Import**: Import lyrics, audio, or metadata from other .nctv files
-- **Model Manager**: One-click Whisper model downloads with progress tracking
-- **Encrypted .nctv Format**: Secure binary project files with AES-256-GCM encryption
-- **Save Prompts**: Warns before closing with unsaved changes
-
-### Changed
-- Improved dirty state tracking across all edit operations
-- Enhanced project file format with chunked streaming for large files
-- Updated preferences dialog with model management tab
-
-### Fixed
-- Fixed AI transcription crash (missing `clear()` method in sync_data.py)
-- Fixed import paths for ModelManagerWidget
-
----
-
-## [0.5.0] - 2025-12-31
-
-### Added
-- **Multiple Animation Types**: Choose from 5 karaoke animations:
-  - Linear Wipe (classic left-to-right fill)
-  - Syllable Step (instant word fill)
-  - Glow Pulse (pulsing glow effect)
-  - Fade In (words fade from transparent)
-  - Bouncing Ball (classic karaoke ball)
-- **Keyboard Shortcuts Help**: Press F1 to see all shortcuts
-- **Undo/Redo System**: Ctrl+Z/Y to undo/redo lyrics changes
-- **Help Button**: Quick access to shortcuts in editor toolbar
-
-### Changed
-- Improved audio track switching (seamless position preservation)
-- Streamlined documentation (combined into README, CHANGELOG, DOCS)
-- Polished .gitignore with better organization
-
-### Fixed
-- Fixed audio not playing when switching tracks while playing
-
----
-
-## [0.4.0] - 2025-12-31
-
-### Added
-- **Karaoke Video Export**: Generate MP4 videos with burned-in karaoke lyrics
-- **Video Styles**: "Neon Gold", "Classic Blue", "Modern Clean", "Fire Red"
-- **Smart Lyric Preview**: Accurate karaoke-style fills with active/upcoming lines
-- **Word-Level Editing**: "Edit Words" dialog for precise word timings
-
-### Changed
-- Added official NC-KTV app icon
-- Optimized preview rendering for smoother playback
-- Improved Lyrics Editor layout
-
-### Fixed
-- Fixed crash in "Edit Words" dialog
-- Fixed "Upcoming Lyrics" disappearing during preview
-- Fixed `RecursionError` in Auto-Transcribe
-- Fixed table edits not updating preview in real-time
-
----
-
-## [0.3.0] - 2025-12-30
-
-### Added
-- **Lyrics Editor Mode**: Professional synchronization interface
-- **AI Auto-Transcription**: Whisper-powered automatic lyric generation
-- **Tap-to-Sync**: Spacebar-based timestamp marking
-- **Waveform Visualization**: Visual audio representation
-- **Click-to-Jump**: Click table rows to seek playback
-
-### Changed
-- Redesigned main interface with Wizard → Editor flow
-- Enhanced project structure for better organization
-
----
-
-## [0.2.0] - 2025-12-30
-
-### Added
-- **Vocal Separation**: UVR-powered instrumental/vocal isolation
-- **GPU Acceleration**: CUDA support for faster processing
-- **Model Selection**: Support for multiple UVR models
-
----
-
-## [0.1.0] - 2025-12-30
-
-### Added
-- Initial project setup
-- Basic wizard interface
-- Audio file support (MP3, WAV, MP4)
-
----
-
-## [0.0.0] - 2025-12-29
-
-### Project Initialization
-- Repository created
-- Initial project structure
-
----
-
-[0.0.0]: https://github.com/AgentHitmanFaris/NC-KTV/releases/tag/v0.0.0

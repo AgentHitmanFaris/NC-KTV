@@ -20,6 +20,51 @@ import threading
 import socketserver
 from pathlib import Path
 
+def setup_local_cache_directories():
+    import os
+    import sys
+    import shutil
+    
+    _script_dir = Path(__file__).parent.resolve()
+    models_dir = _script_dir / "models"
+    local_pth = models_dir / "wav2vec2_fairseq_large_lv60k_asr_ls960.pth"
+    
+    if local_pth.exists():
+        checkpoints_dir = models_dir / "checkpoints"
+        checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        dest_pth = checkpoints_dir / "wav2vec2_fairseq_large_lv60k_asr_ls960.pth"
+        if not dest_pth.exists():
+            try:
+                os.link(str(local_pth), str(dest_pth))
+            except Exception:
+                try:
+                    shutil.copy(str(local_pth), str(dest_pth))
+                except Exception as e:
+                    print(f"[Warning] Failed to link/copy to {dest_pth}: {e}", file=sys.stderr)
+                    
+        hub_checkpoints_dir = models_dir / "hub" / "checkpoints"
+        hub_checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        dest_hub_pth = hub_checkpoints_dir / "wav2vec2_fairseq_large_lv60k_asr_ls960.pth"
+        if not dest_hub_pth.exists():
+            try:
+                os.link(str(local_pth), str(dest_hub_pth))
+            except Exception:
+                try:
+                    shutil.copy(str(local_pth), str(dest_hub_pth))
+                except Exception as e:
+                    print(f"[Warning] Failed to link/copy to {dest_hub_pth}: {e}", file=sys.stderr)
+
+        os.environ["TORCH_HOME"] = str(models_dir.absolute())
+        
+        try:
+            import torch
+            torch.hub.set_dir(str(models_dir.absolute()))
+            print("[Server] Configured local torch cache directory successfully.", file=sys.stderr)
+        except Exception:
+            pass
+
+setup_local_cache_directories()
+
 # ─── Locate and Expose FFmpeg Globally ───────────────────────────────────────
 _script_dir = Path(__file__).parent.resolve()
 
@@ -34,6 +79,8 @@ _possible_ffmpeg_dirs = [
     _exe_dir / "ffmpeg" / "bin",
     _base_dir / "ffmpeg" / "bin",
     _exe_dir / "bin",
+    _base_dir / "build",
+    _base_dir / "build" / "_deps" / "ffmpeg_dev-src" / "bin",
     Path("D:/NC-KTV/ffmpeg/bin"),
     Path("C:/ffmpeg/bin"),
 ]
@@ -202,10 +249,67 @@ def run_transcription_whisperx(audio_file, model_name="large-v3", language=None,
 
 # ─── Lyrics Forced Alignment ─────────────────────────────────────────────────
 
+def parse_line_to_words_and_syllables(line_text, language="en"):
+    is_cjk = language in ["zh", "ko", "ja"]
+    words = []
+    
+    if is_cjk:
+        for char in line_text:
+            if char.strip():
+                words.append([char])
+    else:
+        # Split by spaces to get words
+        raw_words = line_text.split()
+        for rw in raw_words:
+            # Split by hyphens
+            parts = rw.split('-')
+            word_syls = []
+            for idx, part in enumerate(parts):
+                if not part: continue
+                if idx < len(parts) - 1:
+                    word_syls.append(part + "-")
+                else:
+                    word_syls.append(part)
+            if word_syls:
+                words.append(word_syls)
+    return words
+
+def interpolate_word_times(words, start_bound, end_bound):
+    n = len(words)
+    if n == 0: return
+    
+    if words[0]["start"] is None:
+        words[0]["start"] = start_bound
+    if words[-1]["end"] is None:
+        words[-1]["end"] = end_bound
+        
+    times = []
+    for w in words:
+        times.append(w["start"])
+        times.append(w["end"])
+        
+    known_indices = [idx for idx, t in enumerate(times) if t is not None]
+    for k in range(len(known_indices) - 1):
+        idx_a = known_indices[k]
+        idx_b = known_indices[k+1]
+        val_a = times[idx_a]
+        val_b = times[idx_b]
+        
+        steps = idx_b - idx_a
+        if steps > 1:
+            step_val = (val_b - val_a) / steps
+            for step in range(1, steps):
+                times[idx_a + step] = val_a + step * step_val
+                
+    for idx, w in enumerate(words):
+        w["start"] = times[2 * idx]
+        w["end"] = times[2 * idx + 1]
+
 def run_alignment(audio_file, lyrics_text, language="en"):
     import whisperx
     import torch
     import numpy as np
+    import re
 
     if language and language.lower() == "auto":
         language = "en"
@@ -216,28 +320,248 @@ def run_alignment(audio_file, lyrics_text, language="en"):
 
     audio = whisperx.load_audio(str(audio_file))
     vocal_start, vocal_end = detect_vocal_region(audio)
-    clean_lines = [line.strip() for line in lyrics_text.strip().split("\n") if line.strip()]
 
-    if not clean_lines:
+    raw_lines = [line.strip() for line in lyrics_text.strip().split("\n") if line.strip()]
+    if not raw_lines:
         return {"error": "No lyrics text provided", "segments": []}
 
-    full_text = " ".join(clean_lines)
+    # Parse each line into syllables and clean words
+    parsed_lines = []
+    for line_text in raw_lines:
+        words = parse_line_to_words_and_syllables(line_text, language)
+        if not words:
+            continue
+        
+        clean_words = []
+        for word in words:
+            clean_word = "".join(syl.replace("-", "") for syl in word)
+            clean_words.append(clean_word)
+            
+        clean_line = " ".join(clean_words)
+        parsed_lines.append({
+            "original_text": line_text,
+            "parsed_words": words,  # list of list of syllables
+            "clean_words": clean_words,
+            "clean_line": clean_line
+        })
+
+    if not parsed_lines:
+        return {"error": "No valid lyric lines parsed", "segments": []}
+
+    full_text = " ".join(line["clean_line"] for line in parsed_lines)
     raw_segments = [{"text": full_text, "start": vocal_start, "end": vocal_end}]
     align_device = "cpu" if device == "mps" else device
 
     try:
         align_model, metadata = whisperx.load_align_model(language_code=language, device=align_device)
-        align_result = whisperx.align(raw_segments, align_model, metadata, audio, align_device)
+        align_result = whisperx.align(raw_segments, align_model, metadata, audio, align_device, return_char_alignments=True)
         del align_model
         _free_gpu()
     except Exception as e:
         return {"error": f"Alignment error: {e}", "segments": []}
 
-    segments = _map_words_to_lines(align_result, clean_lines)
+    # Flatten all aligned words and chars from whisperx
+    all_aligned_words = [w for seg in align_result.get("segments", []) for w in seg.get("words", [])]
+    all_aligned_chars = [c for seg in align_result.get("segments", []) for c in seg.get("chars", [])]
+
+    # Map aligned words to our flat words to assign start/end times
+    flat_words_to_map = []
+    for line_idx, line in enumerate(parsed_lines):
+        for word_idx, (clean_word, syllables) in enumerate(zip(line["clean_words"], line["parsed_words"])):
+            flat_words_to_map.append({
+                "line_idx": line_idx,
+                "word_idx_in_line": word_idx,
+                "clean_word": clean_word,
+                "syllables": syllables,
+                "start": None,
+                "end": None
+            })
+
+    # Sequence alignment for words
+    i, j = 0, 0
+    while i < len(flat_words_to_map) and j < len(all_aligned_words):
+        fw = re.sub(r"[^\w]", "", flat_words_to_map[i]["clean_word"]).lower()
+        aw = re.sub(r"[^\w]", "", all_aligned_words[j].get("word", "")).lower()
+        
+        if fw == aw or not fw or not aw:
+            flat_words_to_map[i]["start"] = all_aligned_words[j].get("start")
+            flat_words_to_map[i]["end"] = all_aligned_words[j].get("end")
+            i += 1
+            j += 1
+        else:
+            found = False
+            for k in range(1, 5):
+                if i + k < len(flat_words_to_map) and re.sub(r"[^\w]", "", flat_words_to_map[i+k]["clean_word"]).lower() == aw:
+                    i += k
+                    found = True
+                    break
+                if j + k < len(all_aligned_words) and fw == re.sub(r"[^\w]", "", all_aligned_words[j+k].get("word", "")).lower():
+                    j += k
+                    found = True
+                    break
+            if not found:
+                flat_words_to_map[i]["start"] = all_aligned_words[j].get("start")
+                flat_words_to_map[i]["end"] = all_aligned_words[j].get("end")
+                i += 1
+                j += 1
+
+    # Interpolate missing word timings
+    interpolate_word_times(flat_words_to_map, vocal_start, vocal_end)
+
+    # Map aligned chars to our flat chars
+    flat_chars_to_map = []
+    for word_idx, w_data in enumerate(flat_words_to_map):
+        clean_word = w_data["clean_word"]
+        syllables = w_data["syllables"]
+        
+        syl_idx = 0
+        char_in_syl_idx = 0
+        for char in clean_word:
+            while syl_idx < len(syllables):
+                current_syl = syllables[syl_idx]
+                while char_in_syl_idx < len(current_syl) and current_syl[char_in_syl_idx] == '-':
+                    char_in_syl_idx += 1
+                if char_in_syl_idx < len(current_syl):
+                    flat_chars_to_map.append({
+                        "word_idx": word_idx,
+                        "syl_idx": syl_idx,
+                        "char": char,
+                        "start": None,
+                        "end": None
+                    })
+                    char_in_syl_idx += 1
+                    break
+                else:
+                    syl_idx += 1
+                    char_in_syl_idx = 0
+
+    clean_aligned_chars = [c for c in all_aligned_chars if c.get("char", "").strip()]
+
+    # Sequence alignment for chars
+    i, j = 0, 0
+    while i < len(flat_chars_to_map) and j < len(clean_aligned_chars):
+        fc = flat_chars_to_map[i]["char"].lower()
+        ac = clean_aligned_chars[j]["char"].lower()
+        
+        if fc == ac or not fc.isalnum() or not ac.isalnum():
+            flat_chars_to_map[i]["start"] = clean_aligned_chars[j].get("start")
+            flat_chars_to_map[i]["end"] = clean_aligned_chars[j].get("end")
+            i += 1
+            j += 1
+        else:
+            found = False
+            for k in range(1, 5):
+                if i + k < len(flat_chars_to_map) and flat_chars_to_map[i+k]["char"].lower() == ac:
+                    i += k
+                    found = True
+                    break
+                if j + k < len(clean_aligned_chars) and fc == clean_aligned_chars[j+k]["char"].lower():
+                    j += k
+                    found = True
+                    break
+            if not found:
+                flat_chars_to_map[i]["start"] = clean_aligned_chars[j].get("start")
+                flat_chars_to_map[i]["end"] = clean_aligned_chars[j].get("end")
+                i += 1
+                j += 1
+
+    # Group chars by word_idx
+    word_char_times = {}
+    for c_data in flat_chars_to_map:
+        word_char_times.setdefault(c_data["word_idx"], []).append(c_data)
+
+    # For each word, interpolate its characters and construct syllable timing results
+    word_syllables_results = {}
+    for word_idx, w_data in enumerate(flat_words_to_map):
+        w_start = w_data["start"]
+        w_end = w_data["end"]
+        syllables = w_data["syllables"]
+        
+        chars_in_word = word_char_times.get(word_idx, [])
+        if not chars_in_word:
+            # Fallback if no characters (distribute word time equally across syllables)
+            syl_results = []
+            n_syls = len(syllables)
+            dur = (w_end - w_start) / n_syls
+            for s_idx, syl in enumerate(syllables):
+                s_start = w_start + s_idx * dur
+                s_end = w_start + (s_idx + 1) * dur
+                syl_results.append({
+                    "word": syl,
+                    "start": round(s_start, 3),
+                    "end": round(s_end, 3)
+                })
+            word_syllables_results[word_idx] = syl_results
+            continue
+
+        # Set boundary conditions and interpolate char times
+        times = []
+        for c in chars_in_word:
+            times.append(c["start"])
+            times.append(c["end"])
+            
+        if times[0] is None:
+            times[0] = w_start
+        if times[-1] is None:
+            times[-1] = w_end
+            
+        known_indices = [idx for idx, t in enumerate(times) if t is not None]
+        for k in range(len(known_indices) - 1):
+            idx_a = known_indices[k]
+            idx_b = known_indices[k+1]
+            val_a = times[idx_a]
+            val_b = times[idx_b]
+            
+            steps = idx_b - idx_a
+            if steps > 1:
+                step_val = (val_b - val_a) / steps
+                for step in range(1, steps):
+                    times[idx_a + step] = val_a + step * step_val
+                    
+        # Assign back
+        for idx, c in enumerate(chars_in_word):
+            c["start"] = times[2 * idx]
+            c["end"] = times[2 * idx + 1]
+
+        # Group by syllable
+        syl_results = []
+        for s_idx, syl in enumerate(syllables):
+            syl_chars = [c for c in chars_in_word if c["syl_idx"] == s_idx]
+            if syl_chars:
+                s_start = syl_chars[0]["start"]
+                s_end = syl_chars[-1]["end"]
+            else:
+                s_start = w_start
+                s_end = w_end
+            syl_results.append({
+                "word": syl,
+                "start": round(s_start, 3),
+                "end": round(s_end, 3)
+            })
+        word_syllables_results[word_idx] = syl_results
+
+    # Build segments
+    segments = []
+    for line_idx, line in enumerate(parsed_lines):
+        line_syllables = []
+        # Find all words in this line
+        line_words_data = [w for w in flat_words_to_map if w["line_idx"] == line_idx]
+        for w_data in line_words_data:
+            global_word_idx = flat_words_to_map.index(w_data)
+            line_syllables.extend(word_syllables_results.get(global_word_idx, []))
+            
+        if line_syllables:
+            segments.append({
+                "text": line["original_text"],
+                "start": round(line_syllables[0]["start"], 3),
+                "end": round(line_syllables[-1]["end"], 3),
+                "words": line_syllables
+            })
+
     return {
         "segments": segments,
-        "engine": "whisperx-align",
-        "language": language,
+        "engine": "whisperx-align-syllables",
+        "language": language
     }
 
 # ─── Legacy Whisper Engine ───────────────────────────────────────────────────

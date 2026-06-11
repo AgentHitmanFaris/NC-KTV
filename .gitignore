@@ -1,139 +1,37 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# Font assets
+assets/fonts/
+
+# Build directories
 build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+bin/
+obj/
+NCKTV.Wpf/bin/
+NCKTV.Wpf/obj/
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-python_embed/
-omnizart_env/
-
-# IDE / Editor
-.vscode/
-.idea/
-.qtcreator/
-*.user
-*.swp
-*.swo
-*~
-.spyderproject
-.spyproject
-.ropeproject
-
-# Jupyter
-.ipynb_checkpoints
-
-# Type checkers
-.mypy_cache/
-.dmypy.json
-dmypy.json
-.pyre/
-.pytype/
-
-# Documentation
-/site
-
-# ========================
-# NC-KTV Project Specific
-# ========================
-
-# Large folders (not tracked)
-Testing/
-output/
-temp/
-models/
+# Local/Downloaded binaries
+dotnet-sdk/
+dotnet-sdk.zip
 ffmpeg/
 
-# User config (template tracked)
-config.yaml
-!config.example.yaml
-
-# Logs and temp files
-*.log
-*.zip
-*.spec
-*.whl
-
-# Assets (keep logo only)
-assets/
-!assets/logo.png
-
-# Project files (user-specific)
-*.nctv
+# Output and cache files
+export.mp4
 *.mp4
-debug_models.py
+*.pk
+__pycache__/
+*.pyc
 
-# System files
-.DS_Store
-Thumbs.db
-desktop.ini
+# AI Models
+models/Kim_Vocal_2.onnx
+models/UVR-MDX-NET-Inst_HQ_5.onnx
+models/UVR-MDX-NET-Inst_Main.onnx
+models/UVR_MDXNET_KARA_2.onnx
+models/wav2vec2_fairseq_large_lv60k_asr_ls960.pth
+models/checkpoints/
+models/hub/
 
-# Wiki
-NC-KTV.wiki/
-
-# Build artifacts
-NC-KTV-Portable/
-cpp/out/
-cpp/build/
-cpp/*.txt
-*.ncktv_run_sep.py
-fix_precision.py
-cpp/src/gui/dialogs/replace_words*.py
-
-# Build Tools
-build_pyinstaller/
-build_pyinstaller_work/
-ui_pro_prototype/
-*.lnk
-debug.log
-
-# Local build artifacts
-bin/
-qt/
-share/
-config.ini
+# Reports and temporary files
+nc-ktv-qa-report-2026-06-03.json
+manual_test_checklist.html
+.pytest_cache/
+video/
 
