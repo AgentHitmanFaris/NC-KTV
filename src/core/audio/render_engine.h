@@ -2,6 +2,8 @@
 
 #include <QString>
 #include <QImage>
+#include <QProcess>
+#include <QFile>
 
 namespace ncktv {
 
@@ -21,6 +23,21 @@ public:
 private:
     QString m_chosenVideoCodec;
     QString m_chosenAudioCodec;
+
+    QProcess* m_videoProcess = nullptr;
+    QFile m_audioFile;
+    QString m_tempVideoPath;
+    QString m_tempAudioPath;
+    QString m_finalOutputPath;
+    QString m_ffmpegPath;
+
+    int m_width = 1920;
+    int m_height = 1080;
+    int m_fps = 30;
+    int m_videoBitrate = 4000000;
+    int m_audioBitrate = 192000;
+    int64_t m_totalAudioSamples = 0;
 };
 
 } // namespace ncktv
+
