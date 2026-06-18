@@ -7,6 +7,7 @@ bin/
 obj/
 NCKTV.Wpf/bin/
 NCKTV.Wpf/obj/
+NC-KTV-Portable/
 
 # Local/Downloaded binaries
 dotnet-sdk/

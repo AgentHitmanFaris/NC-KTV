@@ -61,16 +61,18 @@
 
                 <!-- Left Column: Preview Controls -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Orientation="Vertical">
-                    <CheckBox x:Name="ChkAutoUpdate" Content="Update automatically" IsChecked="True" FontSize="11" Margin="0,0,0,6" Foreground="{StaticResource TextDarkBrush}"/>
+                    <CheckBox x:Name="ChkAutoUpdate" Content="Update automatically" IsChecked="True" FontSize="11" Margin="0,0,0,4" Foreground="{StaticResource TextDarkBrush}"/>
+                    <CheckBox x:Name="ChkAutoScroll" Content="Auto-scroll timeline" IsChecked="True" FontSize="11" Margin="0,0,0,6" Foreground="{StaticResource TextDarkBrush}"/>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                         <Button x:Name="BtnUpdate" Content="Update" Width="85" Margin="0,0,6,0" Click="BtnUpdate_Click"/>
                         <Button x:Name="BtnVideoPreview" Content="Video preview..." Width="105" Click="BtnVideoPreview_Click"/>
                     </StackPanel>
                     <!-- Small transport panel -->
                     <StackPanel Orientation="Horizontal">
-                        <Button x:Name="BtnPlay" Content="▶ Play" Width="60" Margin="0,0,4,0" Click="BtnPlay_Click"/>
-                        <Button x:Name="BtnPause" Content="‖ Pause" Width="60" Margin="0,0,4,0" Click="BtnPause_Click"/>
-                        <Button x:Name="BtnStop" Content="■ Stop" Width="60" Click="BtnStop_Click"/>
+                        <Button x:Name="BtnPlay" Content="▶ Play" Width="48" Margin="0,0,3,0" Click="BtnPlay_Click" FontSize="10" Padding="2"/>
+                        <Button x:Name="BtnPause" Content="‖ Pause" Width="48" Margin="0,0,3,0" Click="BtnPause_Click" FontSize="10" Padding="2"/>
+                        <Button x:Name="BtnStop" Content="■ Stop" Width="48" Margin="0,0,3,0" Click="BtnStop_Click" FontSize="10" Padding="2"/>
+                        <ToggleButton x:Name="BtnLoop" Content="🔁 Loop" Width="48" Click="BtnLoop_Click" FontSize="10" Padding="2"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -171,7 +173,10 @@
                             <local:WaveformControl x:Name="VerticalWaveform" Orientation="Vertical" Width="90" HorizontalAlignment="Left" Margin="10,0,0,0"/>
 
                             <!-- Canvas for syllable overlays -->
-                            <Canvas x:Name="CanvasSyllables" Background="Transparent" Width="280">
+                            <Canvas x:Name="CanvasSyllables" Background="Transparent" Width="280"
+                                    MouseDown="CanvasSyllables_MouseDown"
+                                    MouseMove="CanvasSyllables_MouseMove"
+                                    MouseUp="CanvasSyllables_MouseUp">
                                 <!-- Horizontal Playhead Indicator line -->
                                 <Line x:Name="VerticalPlayheadLine" X1="0" X2="280" Y1="0" Y2="0" Stroke="#FFD60A" StrokeThickness="2"/>
                             </Canvas>
@@ -310,7 +315,10 @@
                             </Grid>
 
                             <!-- Results List -->
-                            <ListBox Grid.Row="1" x:Name="LstYtResults" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox Grid.Row="1" x:Name="LstYtResults" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     VirtualizingPanel.ScrollUnit="Pixel"
+                                     VirtualizingPanel.CacheLengthUnit="Item"
+                                     VirtualizingPanel.CacheLength="10,10">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="0,0,0,1" Padding="6" HorizontalAlignment="Stretch" Width="340">
@@ -410,7 +418,10 @@
                                 </Grid.RowDefinitions>
 
                                 <!-- Results List -->
-                                <ListBox Grid.Row="0" x:Name="LstLrcResults" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Margin="0,0,0,5" SelectionChanged="LstLrcResults_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox Grid.Row="0" x:Name="LstLrcResults" Background="White" BorderBrush="{StaticResource BorderLightBrush}" Foreground="Black" Margin="0,0,0,5" SelectionChanged="LstLrcResults_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         VirtualizingPanel.ScrollUnit="Pixel"
+                                         VirtualizingPanel.CacheLengthUnit="Item"
+                                         VirtualizingPanel.CacheLength="10,10">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Border BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="0,0,0,1" Padding="4" HorizontalAlignment="Stretch" Width="320">

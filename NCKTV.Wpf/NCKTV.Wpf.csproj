@@ -15,8 +15,12 @@
   </ItemGroup>
 
   <!-- Copy native dependencies from C++ build directory -->
-  <Target Name="CopyNativeDlls" AfterTargets="AfterBuild">
-    <Message Text="Copying Native DLLs and Qt Plugins from C++ build directory..." Importance="High" />
+  <Target Name="CopyNativeDlls" AfterTargets="AfterBuild;Publish">
+    <PropertyGroup>
+      <DestDir>$(TargetDir)</DestDir>
+      <DestDir Condition="'$(PublishDir)' != ''">$(PublishDir)</DestDir>
+    </PropertyGroup>
+    <Message Text="Copying Native DLLs and Qt Plugins from C++ build directory to $(DestDir)..." Importance="High" />
     <ItemGroup>
       <BridgeDll Include="$(ProjectDir)..\build\ncktv_bridge.dll" />
       <OnnxDll Include="$(ProjectDir)..\build\onnxruntime.dll" />
@@ -27,11 +31,8 @@
       <FFmpegExe Include="$(ProjectDir)..\build\ffmpeg.exe" />
       <FFmpegExe2 Include="$(ProjectDir)..\build\ffprobe.exe" />
       <ConfigYaml Include="$(ProjectDir)..\config.yaml" />
-      <PythonBridge Include="$(ProjectDir)..\python_bridge.py" />
-      <PythonDownloader Include="$(ProjectDir)..\download_whisperx_models.py" />
-      <PythonRobust Include="$(ProjectDir)..\robust_download.py" />
-      <PythonFilter Include="$(ProjectDir)..\hallucination_filter.py" />
-      <PythonReqs Include="$(ProjectDir)..\requirements.txt" />
+      <PythonBridge Include="$(ProjectDir)..\scripts\python_bridge.py" />
+      <PythonReqs Include="$(ProjectDir)..\scripts\requirements.txt" />
       
       <!-- Qt Plugins recursively -->
       <QtPlatformPlugins Include="$(ProjectDir)..\build\platforms\**\*.*" />
@@ -40,25 +41,22 @@
       <QtImagePlugins Include="$(ProjectDir)..\build\imageformats\**\*.*" />
     </ItemGroup>
     
-    <Copy SourceFiles="@(BridgeDll)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(OnnxDll)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(QtDlls)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(FFmpegDlls)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(FFmpegDlls2)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(FFmpegDlls3)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(FFmpegExe)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(FFmpegExe2)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(ConfigYaml)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(PythonBridge)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(PythonDownloader)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(PythonRobust)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(PythonFilter)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(PythonReqs)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(BridgeDll)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(OnnxDll)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtDlls)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegDlls)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegDlls2)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegDlls3)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegExe)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(FFmpegExe2)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ConfigYaml)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PythonBridge)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PythonReqs)" DestinationFolder="$(DestDir)" SkipUnchangedFiles="true" />
     
     <!-- Copy plugins preserving subdirectories -->
-    <Copy SourceFiles="@(QtPlatformPlugins)" DestinationFolder="$(TargetDir)platforms\%(RecursiveDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(QtStylePlugins)" DestinationFolder="$(TargetDir)styles\%(RecursiveDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(QtMultimediaPlugins)" DestinationFolder="$(TargetDir)multimedia\%(RecursiveDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(QtImagePlugins)" DestinationFolder="$(TargetDir)imageformats\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtPlatformPlugins)" DestinationFolder="$(DestDir)platforms\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtStylePlugins)" DestinationFolder="$(DestDir)styles\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtMultimediaPlugins)" DestinationFolder="$(DestDir)multimedia\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtImagePlugins)" DestinationFolder="$(DestDir)imageformats\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

@@ -49,6 +49,43 @@ namespace NCKTV.Wpf
         private double _dragStartClipHeight;
         private int _activeTapSyllableIndex = 0;
 
+        // Cached Typeface for text measurement
+        private Typeface? _cachedTypeface;
+
+        // Frozen Brushes for Syllables
+        private static readonly Brush SyllableBackgroundBrush = new LinearGradientBrush(
+            Color.FromRgb(230, 74, 25),  // Dark Orange-Red Accent
+            Color.FromRgb(191, 54, 12),
+            90.0
+        );
+        private static readonly Brush SyllableBorderBrush = new SolidColorBrush(Color.FromRgb(255, 87, 34));
+        private static readonly Brush HandleBackgroundBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
+
+        // Active lyrics line cache
+        private class ActiveLineCache
+        {
+            public int LineIndex { get; set; } = -2;
+            public List<SyllableClip> LineSyllables { get; set; } = new List<SyllableClip>();
+            public double[] WidthAtStart { get; set; } = Array.Empty<double>();
+            public double[] WidthAtEnd { get; set; } = Array.Empty<double>();
+            public double[] GapWidth { get; set; } = Array.Empty<double>();
+            public double FullLineWidth { get; set; }
+        }
+        private readonly ActiveLineCache _activeLineCache = new ActiveLineCache();
+
+        // Playhead throttle tracking
+        private long _lastPlayheadUiUs = -1;
+        private long _lastLiveLyricsPlayheadUs = -1;
+        private bool _isScrubbing = false;
+        private DateTime _lastScrubTime = DateTime.MinValue;
+
+        static MainWindow()
+        {
+            SyllableBackgroundBrush.Freeze();
+            SyllableBorderBrush.Freeze();
+            HandleBackgroundBrush.Freeze();
+        }
+
         public MainWindow()
         {
             InitializeComponent();
@@ -62,6 +99,7 @@ namespace NCKTV.Wpf
         {
             _syllables.Clear();
             _activeTapSyllableIndex = 0;
+            _activeLineCache.LineIndex = -2; // Invalidate cache
         }
 
         private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -237,9 +275,26 @@ namespace NCKTV.Wpf
         {
             NativeBridge.ncktv_process_events();
 
+            if (_isScrubbing) return; // Skip updating UI from playback timer while scrubbing
+
             if (NativeBridge.ncktv_is_playing())
             {
                 long playheadUs = NativeBridge.ncktv_get_playhead();
+
+                // Looping check
+                if (BtnLoop != null && BtnLoop.IsChecked == true && _activeLineCache.LineSyllables.Count > 0)
+                {
+                    long lineStartUs = _activeLineCache.LineSyllables[0].StartTimeUs;
+                    long lineEndUs = _activeLineCache.LineSyllables[_activeLineCache.LineSyllables.Count - 1].StartTimeUs + 
+                                      _activeLineCache.LineSyllables[_activeLineCache.LineSyllables.Count - 1].DurationUs;
+
+                    if (lineEndUs > lineStartUs && playheadUs >= lineEndUs)
+                    {
+                        NativeBridge.ncktv_set_playhead(lineStartUs);
+                        playheadUs = lineStartUs;
+                    }
+                }
+
                 UpdatePlayheadUI(playheadUs);
                 UpdateLiveLyricsHighlight(playheadUs);
             }
@@ -247,6 +302,9 @@ namespace NCKTV.Wpf
 
         private void UpdatePlayheadUI(long timeUs)
         {
+            if (timeUs == _lastPlayheadUiUs) return;
+            _lastPlayheadUiUs = timeUs;
+
             double seconds = timeUs / (double)UsPerSec;
             double yPos = seconds * ZoomFactor;
             
@@ -259,7 +317,7 @@ namespace NCKTV.Wpf
             TxtWavePos.Text = $"Position: {seconds:F3} sec";
 
             // Autoscroll vertical list to keep playhead in center of viewport
-            if (!ScrollSyllableAdjuster.IsMouseOver)
+            if (ChkAutoScroll != null && ChkAutoScroll.IsChecked == true && !_isDragging && !_isResizing && !_isScrubbing)
             {
                 double viewportHeight = ScrollSyllableAdjuster.ViewportHeight;
                 double targetScroll = yPos - (viewportHeight / 2.0);
@@ -272,8 +330,22 @@ namespace NCKTV.Wpf
         private void OnPlayheadChangedNative(long timeUs)
         {
             Dispatcher.BeginInvoke(new Action(() => {
-                UpdatePlayheadUI(timeUs);
-                UpdateLiveLyricsHighlight(timeUs);
+                if (_isScrubbing) return; // Skip updating UI from C++ callback while scrubbing
+                long playheadUs = timeUs;
+                if (BtnLoop != null && BtnLoop.IsChecked == true && _activeLineCache.LineSyllables.Count > 0)
+                {
+                    long lineStartUs = _activeLineCache.LineSyllables[0].StartTimeUs;
+                    long lineEndUs = _activeLineCache.LineSyllables[_activeLineCache.LineSyllables.Count - 1].StartTimeUs + 
+                                      _activeLineCache.LineSyllables[_activeLineCache.LineSyllables.Count - 1].DurationUs;
+
+                    if (lineEndUs > lineStartUs && playheadUs >= lineEndUs)
+                    {
+                        NativeBridge.ncktv_set_playhead(lineStartUs);
+                        playheadUs = lineStartUs;
+                    }
+                }
+                UpdatePlayheadUI(playheadUs);
+                UpdateLiveLyricsHighlight(playheadUs);
             }));
         }
 
@@ -319,6 +391,91 @@ namespace NCKTV.Wpf
                 PanelSepProgress.Visibility = Visibility.Collapsed;
                 MessageBox.Show($"AI Stem Separation Failed!\nError: {errorMessage}", "AI Processing Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }));
+        }
+
+        // --- Interactive timeline scrubbing ---
+        private void CanvasSyllables_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed)
+            {
+                _isScrubbing = true;
+                _lastPlayheadUiUs = -1; // Force scroll update on scrub start
+                CanvasSyllables.CaptureMouse();
+                _lastScrubTime = DateTime.UtcNow;
+                PerformScrub(e.GetPosition(CanvasSyllables), false);
+                e.Handled = true;
+            }
+        }
+
+        private void CanvasSyllables_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isScrubbing)
+            {
+                PerformScrub(e.GetPosition(CanvasSyllables), false);
+                e.Handled = true;
+            }
+        }
+
+        private void CanvasSyllables_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isScrubbing)
+            {
+                _isScrubbing = false;
+                CanvasSyllables.ReleaseMouseCapture();
+                
+                // Final scrub seek
+                PerformScrub(e.GetPosition(CanvasSyllables), true);
+
+                // Auto-scroll update if enabled
+                long playheadUs = NativeBridge.ncktv_get_playhead();
+                _lastPlayheadUiUs = -1; // Force scroll update
+                UpdatePlayheadUI(playheadUs);
+
+                e.Handled = true;
+            }
+        }
+
+        private void PerformScrub(Point mousePos, bool isFinal)
+        {
+            double y = mousePos.Y;
+            if (y < 0) y = 0;
+            if (y > CanvasSyllables.ActualHeight) y = CanvasSyllables.ActualHeight;
+
+            double seconds = y / ZoomFactor;
+            long playheadUs = (long)(seconds * UsPerSec);
+
+            long totalDur = NativeBridge.ncktv_get_total_duration();
+            if (totalDur > 0 && playheadUs > totalDur)
+            {
+                playheadUs = totalDur;
+            }
+
+            // 1. Update WPF visuals instantly (smooth, no lag!)
+            double finalSeconds = playheadUs / (double)UsPerSec;
+            double yPos = finalSeconds * ZoomFactor;
+            Canvas.SetTop(VerticalPlayheadLine, yPos);
+            
+            TimeSpan ts = TimeSpan.FromSeconds(finalSeconds);
+            TxtTimecode.Text = ts.ToString(@"hh\:mm\:ss\.ff");
+            TxtWavePos.Text = $"Position: {finalSeconds:F3} sec";
+
+            // 2. Seek C++ engine (either if it's the final release, or throttled to avoid UI hang)
+            bool shouldSeek = isFinal;
+            if (!isFinal)
+            {
+                DateTime now = DateTime.UtcNow;
+                if ((now - _lastScrubTime).TotalMilliseconds >= 80)
+                {
+                    shouldSeek = true;
+                    _lastScrubTime = now;
+                }
+            }
+
+            if (shouldSeek)
+            {
+                NativeBridge.ncktv_set_playhead(playheadUs);
+                UpdateLiveLyricsHighlight(playheadUs);
+            }
         }
 
         // --- Dragging & Resizing Syllables vertically ---
@@ -367,23 +524,25 @@ namespace NCKTV.Wpf
 
                 if (_isResizing)
                 {
-                    double newHeight = _dragStartClipHeight + deltaY;
+                    double newHeight = Math.Round(_dragStartClipHeight + deltaY);
                     if (newHeight < 15) newHeight = 15;
-                    _draggedClip.Height = newHeight;
-
-                    // Realtime feedback in timecode preview
-                    double durationSec = newHeight / ZoomFactor;
-                    TxtTimecode.Text = $"[RESIZE] {durationSec:F3}s";
+                    if (newHeight != _draggedClip.Height)
+                    {
+                        _draggedClip.Height = newHeight;
+                        double durationSec = newHeight / ZoomFactor;
+                        TxtTimecode.Text = $"[RESIZE] {durationSec:F3}s";
+                    }
                 }
                 else if (_isDragging)
                 {
-                    double newTop = _dragStartClipTop + deltaY;
+                    double newTop = Math.Round(_dragStartClipTop + deltaY);
                     if (newTop < 0) newTop = 0;
-                    Canvas.SetTop(_draggedClip, newTop);
-
-                    // Realtime feedback in timecode preview
-                    double startSec = newTop / ZoomFactor;
-                    TxtTimecode.Text = $"[MOVE] {startSec:F3}s";
+                    if (newTop != Canvas.GetTop(_draggedClip))
+                    {
+                        Canvas.SetTop(_draggedClip, newTop);
+                        double startSec = newTop / ZoomFactor;
+                        TxtTimecode.Text = $"[MOVE] {startSec:F3}s";
+                    }
                 }
                 e.Handled = true;
             }
@@ -914,6 +1073,8 @@ namespace NCKTV.Wpf
 
         private void RecreateSyllableVisuals()
         {
+            _activeLineCache.LineIndex = -2; // Invalidate active line cache
+
             // Always sort syllables chronologically
             _syllables.Sort((a, b) => a.StartTimeUs.CompareTo(b.StartTimeUs));
 
@@ -940,12 +1101,8 @@ namespace NCKTV.Wpf
                 {
                     Height = height,
                     Width = 120,
-                    Background = new LinearGradientBrush(
-                        Color.FromRgb(230, 74, 25),  // Dark Orange-Red Accent
-                        Color.FromRgb(191, 54, 12),
-                        90
-                    ),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(255, 87, 34)),
+                    Background = SyllableBackgroundBrush,
+                    BorderBrush = SyllableBorderBrush,
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(4),
                     Cursor = Cursors.SizeAll,
@@ -969,7 +1126,7 @@ namespace NCKTV.Wpf
                 var handle = new Border
                 {
                     Height = 6,
-                    Background = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
+                    Background = HandleBackgroundBrush,
                     VerticalAlignment = VerticalAlignment.Bottom,
                     Cursor = Cursors.SizeNS
                 };
@@ -1014,6 +1171,53 @@ namespace NCKTV.Wpf
 
         private void UpdateLyricsPreviewPanel()
         {
+            int textBlockCount = 0;
+            foreach (UIElement child in PanelLyrics.Children)
+            {
+                if (child is WrapPanel wp)
+                {
+                    foreach (UIElement wpChild in wp.Children)
+                    {
+                        if (wpChild is TextBlock) textBlockCount++;
+                    }
+                }
+            }
+
+            if (textBlockCount != _syllables.Count)
+            {
+                BuildLyricsPreviewPanel();
+            }
+            else
+            {
+                HighlightActivePreviewSyllable();
+            }
+        }
+
+        private void HighlightActivePreviewSyllable()
+        {
+            for (int i = 0; i < _syllables.Count; i++)
+            {
+                var clip = _syllables[i];
+                if (clip.PreviewTextBlock != null)
+                {
+                    if (i == _activeTapSyllableIndex)
+                    {
+                        clip.PreviewTextBlock.Foreground = (Brush)FindResource("AccentOrangeBrush");
+                        clip.PreviewTextBlock.FontWeight = FontWeights.Bold;
+                        clip.PreviewTextBlock.TextDecorations = TextDecorations.Underline;
+                    }
+                    else
+                    {
+                        clip.PreviewTextBlock.Foreground = (Brush)FindResource("TextDarkBrush");
+                        clip.PreviewTextBlock.FontWeight = FontWeights.Normal;
+                        clip.PreviewTextBlock.TextDecorations = null;
+                    }
+                }
+            }
+        }
+
+        private void BuildLyricsPreviewPanel()
+        {
             PanelLyrics.Children.Clear();
             if (_syllables.Count == 0)
             {
@@ -1028,7 +1232,6 @@ namespace NCKTV.Wpf
                 return;
             }
 
-            // Group syllables by LineIndex, ordered by LineIndex
             var groupedLines = _syllables
                 .GroupBy(s => s.LineIndex)
                 .OrderBy(g => g.Key);
@@ -1072,25 +1275,18 @@ namespace NCKTV.Wpf
                         Margin = new Thickness(0, 0, 1, 0)
                     };
 
-                    int globalIdx = _syllables.IndexOf(clip);
-                    if (globalIdx == _activeTapSyllableIndex)
-                    {
-                        tb.Foreground = (Brush)FindResource("AccentOrangeBrush");
-                        tb.FontWeight = FontWeights.Bold;
-                        tb.TextDecorations = TextDecorations.Underline;
-                    }
-
                     var currentClip = clip;
                     tb.PreviewMouseLeftButtonDown += (s, e) =>
                     {
                         NativeBridge.ncktv_set_playhead(currentClip.StartTimeUs);
                         UpdatePlayheadUI(currentClip.StartTimeUs);
+                        UpdateLiveLyricsHighlight(currentClip.StartTimeUs);
                         
                         int idx = _syllables.IndexOf(currentClip);
                         if (idx >= 0)
                         {
                             _activeTapSyllableIndex = idx;
-                            UpdateLyricsPreviewPanel();
+                            HighlightActivePreviewSyllable();
                         }
                         
                         e.Handled = true;
@@ -1102,6 +1298,8 @@ namespace NCKTV.Wpf
 
                 PanelLyrics.Children.Add(linePanel);
             }
+
+            HighlightActivePreviewSyllable();
         }
 
         private void UpdateTimelineHeight()
@@ -1453,16 +1651,79 @@ namespace NCKTV.Wpf
         private double MeasureTextWidth(string text, TextBlock textBlock)
         {
             if (string.IsNullOrEmpty(text)) return 0;
+            if (_cachedTypeface == null)
+            {
+                _cachedTypeface = new Typeface(textBlock.FontFamily, textBlock.FontStyle, textBlock.FontWeight, textBlock.FontStretch);
+            }
             var formattedText = new FormattedText(
                 text,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                new Typeface(textBlock.FontFamily, textBlock.FontStyle, textBlock.FontWeight, textBlock.FontStretch),
+                _cachedTypeface,
                 textBlock.FontSize,
                 Brushes.Black,
                 VisualTreeHelper.GetDpi(textBlock).PixelsPerDip
             );
             return formattedText.Width;
+        }
+
+        private void BuildActiveLineCache(int activeLineIndex, List<SyllableClip> lineSyllables)
+        {
+            _activeLineCache.LineIndex = activeLineIndex;
+            _activeLineCache.LineSyllables = lineSyllables;
+
+            int n = lineSyllables.Count;
+            _activeLineCache.WidthAtStart = new double[n];
+            _activeLineCache.WidthAtEnd = new double[n];
+            _activeLineCache.GapWidth = new double[n];
+
+            if (n == 0)
+            {
+                _activeLineCache.FullLineWidth = 0;
+                return;
+            }
+
+            string fullLineText = ReconstructLineText(lineSyllables);
+            _activeLineCache.FullLineWidth = MeasureTextWidth(fullLineText, TxtSubtitleActive);
+
+            for (int i = 0; i < n; i++)
+            {
+                var currentSyllable = lineSyllables[i];
+
+                // Calculate sungPrefix for syllable i
+                string sungPrefix = ReconstructLineText(lineSyllables.GetRange(0, i));
+                if (i > 0)
+                {
+                    var lastClipInPrefix = lineSyllables[i - 1];
+                    var activeClip = lineSyllables[i];
+                    if (!lastClipInPrefix.Text.EndsWith("-") && (!IsCjkString(lastClipInPrefix.Text) || !IsCjkString(activeClip.Text)))
+                    {
+                        sungPrefix += " ";
+                    }
+                }
+
+                string activeSylText = currentSyllable.Text;
+                if (activeSylText.EndsWith("-"))
+                {
+                    activeSylText = activeSylText.Substring(0, activeSylText.Length - 1);
+                }
+
+                _activeLineCache.WidthAtStart[i] = MeasureTextWidth(sungPrefix, TxtSubtitleActive);
+                _activeLineCache.WidthAtEnd[i] = MeasureTextWidth(sungPrefix + activeSylText, TxtSubtitleActive);
+
+                // Calculate gap width after syllable i finishes
+                string finishedPrefix = ReconstructLineText(lineSyllables.GetRange(0, i + 1));
+                if (i + 1 < n)
+                {
+                    var lastClip = lineSyllables[i];
+                    var nextClip = lineSyllables[i + 1];
+                    if (!lastClip.Text.EndsWith("-") && (!IsCjkString(lastClip.Text) || !IsCjkString(nextClip.Text)))
+                    {
+                        finishedPrefix += " ";
+                    }
+                }
+                _activeLineCache.GapWidth[i] = MeasureTextWidth(finishedPrefix, TxtSubtitleActive);
+            }
         }
 
         private List<string> GetTextList(List<SyllableClip> clips)
@@ -1523,6 +1784,12 @@ namespace NCKTV.Wpf
 
         private void UpdateLiveLyricsHighlight(long playheadUs)
         {
+            if (playheadUs == _lastLiveLyricsPlayheadUs && _activeLineCache.LineIndex != -2)
+            {
+                return;
+            }
+            _lastLiveLyricsPlayheadUs = playheadUs;
+
             if (_syllables.Count == 0)
             {
                 TxtSubtitleInactive.Text = string.Empty;
@@ -1532,9 +1799,6 @@ namespace NCKTV.Wpf
                 TxtLiveLyricsNextLine.Text = string.Empty;
                 return;
             }
-
-            // Always ensure syllables list is sorted chronologically
-            _syllables.Sort((a, b) => a.StartTimeUs.CompareTo(b.StartTimeUs));
 
             // Find the active syllable (the one where the playhead is currently inside its duration)
             SyllableClip activeSyllable = null;
@@ -1578,37 +1842,52 @@ namespace NCKTV.Wpf
                 }
             }
 
-            // Get all syllables for the current, previous and next lines
-            var lineSyllables = new List<SyllableClip>();
-            var prevLineSyllables = new List<SyllableClip>();
-            var nextLineSyllables = new List<SyllableClip>();
-
-            foreach (var clip in _syllables)
+            // If active line changes or cache was invalidated
+            if (activeLineIndex != _activeLineCache.LineIndex)
             {
-                if (clip.LineIndex == activeLineIndex)
+                // Get all syllables for the current, previous and next lines
+                var lineSyllables = new List<SyllableClip>();
+                var prevLineSyllables = new List<SyllableClip>();
+                var nextLineSyllables = new List<SyllableClip>();
+
+                foreach (var clip in _syllables)
                 {
-                    lineSyllables.Add(clip);
+                    if (clip.LineIndex == activeLineIndex)
+                    {
+                        lineSyllables.Add(clip);
+                    }
+                    else if (clip.LineIndex == activeLineIndex - 1)
+                    {
+                        prevLineSyllables.Add(clip);
+                    }
+                    else if (clip.LineIndex == activeLineIndex + 1)
+                    {
+                        nextLineSyllables.Add(clip);
+                    }
                 }
-                else if (clip.LineIndex == activeLineIndex - 1)
+
+                // Set text for previous and next lines
+                TxtLiveLyricsPrevLine.Text = ReconstructLineText(prevLineSyllables);
+                TxtLiveLyricsNextLine.Text = ReconstructLineText(nextLineSyllables);
+
+                BuildActiveLineCache(activeLineIndex, lineSyllables);
+
+                if (lineSyllables.Count == 0)
                 {
-                    prevLineSyllables.Add(clip);
+                    TxtSubtitleInactive.Text = string.Empty;
+                    TxtSubtitleActive.Text = string.Empty;
+                    TxtSubtitleActive.Visibility = Visibility.Collapsed;
+                    return;
                 }
-                else if (clip.LineIndex == activeLineIndex + 1)
-                {
-                    nextLineSyllables.Add(clip);
-                }
+
+                // Construct full text of the active line
+                string fullLineText = ReconstructLineText(lineSyllables);
+                TxtSubtitleInactive.Text = fullLineText;
+                TxtSubtitleActive.Text = fullLineText;
             }
 
-            // Sort them to be safe
-            lineSyllables.Sort((a, b) => a.StartTimeUs.CompareTo(b.StartTimeUs));
-            prevLineSyllables.Sort((a, b) => a.StartTimeUs.CompareTo(b.StartTimeUs));
-            nextLineSyllables.Sort((a, b) => a.StartTimeUs.CompareTo(b.StartTimeUs));
-
-            // Set text for previous and next lines
-            TxtLiveLyricsPrevLine.Text = ReconstructLineText(prevLineSyllables);
-            TxtLiveLyricsNextLine.Text = ReconstructLineText(nextLineSyllables);
-
-            if (lineSyllables.Count == 0)
+            var activeLineSyllables = _activeLineCache.LineSyllables;
+            if (activeLineSyllables.Count == 0)
             {
                 TxtSubtitleInactive.Text = string.Empty;
                 TxtSubtitleActive.Text = string.Empty;
@@ -1616,19 +1895,14 @@ namespace NCKTV.Wpf
                 return;
             }
 
-            // Construct full text of the active line
-            string fullLineText = ReconstructLineText(lineSyllables);
-            TxtSubtitleInactive.Text = fullLineText;
-            TxtSubtitleActive.Text = fullLineText;
-
             // Compute the sung width of the active line at the current playhead
             double sungWidth = 0;
 
             // Find if there's any active syllable in this line
             int activeWordIdxInLine = -1;
-            for (int i = 0; i < lineSyllables.Count; i++)
+            for (int i = 0; i < activeLineSyllables.Count; i++)
             {
-                var clip = lineSyllables[i];
+                var clip = activeLineSyllables[i];
                 if (playheadUs >= clip.StartTimeUs && playheadUs <= (clip.StartTimeUs + clip.DurationUs))
                 {
                     activeWordIdxInLine = i;
@@ -1639,19 +1913,7 @@ namespace NCKTV.Wpf
             if (activeWordIdxInLine != -1)
             {
                 // Active syllable is inside the line
-                var currentSyllable = lineSyllables[activeWordIdxInLine];
-
-                // Fully sung words (prefixes)
-                string sungPrefix = ReconstructLineText(lineSyllables.GetRange(0, activeWordIdxInLine));
-                if (activeWordIdxInLine > 0)
-                {
-                    var lastClipInPrefix = lineSyllables[activeWordIdxInLine - 1];
-                    var activeClip = lineSyllables[activeWordIdxInLine];
-                    if (!lastClipInPrefix.Text.EndsWith("-") && (!IsCjkString(lastClipInPrefix.Text) || !IsCjkString(activeClip.Text)))
-                    {
-                        sungPrefix += " ";
-                    }
-                }
+                var currentSyllable = activeLineSyllables[activeWordIdxInLine];
 
                 double progress = 0.0;
                 if (currentSyllable.DurationUs > 0)
@@ -1661,34 +1923,28 @@ namespace NCKTV.Wpf
                     if (progress > 1) progress = 1;
                 }
 
-                string activeSylText = currentSyllable.Text;
-                if (activeSylText.EndsWith("-"))
-                {
-                    activeSylText = activeSylText.Substring(0, activeSylText.Length - 1);
-                }
-
-                double widthAtStart = MeasureTextWidth(sungPrefix, TxtSubtitleActive);
-                double widthAtEnd = MeasureTextWidth(sungPrefix + activeSylText, TxtSubtitleActive);
+                double widthAtStart = _activeLineCache.WidthAtStart[activeWordIdxInLine];
+                double widthAtEnd = _activeLineCache.WidthAtEnd[activeWordIdxInLine];
                 sungWidth = widthAtStart + (widthAtEnd - widthAtStart) * progress;
             }
             else
             {
                 // Playhead is either completely before this line, completely after it, or in a gap between words of this line.
-                if (playheadUs < lineSyllables[0].StartTimeUs)
+                if (playheadUs < activeLineSyllables[0].StartTimeUs)
                 {
                     sungWidth = 0;
                 }
-                else if (playheadUs > (lineSyllables[lineSyllables.Count - 1].StartTimeUs + lineSyllables[lineSyllables.Count - 1].DurationUs))
+                else if (playheadUs > (activeLineSyllables[activeLineSyllables.Count - 1].StartTimeUs + activeLineSyllables[activeLineSyllables.Count - 1].DurationUs))
                 {
-                    sungWidth = MeasureTextWidth(fullLineText, TxtSubtitleActive);
+                    sungWidth = _activeLineCache.FullLineWidth;
                 }
                 else
                 {
                     // The playhead is in a gap between words of this line. Find the last word that has finished singing.
                     int lastFinishedWordIdx = -1;
-                    for (int i = 0; i < lineSyllables.Count; i++)
+                    for (int i = 0; i < activeLineSyllables.Count; i++)
                     {
-                        if (playheadUs > (lineSyllables[i].StartTimeUs + lineSyllables[i].DurationUs))
+                        if (playheadUs > (activeLineSyllables[i].StartTimeUs + activeLineSyllables[i].DurationUs))
                         {
                             lastFinishedWordIdx = i;
                         }
@@ -1696,17 +1952,7 @@ namespace NCKTV.Wpf
 
                     if (lastFinishedWordIdx != -1)
                     {
-                        string sungPrefix = ReconstructLineText(lineSyllables.GetRange(0, lastFinishedWordIdx + 1));
-                        if (lastFinishedWordIdx + 1 < lineSyllables.Count)
-                        {
-                            var lastClip = lineSyllables[lastFinishedWordIdx];
-                            var nextClip = lineSyllables[lastFinishedWordIdx + 1];
-                            if (!lastClip.Text.EndsWith("-") && (!IsCjkString(lastClip.Text) || !IsCjkString(nextClip.Text)))
-                            {
-                                sungPrefix += " ";
-                            }
-                        }
-                        sungWidth = MeasureTextWidth(sungPrefix, TxtSubtitleActive);
+                        sungWidth = _activeLineCache.GapWidth[lastFinishedWordIdx];
                     }
                     else
                     {
@@ -1882,7 +2128,7 @@ namespace NCKTV.Wpf
 
                             if (root.TryGetProperty("segments", out JsonElement segmentsProp))
                             {
-                                Dispatcher.BeginInvoke(new Action(() => {
+                                Dispatcher.Invoke(new Action(() => {
                                     ClearSyllables();
                                     NativeBridge.ncktv_clear_track_clips("Track_Lyric");
 
@@ -1943,7 +2189,7 @@ namespace NCKTV.Wpf
                 {
                     Dispatcher.BeginInvoke(new Action(() => {
                         PanelSepProgress.Visibility = Visibility.Collapsed;
-                        MessageBox.Show($"AI Lyrics Sync Failed!\n\n{ex.Message}\n\nMake sure python, PyTorch, and WhisperX are installed and configured.", "AI Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show($"AI Lyrics Sync Failed!\n\n{ex.Message}\n\nMake sure Python is installed and configured.", "AI Sync Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }));
                 }
                 finally
@@ -1985,6 +2231,11 @@ namespace NCKTV.Wpf
         {
             NativeBridge.ncktv_stop();
             UpdatePlayheadUI(0);
+        }
+
+        private void BtnLoop_Click(object sender, RoutedEventArgs e)
+        {
+            // Handled dynamically during playhead ticks/callbacks
         }
 
         private void BtnLoad_Click(object sender, RoutedEventArgs e)
